@@ -13,17 +13,17 @@ classdef FlowAnalysis < handle
 	%
     %   Functions:
     %
-    %       data = openFiles(varargin)
+    %       data			= openFiles(varargin)
     %       [xBleed, yComp] = compensateSC(JCFile, singleColorFile, correctFile, bC, cC, plotsOn)
-    %       compData = compensateBatchSC(jcData, scData, channels, inputData, gate, plotsOn)
-    %       compdData = compensateMatrix(matrixFile, inputData)
-    %       YI = lsq_lut_piecewise(x, y, XI)
-    %       data = bin(data, constitutive, outputs, gate)
-    %       data = cluster(data, channels, method, dataType, numPop)
-    %       [data, stats] = calcStats(inputs [data, channels, dataType, threshChan, thresh, threshPct, statTypes] )
-    %       data = mixtureModel(data, channels, dataType, numPop, par)
+    %       compData		= compensateBatchSC(jcData, scData, channels, inputData, gate, plotsOn)
+    %       compdData		= compensateMatrix(matrixFile, inputData)
+    %       YI				= lsq_lut_piecewise(x, y, XI)
+    %       data			= bin(data, constitutive, outputs, gate)
+    %       data			= cluster(data, channels, method, dataType, numPop)
+    %       [data, stats]	= calcStats(inputs [data, channels, dataType, threshChan, thresh, threshPct, statTypes] )
+    %       data			= mixtureModel(data, channels, dataType, numPop, par)
     %       [x1, x2, p1, p2, yfit1, yfit2, rsq_both] = LSB_fit(constitutive, reporter, doLog, skip)
-    %       data = ronBin(data, constitutive, outputs)
+    %       data			= ronBin(data, constitutive, outputs)
     %
     % Written/Compiled by Ross Jones
     % Weiss Lab, MIT
@@ -31,10 +31,10 @@ classdef FlowAnalysis < handle
     
     methods (Static)
         
-        function data = openFiles(varargin)
+        function [data] = openFiles(varargin)
             % Opens the given files (opens a GUI to select files if no args)
             %
-            % The following is no longer true, but kept in case it relevant portions are uncommented
+            % The following is no longer true, but kept in case if relevant portions are uncommented
             %   The first argument is the name of the channel with the transfection
             %   marker. Note that channel names are changed such that ' ' and '-'
             %   become '_', and '#' becomes 'N', so take that into consideration
@@ -106,7 +106,7 @@ classdef FlowAnalysis < handle
             
             % Run through and extract data from files, putting it into the
             % standardized struct array.
-            for i = 1:numFiles
+			for i = 1:numFiles
                 % Depending on how the files were added, append the filepaths
                 if (nargin == 0)
                     % In this case, they were selected from the GUI, so we need the path
@@ -172,7 +172,7 @@ classdef FlowAnalysis < handle
 
                 % Has adjusted names
                 data(i).chanNames = channelNames;
-            end
+			end
 
             fprintf(1, 'Finished creating data struct\n');
         end
@@ -264,7 +264,7 @@ classdef FlowAnalysis < handle
         end
         
         
-        function compData = compensateBatchSC(jcData, scData, scChannels, inputData, fixChannels, gate, plotsOn)
+        function compData = compensateBatchSC(jcData, scData, scChannels, inputData, fixChannels, dataType, gate, plotsOn)
             % compensateBatchSC compensates data using a fitting routine to single-color bleeding.
             % 
             %   compData = compensateBatchSC(jcData, scData, scChannels, inputData, fixChannels, gate, plotsOn)
@@ -291,6 +291,9 @@ classdef FlowAnalysis < handle
             %           fixChannels     A cell array of strings indicating the channels to be fixed
             %            (cell)         by the compensation procedure.
             %
+			%			dataType (opt)	A string indicating which data type to compensate with. 
+			%			 (string)		
+            %
             %           gate (opt)      A string indicating what gated population to compensate
             %            (string)       with, for example, 'P3'. Must match entries in 'gates'
             %                           field of all data structs.
@@ -310,7 +313,7 @@ classdef FlowAnalysis < handle
             %   2015-11-17
             
             % Check the inputs
-            parseInputs();
+            checkInputs_compensateBatchSC();
                         
             % Allocate output structure
             fields = fieldnames(inputData);
@@ -349,7 +352,7 @@ classdef FlowAnalysis < handle
             % --- Helper functions --- %
             
             
-            function parseInputs()
+            function checkInputs_compensateBatchSC()
                 
                 % Check types
                 validateattributes(jcData, {'struct'}, {}, mfilename, 'jcData', 1);
@@ -357,6 +360,9 @@ classdef FlowAnalysis < handle
                 validateattributes(scChannels, {'cell', 'char'}, {}, mfilename, 'channels', 3);
                 validateattributes(inputData, {'struct'}, {}, mfilename, 'inputData', 4);
                 validateattributes(fixChannels, {'cell', 'char'}, {}, mfilename, 'channels', 5);
+				if exist('dataType', 'var')
+					validatestring(dataType, fieldnames(jcData(1).(scChannels{1})), mfilename, 'dataType', 5)
+				end
                 if exist('gate', 'var')
                     validatestring(gate, fieldnames(jcData(1).gates), mfilename, 'gate', 6);
                 end
@@ -467,8 +473,8 @@ classdef FlowAnalysis < handle
         end
         
         
-        function [data, jcData, scData, autofluor, coeffs, coeffs_comp] = ...
-                        compensateMatrixBatch(data, channels, jcData, scData, gate, plotsOn)
+        function [data, wtData, scData, fitParams] = ...
+                        compensateMatrixBatch(data, channels, wtData, scData, dataType, gate, plotsOn)
             % compensateMatrixBatch compensates an entire standard data struct by generating 
             % coefficients with linear fitting on single-color control data and processing the
             % data to be sent piecewise to FlowAnalysis.compensateMatrix(). 
@@ -490,15 +496,18 @@ classdef FlowAnalysis < handle
             %                               eg: {'PE_Texas_Red_A', 'FITC_A'}
             %                               Note: this is case-sensitive
             %
-            %           jcData          A standard struct with untransfected cells data
+            %           wtData          A standard struct with untransfected (WT) cells data
             %            (struct)       
             %
             %           scData          A standard struct with single color samples data
             %            (struct)       
             %                       *** The order MUST BE THE SAME as the corresponding 
             %                           colors in 'channels'. This will not be auto-checked!
+			%
+			%			dataType (opt)	A string indicating which data type to compensate with. 
+			%			 (string)		
             %
-            %           gate (opt)      A string indicating what gated population to compensate
+            %           gate (opt)      A string indicating which gated population to compensate
             %            (string)       with, for example, 'P3'. Must match entries in 'gates'
             %                           field of all data structs.
             %
@@ -511,11 +520,13 @@ classdef FlowAnalysis < handle
             %                               afs = autofluorescence subtracted
             %                               mComp = matrix compensated
             %
-            %           jcData          A copy of the jcData struct with added 'afs' and 'mComp' 
+            %           wtData          A copy of the wtData struct with added 'afs' and 'mComp' 
             %            (struct)       fields for each compensated channel.
             %
             %           scData          A copy of the scData struct with added 'afs' and 'mComp' 
             %            (struct)       fields for each compensated channel.
+			%
+			%			fitParams		(Optional) The parameters fit during compensation
             %
             %
             % Ross Jones, Weiss Lab
@@ -524,26 +535,38 @@ classdef FlowAnalysis < handle
             % 
             % Update Log: 
             %
-            % ...
+            %	2017-07-16		Added dataType input
+			%	2017-08-22		Added full compensation parameter output,
+			%					changed autofluorescence calculation
+			%
+			%	...
+			%
+			% Autofluorescence:		[ 4,  2, 0,   1]
+			% Summed Intercepts:	[13, 11, 0, -15]
+			% Ints after AF sub:	[ 1,  5, 0, -18]
+			% AF Sub effect:	  - [12,  6, 0,   3] = -3 * AF
             
             % Check the inputs - makes no changes to data structures
-            checkInputs();
-            
-            % Subtract autofluorescence - adds autofluorescence subtracted (afs) 
-            % field to existing data structures
+            checkInputs_compensateMatrixBatch();
             
             % Find medians for each channel in jcData
-            autofluor = getAutofluor();
-            for i = 1:numel(data)
-                data(i) = subtractAutofluorescence(data(i), autofluor);
-            end
-            for i = 1:numel(scData)
-                scData(i) = subtractAutofluorescence(scData(i), autofluor);
-            end
-            jcData = subtractAutofluorescence(jcData, autofluor);
+% 			autofluor = getAutofluor();
             
             % Find coefficients using least-squares linear fits - uses afs data
-            coeffs = getCoefficients();
+            [coeffs, ints] = getCoefficients();
+			
+			% Calculate autofluorescence from scData fit Y-intercepts
+			autofluor = sum(ints, 2) / (numel(channels) - 1); 
+			
+			% Subtract autofluorescence - adds autofluorescence subtracted (afs) 
+            % field to existing data structures
+			for i = 1:numel(data)
+				data(i) = subtractAutofluorescence(data(i), autofluor);
+			end
+			for i = 1:numel(scData)
+				scData(i) = subtractAutofluorescence(scData(i), autofluor);
+			end
+			wtData = subtractAutofluorescence(wtData, autofluor);
             
             % Process the compensation - adds matrix compensated (mComp) field
             % to existing data structures
@@ -553,27 +576,37 @@ classdef FlowAnalysis < handle
             for i = 1:numel(scData)
                 scData(i) = processCompensation(scData(i), coeffs);
             end
-            jcData = processCompensation(jcData, coeffs);
+            wtData = processCompensation(wtData, coeffs);
             
             % Check compensation results
-            coeffs_comp = getCoefficients(true);
+            [coeffs_comp, ints_comp] = getCoefficients(true);
             
+			fitParams = struct( ...
+				'intercepts', ints, ...
+				'autofluor', autofluor, ...
+				'coefficients', coeffs, ...
+				'comp_ints', ints_comp, ...
+				'comp_coeffs', coeffs_comp);
+			
             
             % --- Helper functions --- %
             
             
-            function checkInputs()
+            function checkInputs_compensateMatrixBatch()
                 
                 % Check types
                 validateattributes(data, {'struct'}, {}, mfilename, 'inputData', 1);
                 validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 2);
-                validateattributes(jcData, {'struct'}, {}, mfilename, 'jcData', 3);
+                validateattributes(wtData, {'struct'}, {}, mfilename, 'jcData', 3);
                 validateattributes(scData, {'struct'}, {}, mfilename, 'scData', 4);
+				if exist('dataType', 'var')
+					validatestring(dataType, fieldnames(wtData(1).(channels{1})), mfilename, 'dataType', 5);
+				end
                 if exist('gate', 'var')
-                    validatestring(gate, fieldnames(jcData(1).gates), mfilename, 'gate', 5);
+                    validatestring(gate, fieldnames(wtData(1).gates), mfilename, 'gate', 6);
                 end
                 if exist('plotsOn', 'var')
-                    validateattributes(plotsOn, {'logical'}, {}, mfilename, 'plotsOn', 6);
+                    validateattributes(plotsOn, {'logical'}, {}, mfilename, 'plotsOn', 7);
                 else
                     plotsOn = false;
                 end
@@ -599,26 +632,26 @@ classdef FlowAnalysis < handle
                 % Builds an Nx1 array of autofluorescent values in each channel
                 
                 % Set up figure to view distribution (if applicable)
-                if (exist('plotsOn', 'var') && plotsOn)
+                if plotsOn
                     figure()
                     spIdx = 0;
                 end
                 
                 autofluor = zeros(1, numel(channels));
                 if exist('gate', 'var')
-                    jcGate = jcData.gates.(gate);
+                    wtGate = wtData.gates.(gate);
                 else
-                    jcGate = true(1, numel(jcData.(channels{1}).raw));
+                    wtGate = true(1, numel(wtData.(channels{1}).(dataType)));
                 end
                 for ch = 1:numel(channels)
-                    autofluor(ch) = median(jcData.(channels{ch}).raw(jcGate));
+                    autofluor(ch) = median(wtData.(channels{ch}).(dataType)(wtGate));
                     
-                    if (exist('plotsOn', 'var') && plotsOn)
+                    if plotsOn
                         spIdx = spIdx + 1;
                         ax = subplot(1, numel(channels), spIdx);
                         hold(ax, 'on')
-                        histogram(ax, jcData.(channels{ch}).raw(jcGate))
-                        histogram(ax, jcData.(channels{ch}).raw(jcGate) - autofluor(ch))
+                        histogram(ax, real(wtData.(channels{ch}).(dataType)(wtGate)))
+                        histogram(ax, real(wtData.(channels{ch}).(dataType)(wtGate) - autofluor(ch)))
                     end
                 end
             end
@@ -628,68 +661,89 @@ classdef FlowAnalysis < handle
                 % Subtracts autofluorescence from the given data subset
                 
                 % Iterate over data and subtract autofluorescence
-                if exist('gate', 'var')
-                    dGate = dataSubset.gates.(gate);
-                else
-                    dGate = true(1, numel(dataSubset.(channels{1}).raw));
-                end
+				% Don't gate the data to keep the .afs data full-size.
                 for ch = 1:numel(channels)
-                    dataSubset.(channels{ch}).afs = dataSubset.(channels{ch}).raw(dGate) - autofluor(ch);
+                    dataSubset.(channels{ch}).afs = ...
+							dataSubset.(channels{ch}).(dataType) - autofluor(ch);
                 end
             end
             
             
-            function coefficients = getCoefficients(isComp)
+            function [coefficients, intercepts] = getCoefficients(isComp)
                 % Finds the coefficients for linear fits between each channel
                 % when observing bleed-through.
                 %
                 % Optional input: isComp (can use to check post-comp data)
                 
                 % Set up figure to view fitting (if applicable)
-                if (exist('plotsOn', 'var') && plotsOn)
+                if plotsOn
                     figure()
                     spIdx = 0;
                 end
                 
                 coefficients = zeros(numel(channels));
+				intercepts = zeros(numel(channels));
                 for chF = 1:numel(channels)
                     
                     % Find regression with each channel
                     for chB = 1:numel(channels)
                         
-                        if (exist('isComp', 'var') && isComp)
-                            scBleedData = scData(chB).(channels{chB}).mComp;
-                            scFixData = scData(chB).(channels{chF}).mComp;
-                        else
-                            scBleedData = scData(chB).(channels{chB}).afs;
-                            scFixData = scData(chB).(channels{chF}).afs;
-                        end
+						if exist('gate', 'var')
+							scGate = scData(chB).gates.(gate);
+						else
+							scGate = true(1, numel(scData(chB).(channels{1}).(dataType)));
+						end
+						
+						if (exist('isComp', 'var') && isComp)
+							scBleedData = scData(chB).(channels{chB}).mComp(scGate);
+							scFixData = scData(chB).(channels{chF}).mComp(scGate);
+						else
+							scBleedData = scData(chB).(channels{chB}).(dataType)(scGate);
+							scFixData = scData(chB).(channels{chF}).(dataType)(scGate);
+						end
+% 						valid = (scBleedData > 0 & scFixData > 0);
+% 						scBleedData = scBleedData(valid);
+% 						scFixData = scFixData(valid);
                         
                         % This is the same as calculating the slope with a least
                         % squares metric. Rows are channels being bled into and
                         % columns are bleeding channels. 
 %                         coefficients(chF, chB) = scBleedData(:) \ scFixData(:);
-                        [~, coefficients(chF, chB)] = regression(scBleedData', scFixData');
+                        [~, coefficients(chF, chB), intercepts(chF, chB)] = regression(scBleedData', scFixData');
                         
-                        if (exist('plotsOn', 'var') && plotsOn)
+                        if plotsOn
                             
-                            subSample = linspace(min(scBleedData), max(scBleedData), 100);
-                            
+                            subSample = logspace(-1, 11, 100);
+							
                             spIdx = spIdx + 1;
                             ax = subplot(numel(channels), numel(channels), spIdx);
                             hold(ax, 'on')
-                            
-                            plot(ax, Transforms.lin2logicle(scBleedData(1:10:end)), ...
-                                Transforms.lin2logicle(scFixData(1:10:end)), ...
+%                           
+%                             plot(ax, Transforms.lin2logicle(scBleedData(1:10:end)), ...
+%                                  Transforms.lin2logicle(scFixData(1:10:end)), ...
+%                                  '.', 'MarkerSize', 2)
+%                             
+%                             plot(ax, Transforms.lin2logicle(subSample), ...
+%                                  Transforms.lin2logicle(subSample * coefficients(chF, chB)), ...
+%                                  '-', 'linewidth', 4)
+							
+							warning('off', 'MATLAB:Axes:NegativeDataInLogAxis')
+							plot(ax, scBleedData(1:10:end), ...
+                                scFixData(1:10:end), ...
                                 '.', 'MarkerSize', 2)
                             
-                            plot(ax, Transforms.lin2logicle(subSample), ...
-                                Transforms.lin2logicle(subSample * coefficients(chF, chB)), ...
+                            plot(ax, subSample, ...
+                                subSample * coefficients(chF, chB) + intercepts(chF, chB), ...
                                 '-', 'linewidth', 4)
-                            Plotting.biexpAxes(ax);
-                            if (chB ~= chF)
-                                ax.YLim = Transforms.lin2logicle([-100, 200]);
-                            end
+							
+% 							Plotting.biexpAxes(ax);
+							ax.XScale = 'log';
+							ax.YScale = 'log';
+							ax.YLim = [1e-1, 1e7];
+							ax.XLim = [1e-1, 1e11];
+							if (chB ~= chF)
+% 								ax.YLim = Transforms.lin2logicle([-100, 200]);
+							end
                         end
                     end
                 end
@@ -700,9 +754,10 @@ classdef FlowAnalysis < handle
                 % Processes the compensation for one data subset
                 
                 % Extract raw data into NxM matrix (N = num channels, M = num cells)
-                rawData = zeros(numel(channels), numel(dataSubset.(channels{1}).afs));
+				% Don't gate the data to keep the .mComp data full-size.
+				rawData = zeros(numel(channels), numel(dataSubset.(channels{1}).afs));
                 for ch = 1:numel(channels)
-                    rawData(ch, :) = dataSubset.(channels{ch}).afs;
+					rawData(ch, :) = dataSubset.(channels{ch}).afs;
                 end
                 
                 % Apply matrix compensation
@@ -762,7 +817,7 @@ classdef FlowAnalysis < handle
             % ...
             
             % Check inputs are valid
-            checkInputs(inputData, coefficients);
+            checkInputs_compensateMatrix(inputData, coefficients);
             
             % Compensate data
             compdData = coefficients \ inputData;
@@ -771,7 +826,7 @@ classdef FlowAnalysis < handle
             % --- Helper functions --- %
             
             
-            function checkInputs(inputData, coefficients)
+            function checkInputs_compensateMatrix(inputData, coefficients)
                 
                 % Check types
                 validateattributes(inputData, {'numeric'}, {}, mfilename, 'inputData', 1);
@@ -858,7 +913,7 @@ classdef FlowAnalysis < handle
         end
         
         
-        function data = bin(data, inputs, outputs, dataType, numBins, binMin, binMax)
+        function data = bin(data, inputs, outputs, dataType, noStats)
             % data = bin(data, constitutive, outputs)
             %
             % Creates bins for the given data, adding the 'bins' and 'gmeans' fields
@@ -866,53 +921,55 @@ classdef FlowAnalysis < handle
             %
             %   Inputs
             %       'data'          A data struct like that generated by the openFiles() method.
-            %       'inputs'        A cell array of string input channel names. Must match 
-            %                       a field in the data struct with the subfield 'raw'.
-            %                       For single channel inputs, a string can be given.
-            %       'outputs'       Similar to inputs, but for output channels. Can be a cell 
-            %                       array of channel names or a single channel name string.
+			%		 <struct>
+            %       'inputs'        A struct with channel names as keys and bin edges as values. 
+			%		 <struct>		The channel names must match a field in the data struct with 
+			%						the subfield 'raw'. The struct tells the
+			%						function which channels to bin on and where
+			%						to draw the bins in each dimension. 
+            %       'outputs'       Channels to calculate bin statistics but not to explicitly
+			%		 <cell, char>	use for creating bins. Can be a cell array of channel names 
+			%						or a single channel name string.
             %       'dataType'      The data type to use, eg 'raw', or 'scComp'
-            %       'numBins'       (Optional) The number of bins to use - same for each dimension. 
-            %                           < Default: 20 >
-            %       'binMin'        (Optional) A double value indicating the
-            %                       lower edge of the smallest bin 
-            %                           < Default: lin2logicle(-171.088) >
-            %       'binMax'        (Optional) A double value indicating the
-            %                       upper edge of the largest bin
-            %                           < Default: lin2logicle(2^18) >
+			%		 <char>
+			%		'noStats'		(Optional) If TRUE, no stats are computed, just the 
+			%		 <logical>		cell indexes in bins are returned. 
             %
             %   Outputs
-            %       'data.bins'             A boolean matrix where each row corresponds
-            %                               with a bin and each column is a cell. An
-            %                               element is true if the cell is in the bin.
+            %       'data.bins'             An N-dimensional cell matrix where each cell 
+            %								holds a double array of numerical indexes 
+            %								for each cell in a given bin. N := # channels
+			%								in 'inputs'. The size of each dimension is 
+            %								given by the number of edges given in each 
+			%								dimensison. 
             %       'data.(...).gmeans'     Bin geometric means (positive values only)
             %       'data.(...).medians'    Bin median
             %       'data.(...).stds'       Bin std deviation
             %       'data.(...).geostds'    Bin geometric standard deviation (pos vals only)
             %
-            % Updated 2017-05-15
-            % - Changed data.bins to be a double array of bin IDs instead of a cell
-            %   array of logicle vectors
+            % Update Log
+			%	2017-05-15
+            %	 - Changed data.bins to be a double array of bin IDs instead of a cell
+            %	   array of logicle vectors
+			%
             
             % Check inputs
-            checkInputs()
-            
-            % Collect all channels
-            channels = [inputs, outputs];
-            
-            % Find binning dimensions
-            nDims = numel(inputs);
-            binDims = numBins * ones(1, nDims);
-            if nDims == 1
-                binDims = [1, binDims];
-            end
+            inputChannels = checkInputs_bin();
+			channels = [inputChannels, outputs];
+			
+			% Find binning dimensions
+            nDims = numel(inputChannels);
             
             % Create bins with input channels
-            for i = 1:numel(data)
-                data(i).bins = generateBins(data(i), nDims);
-            end
+            [data(1).bins, binDims] = generateBins(data(1), nDims);
+			for i = 2:numel(data)
+				[data(i).bins] = generateBins(data(i), nDims);
+			end
             
             fprintf(1, 'Finished creating bins\n');
+			if (noStats)
+				return	% Allow returning after only generating bins
+			end
             
             % Calculate bin statistics
             for i = 1:numel(data)
@@ -963,90 +1020,86 @@ classdef FlowAnalysis < handle
             
             % --- Helper Functions --- %
             
-            function checkInputs()
+			
+            function [inputChannels] = checkInputs_bin()
                 
-                validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
-                validateattributes(inputs, {'char', 'cell'}, {}, mfilename, 'inputs', 2);
-                validateattributes(outputs, {'char', 'cell'}, {}, mfilename, 'outputs', 3);
-                if (~iscell(inputs))
-                    inputs = {inputs};      % This just makes things less messy throughout
-                end
-                if (~iscell(outputs))
-                    outputs = {outputs};    % This just makes things less messy throughout
-                end
-                validatestring(dataType, fieldnames(data(1).(inputs{1})), mfilename, 'dataType', 4);
-
-                % Check optional parameters
-                if ~exist('numBins', 'var')
-                    numBins = 20;   % Default 20 bins
-                end
-                if ~exist('binMin', 'var')
-                    binMin = 0;     % logicle2lin(0) = -171.088
-                end
-                if ~exist('binMax', 'var')
-                    binMax = 4.5;   % logicle2lin(4.5) = 2^18
-                end
+				validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
+				validateattributes(inputs, {'struct'}, {}, mfilename, 'inputs', 2);
+				validateattributes(outputs, {'char', 'cell'}, {}, mfilename, 'outputs', 3);
+				inputChannels = reshape(fieldnames(inputs), 1, []);
+				if (~iscell(outputs))
+					outputs = {outputs};    % This just makes things less messy throughout
+				end
+				for ic = 1:numel(inputChannels)
+					assert(numel(inputs.(inputChannels{ic})) > 1, ...
+							'Must have more than one bin edge to define a bin!');
+				end
+				
+				validatestring(dataType, fieldnames(data(1).(inputChannels{1})), mfilename, 'dataType', 4);
+				
+				if exist('noStats', 'var')
+					noStats = logical(noStats);
+				else
+					noStats = false;
+				end
+				validateattributes(noStats, {'logical'}, {'scalar'}, mfilename, 'noStats', 6);
             end
             
             
-            function bins = generateBins(dataToBin, nDims)
+            function [bins, binDims] = generateBins(dataToBin, nDims)
                 % Generates bins for the given data sample in N dimensions where
                 % N is given by nDims
                 
                 % Extract cells
-                cells = zeros(numel(dataToBin.(inputs{1}).(dataType)), nDims);
+                cells = zeros(numel(dataToBin.(inputChannels{1}).(dataType)), nDims);
+				binEdges = cell(1, nDims);
                 for d = 1:nDims
-                    cells(:, d) = Transforms.lin2logicle(dataToBin.(inputs{d}).(dataType));
+                    cells(:, d) = Transforms.lin2logicle(dataToBin.(inputChannels{d}).(dataType));
+					binEdges(d) = {inputs.(inputChannels{d})};
                 end
                 
                 % Do binning
-                bins = FlowAnalysis.simpleBin(cells, numBins, binMin, binMax);
+                [bins, binDims] = FlowAnalysis.simpleBin(cells, binEdges);
             end
         end
         
         
-        function bins = simpleBin(cells, numBins, binMin, binMax)
+        function [bins, binDims] = simpleBin(cells, binEdges)
             % Takes a double array of cells and bins them in biexp space, 
             % returning a double array of bin IDs for each cell
             %
             %   Inputs
             %       'cells'         A N x M double matrix of N cell fluorescence  
-            %                       values in N pre-selected channels. If using 
-            %                       default parameters, this matrix should be 
-            %                       logicle-transformed.
-            %       'numBins'       (Optional) A double value indicating the
-            %                       number of bins to use 
-            %                           < Default: 20 >
-            %       'binMin'        (Optional) A double value indicating the
-            %                       lower edge of the smallest bin 
-            %                           < Default: lin2logicle(-171.088) >
-            %       'binMax'        (Optional) A double value indicating the
-            %                       upper edge of the largest bin
-            %                           < Default: lin2logicle(2^18) >
+            %                       values in M pre-selected channels. 
+            %       'binEdges'		An array of edges defining each bin in logicle space.
+			%						The edges are applied to all dimensions. To make unique 
+			%						edges for each dimension, pass a cell array of bin edges, 
+			%						where each cell element corresponds with a channel in the
+			%						same order as the columns of 'cells'. 
             %
             %   Output
             %       'bins'          A N-dimensional cell matrix where each cell 
             %                       holds a double array of numerical indexes 
             %                       for each cell in a given bin. The size of
-            %                       each dimension is given by 'numBins'.
-            
-            % Check optional parameters
-            if ~exist('numBins', 'var')
-                numBins = 20;   % Default 20 bins
-            end
-            if ~exist('binMin', 'var')
-                binMin = 0;     % logicle2lin(0) = -171.088
-            end
-            if ~exist('binMax', 'var')
-                binMax = 4.5;   % logicle2lin(4.5) = 2^18
-            end
+            %                       each dimension is given by the number of
+            %                       edges given in each dimensison. 
             
             % Define bins in biexponential space at a wide range
-            edges = linspace(binMin, binMax, numBins + 1);
+			
+			if iscell(binEdges)
+				% Unique bin edges for all
+				binDims = zeros(1, numel(binEdges));
+				for be = 1:numel(binEdges)
+					binDims(be) = numel(binEdges{be}) - 1;
+				end
+			else
+				% Bin edges same and apply to all channels
+				binDims = (numel(binEdges) - 1) .* ones(1, size(cells, 2));
+				binEdges = {binEdges};
+			end
             
             % Setup bins as a cell array with dimensions equal to number of cell channels. 
-            nDims = size(cells, 2);
-            binDims = numBins * ones(1, nDims);
+            nDims = length(binDims);
             if nDims == 1
                 binDims = [binDims, 1];
             end
@@ -1054,25 +1107,35 @@ classdef FlowAnalysis < handle
             binsNum = reshape(1:numel(bins), binDims);
             
             % Find cells in each bin
-            for i = 1:numel(bins)
-                
-                % Find bin coordinates in ND-space
-                [I, J] = find(binsNum == i);
-                while (J > numBins)
-                    [I2, J] = find(binsNum == J);
-                    I = [I, I2]; %#ok<AGROW>
-                end
-                binCoords = [I, J];
-                
-                % Identify all cells within bin by checking bin edges in each dimension
-                cellsInBin = true(size(cells(:, 1)));
-                for j = 1:nDims
-                    cellsInBin = (cellsInBin & ...
-                                 (cells(:, j) <= edges(binCoords(j) + 1)) & ...
-                                 (cells(:, j) > edges(binCoords(j))));
-                end
-                bins{i} = find(cellsInBin);
-            end
+			for i = 1:numel(bins)
+				
+				% Find bin coordinates in ND-space
+				% This works by continually finding the X and Y coordinate until
+				% the Y coordinate is < numBins. Y coordinate is higher when the
+				% position is found in a higher dimension. 
+				% Note: May only work when the dimensions are square...not sure
+				[I, J] = find(binsNum == i);
+				idx = 1; 
+				while (J > binDims(idx))
+					idx = idx + 1;
+					[I2, J] = find(binsNum == J);
+					I = [I, I2]; %#ok<AGROW>
+				end
+				binCoords = [I, J];
+				if numel(binCoords) < nDims
+					% For when j has not reached dimensions higher than 2. 
+					binCoords = [binCoords, ones(1, nDims - numel(binCoords))]; %#ok<AGROW>
+				end
+				
+				% Identify all cells within bin by checking bin edges in each dimension
+				cellsInBin = true(size(cells(:, 1)));
+				for j = 1:nDims
+					cellsInBin = (cellsInBin & ...
+								 (cells(:, j) <= binEdges{j}(binCoords(j) + 1)) & ...
+								 (cells(:, j) > binEdges{j}(binCoords(j))));
+				end
+				bins{i} = find(cellsInBin);
+			end
             
         end
         
@@ -1350,7 +1413,7 @@ classdef FlowAnalysis < handle
             %   2016-12-06: Added thresholding by average percentage above threshold (threshPct)
             
             % Check inputs
-            [data, channels, dataType] = checkInputs(inputs);
+            [data, channels, dataType] = checkInputs_calcStats(inputs);
             dataType = dataType{:}; % Not implemented multiple yet
             
             [H, W, D] = size(data);
@@ -1502,7 +1565,7 @@ classdef FlowAnalysis < handle
             % --- Helper Function --- %
             
             
-            function [data, channels, dataType] = checkInputs(inputs)
+            function [data, channels, dataType] = checkInputs_calcStats(inputs)
                 
                 % Ensure necessary inputs are present
                 reqFields = {'data', 'channels', 'dataType'};
@@ -1616,7 +1679,7 @@ classdef FlowAnalysis < handle
             end
             
             % Check inputs
-            checkInputs(data, channels, dataType, numPop, par);
+            checkInputs_mixtureModel(data, channels, dataType, numPop, par);
             numPop = round(numPop);
             
             % Find data sizes
@@ -1704,7 +1767,7 @@ classdef FlowAnalysis < handle
             % --- Helper Function --- %
             
             
-            function checkInputs(data, channels, dataType, numPop, par)
+            function checkInputs_mixtureModel(data, channels, dataType, numPop, par)
                 % Checks the inputs to make sure they are valid
                 
                 validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);

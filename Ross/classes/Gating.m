@@ -198,8 +198,8 @@ classdef Gating < handle
             %   Gates
             %   
             %       P1:     FSC_A vs SSC_A
-            %       P2:     FSC_W vs FSC_H
-            %       P3:     SSC_W vs SSC_H
+            %       P2:     FSC_H vs FSC_W
+            %       P3:     SSC_H vs SSC_W
             %
             %   Inputs
             %
@@ -227,13 +227,13 @@ classdef Gating < handle
             numIdxP1 = find(idxP1);         % Find numerical indexes for P1
 
             % Second do FSC-W vs FSC-H
-            [subIdxP2, gateP2] = Gating.gatePolygon(sample.FSC_W.raw(idxP1), sample.FSC_H.raw(idxP1), 'linear');
+            [subIdxP2, gateP2] = Gating.gatePolygon(sample.FSC_H.raw(idxP1), sample.FSC_W.raw(idxP1), 'linear');
             numIdxP2 = numIdxP1(subIdxP2);  % Get positions in P1 of objects passing P2 gate
             idxP2 = falseIdx;               % Copy this to get the full-sized indexing vector
             idxP2(numIdxP2) = true;         % Assign TRUE values according to what passes P1 AND P2
 
             % Third do SSC-W vs SSC-H
-            [~, gateP3] = Gating.gatePolygon(sample.SSC_W.raw(idxP2), sample.SSC_H.raw(idxP2), 'semilogy');    
+            [~, gateP3] = Gating.gatePolygon(sample.SSC_H.raw(idxP2), sample.SSC_W.raw(idxP2), 'semilogy');    
             
         end
         

@@ -32,7 +32,7 @@ classdef Plotting < handle
     
 	methods (Static)
 		
-		function densityplot(ax, xdata, ydata, nPoints, mode, colorMap)
+		function densityplot(ax, xdata, ydata, nPoints, mode, colorMap, nonZero)
 			%DENSITYPLOT(XDATA,YDATA) plots the vector Y vs vector X in dot-plot form with colors
             %   of the dots indicating density
 			%   
@@ -55,6 +55,9 @@ classdef Plotting < handle
             %                                            Must be the same size as xdata/ydata
             %       
             %       colorMap (ColorMap) The ColorMap opject to use for plotting
+			%
+			%		nonZero (logicle)	(Optional) Indicates whether to force
+			%							non-zero values
             %
 			%
 			%   Example:
@@ -88,141 +91,169 @@ classdef Plotting < handle
                 assert(all(size(mode) == size(xdata)), 'If numeric, mode must be the same size as the data!')
             end
             validateattributes(colorMap, {'ColorMap'}, {}, mfilename, 'colorMap', 6);
-            nPoints = round(nPoints);
+			if exist('nonZero', 'var')
+				nonZero = any(logical(nonZero(:)));
+				validateattributes(nonZero, {'logical'}, {}, mfilename, 'nonZero', 7);
+			else
+				nonZero = false;
+			end
+			nPoints = round(nPoints);
 
             % Remove complex values
             x = real(xdata);
             y = real(ydata);
             
             % Fix NaN and inf values by removing them.
-            if any(isnan(x) | isinf(x) | isnan(y) | isinf(y))
-                warning('Inf/NaN values detected - removing')
-                valid = ~(isnan(x) | isinf(x) | isnan(y) | isinf(y));
-                x = x(valid);
-                y = y(valid);
-            else
-                valid = true(size(x));
-            end
+			if any(isnan(x) | isinf(x) | isnan(y) | isinf(y))
+				warning('Inf/NaN values detected - removing')
+				valid = ~(isnan(x) | isinf(x) | isnan(y) | isinf(y));
+			else
+				valid = true(size(x));
+			end
+			if (nonZero), valid = (valid & (x >= 0) & (y >= 0)); end
             
-            % Reduce number of points to speed density calculation
-            numPoints = min(numel(x), nPoints);
-            subsample = randperm(numel(x), numPoints);
-            x = x(subsample);
-            y = y(subsample);
-            
-            if ischar(mode), switch mode %#ok<ALIGN>
-                case {'fast', 'normal'}
-                    % Find how many neighbours there are less than dX and dY away.
-                    if (strcmpi(mode, 'fast'))
-                        skip = 10;
-                    else
-                        skip = 1;
-                    end
-                    
-                    % Find the range of each vector
-                    xdist = max(x) - min(x);
-                    ydist = max(y) - min(y);
-                    
-                    % Find the density of each vector by dividing the number of points by the
-                    % range. Dividing 100 by this number defines some distance one would expect 
-                    % close data points to be from one another.
-                    xdens = numPoints / xdist;
-                    ydens = numPoints / ydist;
-                    dX = 100 / xdens;
-                    dY = 100 / ydens;
-                    
-                    neighbors = zeros(numPoints, 1);
-                    for j = 1:numPoints
-                        xval = x(j);
-                        yval = y(j);
+			% Check mode of point coloration
+            if ischar(mode)
+				
+				% Only need to check x and y for valid points
+				x = x(valid);
+				y = y(valid);
+				numPoints = min(numel(x), nPoints);
+				subsample = randperm(numel(x), numPoints);
+				x = x(subsample);
+				y = y(subsample);
+				switch mode %#ok<ALIGN>
+					case {'fast', 'normal'}
+						% Find how many neighbours there are less than dX and dY away.
+						if (strcmpi(mode, 'fast'))
+							skip = 10;
+						else
+							skip = 1;
+						end
 
-                        neighbors(j) = sum( ...
-                            (abs(x(1:skip:end) - xval) < dX) & ...
-                            (abs(y(1:skip:end) - yval) < dY));
-                    end
-                    
-%                     % Convert neighbors to log scale to get better view of data
-%                     neighbors = round(10 * Transforms.lin2logicle(neighbors));
-                    
-                    [sortedNeighbors, sortIdx] = sort(neighbors);
-                    
-                    % Convert # neighbors to color
-                    nColors = max(sortedNeighbors) + 1;
-                    cm = colorMap.getColormap(nColors);
-                    colors = cm(sortedNeighbors + 1, :);
-                
-                case 'kernel'
-                    % Reshape input vector to column format
-                    x = reshape(x, [], 1);
-                    y = reshape(y, [], 1);
-                    
-                    % Estimate density with kernel
-                    [bw, density, meshX, meshY] = kde2d([x, y]);
-                    
-%                     % Convert density to log scale to get better view of data
-%                     density = Transforms.lin2logicle(density);
-                    
-%                     fprintf(1, 'Kernal density estimation with bandwidth: %.3f\n', bw);
-                    interpDensity = interp2(meshX, meshY, density, x, y);
-                    
-                    [sortedDensity, sortIdx] = sort(interpDensity);
-                    
-                    % Convert density to color
-                    nColors = 1000;
-                    cm = colorMap.getColormap(nColors);
-                    colors = cm(ceil((sortedDensity + min(sortedDensity)) ...
-									/ (max(sortedDensity) + min(sortedDensity)) ...
-									* nColors), :);
-					
-                case 'hist'
-                    % Reshape input vector to column format
-                    x = reshape(x, [], 1);
-                    y = reshape(y, [], 1);
-                    nBins = 25;
-                    
-                    % Use histogram to calculate true density - select # bins based on # points
-                    edgesX = linspace(median(x) - 5 * std(x), median(x) + 5 * std(x), nBins + 1);
-                    edgesY = linspace(median(y) - 5 * std(y), median(y) + 5 * std(y), nBins + 1);
-                    [binCounts, edgesX, edgesY] = histcounts2(x, y, edgesX, edgesY);
-                    
-                    % Estimate bin centers by averaging the edges
-                    binCoordX = zeros(numel(edgesX) - 1, 1);
-                    binCoordY = zeros(numel(edgesY) - 1, 1);
-                    for i = 2:length(edgesX)
-                        binCoordX(i - 1) = mean(edgesX([i - 1, i]));
-                    end
-                    for i = 2:length(edgesY)
-                        binCoordY(i - 1) = mean(edgesY([i - 1, i]));
-                    end
-                    
-                    % Create mesh of X and Y values for the bins
-                    [binMeshX, binMeshY] = meshgrid(binCoordX, binCoordY);
-                    
-                    % Interpolate over the 2D histogram counts to make a PDF for the data points
-                    interpDensity = interp2(binMeshX, binMeshY, binCounts', x, y);
-                    
-                    % Sort so brightest cells are plotted on top
-                    [sortedDensity, sortIdx] = sort(interpDensity);
-                    validInterp = ~(isnan(sortedDensity) | isinf(sortedDensity));
-                    sortedDensity = sortedDensity(validInterp);
-                    sortIdx = sortIdx(validInterp);
-                    
-                    % Convert density to color
-                    nColors = 1000;
-                    cm = colorMap.getColormap(nColors);
-                    colors = cm(ceil((sortedDensity + min(sortedDensity)) ...
-									/ (max(sortedDensity) + min(sortedDensity)) ...
-									* nColors), :);
-					
-            end, else
-                z = real(reshape(mode(valid), [], 1));
-                z = z(subsample);                
+						% Find the range of each vector
+						xdist = max(x) - min(x);
+						ydist = max(y) - min(y);
+
+						% Find the density of each vector by dividing the number of points by the
+						% range. Dividing 100 by this number defines some distance one would expect 
+						% close data points to be from one another.
+						xdens = numPoints / xdist;
+						ydens = numPoints / ydist;
+						dX = 100 / xdens;
+						dY = 100 / ydens;
+
+						neighbors = zeros(numPoints, 1);
+						for j = 1:numPoints
+							xval = x(j);
+							yval = y(j);
+
+							neighbors(j) = sum( ...
+								(abs(x(1:skip:end) - xval) < dX) & ...
+								(abs(y(1:skip:end) - yval) < dY));
+						end
+
+	%                     % Convert neighbors to log scale to get better view of data
+	%                     neighbors = round(10 * Transforms.lin2logicle(neighbors));
+
+						[sortedNeighbors, sortIdx] = sort(neighbors);
+
+						% Convert # neighbors to color
+						nColors = max(sortedNeighbors) + 1;
+						cm = colorMap.getColormap(nColors);
+						colors = cm(sortedNeighbors + 1, :);
+
+					case 'kernel'
+						% Reshape input vector to column format
+						x = reshape(x, [], 1);
+						y = reshape(y, [], 1);
+
+						% Estimate density with kernel
+						[bw, density, meshX, meshY] = kde2d([x, y]);
+
+	%                     % Convert density to log scale to get better view of data
+	%                     density = Transforms.lin2logicle(density);
+
+	%                     fprintf(1, 'Kernal density estimation with bandwidth: %.3f\n', bw);
+						interpDensity = interp2(meshX, meshY, density, x, y);
+
+						[sortedDensity, sortIdx] = sort(interpDensity);
+
+						% Convert density to color
+						nColors = 1000;
+						cm = colorMap.getColormap(nColors);
+						% The -1/+1 ensures that no value is exactly 0 or > max index
+						MIN = min(sortedDensity);
+						if (nonZero), MIN = max(0, MIN); end
+						colors = cm(ceil((sortedDensity - MIN) ...
+										./ (max(sortedDensity) - MIN) ...
+										.* (nColors - 1) + 1), :);
+
+					case 'hist'
+						% Reshape input vector to column format
+						x = reshape(x, [], 1);
+						y = reshape(y, [], 1);
+						nBins = 25;
+
+						% Use histogram to calculate true density - select # bins based on # points
+						edgesX = linspace(median(x) - 5 * std(x), median(x) + 5 * std(x), nBins + 1);
+						edgesY = linspace(median(y) - 5 * std(y), median(y) + 5 * std(y), nBins + 1);
+						[binCounts, edgesX, edgesY] = histcounts2(x, y, edgesX, edgesY);
+
+						% Estimate bin centers by averaging the edges
+						binCoordX = zeros(numel(edgesX) - 1, 1);
+						binCoordY = zeros(numel(edgesY) - 1, 1);
+						for i = 2:length(edgesX)
+							binCoordX(i - 1) = mean(edgesX([i - 1, i]));
+						end
+						for i = 2:length(edgesY)
+							binCoordY(i - 1) = mean(edgesY([i - 1, i]));
+						end
+
+						% Create mesh of X and Y values for the bins
+						[binMeshX, binMeshY] = meshgrid(binCoordX, binCoordY);
+
+						% Interpolate over the 2D histogram counts to make a PDF for the data points
+						interpDensity = interp2(binMeshX, binMeshY, binCounts', x, y);
+
+						% Sort so brightest cells are plotted on top
+						[sortedDensity, sortIdx] = sort(interpDensity);
+						validInterp = ~(isnan(sortedDensity) | isinf(sortedDensity));
+						sortedDensity = sortedDensity(validInterp);
+						sortIdx = sortIdx(validInterp);
+
+						% Convert density to color
+						nColors = 1000;
+						cm = colorMap.getColormap(nColors);
+						% The -1/+1 ensures that no value is exactly 0 or > max index
+						MIN = min(sortedDensity);
+						if (nonZero), MIN = max(0, MIN); end
+						colors = cm(ceil((sortedDensity - MIN) ...
+										./ (max(sortedDensity) - MIN) ...
+										.* (nColors - 1) + 1), :);
+
+				end
+			else
+				z = real(reshape(mode, [], 1));
+				valid = (valid & ~(isnan(z) | isinf(z)));
+				if (nonZero), valid = (valid & (z >= 0)); end
+				x = x(valid);
+				y = y(valid);
+				z = z(valid);
+				
+				% Reduce number of points to speed density calculation
+				numPoints = min(numel(x), nPoints);
+				subsample = randperm(numel(x), numPoints);
+				x = x(subsample);
+				y = y(subsample);
+                z = z(subsample);       
                 [sortedZ, sortIdx] = sort(z);
 				
                 nColors = 1000;
                 cm = colorMap.getColormap(nColors);
-				% The +1 ensures that no value is exactly 0
-                colors = cm(ceil((sortedZ + min(sortedZ) + 1) / (4.5 + min(sortedZ) + 1) * nColors), :);
+				MIN = min(sortedZ);
+					if (nonZero), MIN = max(0, MIN); end
+                colors = cm(ceil((sortedZ - MIN) ./ (4.5 - MIN) .* (nColors - 1) + 1), :);
             end
             
             % Plot data in sorted order so highest density points are plotted last.
@@ -531,13 +562,15 @@ classdef Plotting < handle
         end
 
         
-		function [nelements , centers] = biexhist(Y, M)
+		function [nelements , centers] = biexhist(Y, M, showPlot)
 			%BIEXHIST Logiclly-scaled (Parks,et al.) histogram. 
 			%   BIEXHIST(Y) bins the elements of Y into 10 equally spaced containers
 			%   and produces a histogram plot of the results.  If Y is a
 			%   matrix, hist works down the columns.
 			% 
-			%   N = hist(Y, M), where M is a scalar, uses M bins.
+			%   N = hist(Y, M, showPlot), where M is a scalar, uses M bins.
+			%	
+			%	showPlot is an optional logical flag to plot the histogram.
 			%
 			%   Example:
 			%       [fcsdat, fcshdr, fcsdatscaled, fcsdatcomp] = fca_readfcs('sample.fcs');
@@ -568,9 +601,11 @@ classdef Plotting < handle
 % 				  maxN = maxN + 1000;
 %             end            
 %             nelements=nelements./max(nelements).*100;
-			area(centers, nelements, 'FaceColor', [0.5 0.5 0.5], 'LineWidth', 1.5);
-			
-			Plotting.biexpAxes(gca(), true, false);
+
+			if (exist('showPlot', 'var') && showPlot)
+				area(centers, nelements, 'FaceColor', [0.5 0.5 0.5], 'LineWidth', 1.5);
+				Plotting.biexpAxes(gca(), true, false);
+			end
 			
         end
         
