@@ -3,7 +3,7 @@
 
 classdef CellList < handle
     
-    properties (Access = private)
+    properties (SetAccess = private)
         data;
         size;
     end
@@ -23,19 +23,15 @@ classdef CellList < handle
             % Initialize cell structure which holds data
             self.data = cell(1, capacity);
             self.size = 0;
-        end
+		end
         
-        
-%         function matrix = toMat(self)
-%             % Returns a Matlab matrix version of the list.
-%             matrix = cell2mat(self.data(1:self.size));
-%         end
-        
+		
         function numElements = numel(self)
             % Returns the current number of elements in the array - same as length!
             numElements = self.size;
-        end
+		end
         
+		
         function len = length(self)
             % Returns the current length of the array - same as numel!
             len = self.size;
@@ -45,7 +41,16 @@ classdef CellList < handle
         function cells = toCell(self)
             % Returns the cell list as it is
             cells = self.data(1:self.size);
-        end
+		end
+		
+		
+		function vector = toVec(self)
+			% Returns the cell list as a vector
+			%
+			%	NOTE: Only works if all data is numeric
+			
+			vector = cell2mat(self.toCell());
+		end
         
         
         function self = add(self, item, index)
