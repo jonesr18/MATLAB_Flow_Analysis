@@ -11,6 +11,10 @@ classdef Gating < handle
 	%		g = Transforms();
 	%		[cells, vert] = g.gatePolygon(x, y, axScales, pos)
 	
+	properties (Constant)
+		SCATTER_CHANNELS = {'SSC_A', 'SSC_H', 'SSC_W', 'FSC_A', 'FSC_H', 'FSC_W'};
+	end
+	
 	methods (Static)
 	
 		function [gateData, gateIndices] = gate(data, indices, channelX, channelY, plotScale)
@@ -37,11 +41,11 @@ classdef Gating < handle
             %   Written by
             %   Ross Jones
             %   jonesr18@mit.edu
-            %   Updated 2.9.15
+            %   Updated 2015-02-09
 
             % Check inputs
             plotScale = lower(plotScale);
-            checkInputs(data, indices, channelX, channelY, plotScale);
+            checkInputs_gate(data, indices, channelX, channelY, plotScale);
 
             % For standardization and ease of use, convert to logical indexing
             if (~islogical(indices))
@@ -160,7 +164,7 @@ classdef Gating < handle
             end
 
 
-            function checkInputs(data, indices, channelX, channelY, plotScale)
+            function checkInputs_gate(data, indices, channelX, channelY, plotScale)
                 % Checks the inputs to the main function
 
                 % data
@@ -192,7 +196,7 @@ classdef Gating < handle
         end
 		
 		
-        function [gateP1, gateP2, gateP3] = standardGating(sample)
+        function [gateP1, gateP2, gateP3] = standardGating(data, onlyP1, swap, maxPoints)
             % Creates 3 standard gates from a given samples
             %
             %   Gates
@@ -203,7 +207,14 @@ classdef Gating < handle
             %
             %   Inputs
             %
-            %       sample      A std struct (must contain channels noted above)
+            %       data		A standard struct (must contain channels noted above)
+			%		onlyP1		(optional) Logical flag to only gate on P1. The other 
+			%					gates are returned as empty so that the output 
+			%					interface is conserved. <Default := false>
+			%		swap		(optional) Logical flag to swap the FSC and SSC
+			%					plot axes (useful for Koch LSRII-HTS2)
+			%		maxPoints	(optional) Number indicating the maximum number of 
+			%					points to plot for drawing gates. <Default := 20000>
             %
             %   Outputs
             %
@@ -214,69 +225,144 @@ classdef Gating < handle
             %
             % Written by Ross Jones
             % Weiss Lab, MIT
-            % Last updated: 2016-07-19
+            % Update Log: 
+			%	2017-09-25
+			%		Added data combining so that all samples can be passed together
+			
+			% Check inputs
+			validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
+			missingChannels = setdiff(Gating.SCATTER_CHANNELS, fieldnames(data));
+			assert(isempty(missingChannels), 'Scatter channel missing: %s\n', missingChannels{:});
+			onlyP1 = (exist('onlyP1', 'var') && all(logical(onlyP1))); % Default FALSE
+			swap = (exist('swap', 'var') && all(logical(swap)));
+			if ~exist('maxPoints', 'var'), maxPoints = 20000; end
+			
+			% For each scatter channel, extract # cells/# samples from each sample
+			combinedData = struct();
+			for ch = Gating.SCATTER_CHANNELS
+				combData = [];
+				for d = 1:numel(data)
+					if ~isempty(data(d).(ch{:})) % Some FlowData tcData will be empty 
+						combData = [combData; data(d).(ch{:}).raw(1:numel(data):end)]; %#ok<AGROW>
+					end
+				end
+				combinedData.(ch{:}).raw = combData;
+			end
+			totalPoints = numel(combinedData.(Gating.SCATTER_CHANNELS{1}).raw);
+			numPoints = min(maxPoints, totalPoints);
             
             % Full-size index for whole set of observations
             % In order to avoid problems with sub-indexing below, we will copy the entire FALSE index array
             % when assigning data to a new gate index array, then add back the TRUE entries by numerical index
-            falseIdx = false(sample.nObs, 1); 
+            falseIdx = false(numPoints, 1); 
+			pointsIdx = randperm(totalPoints, numPoints);
 
             % First do FSC-A vs SSC-A
-            [subIdxP1, gateP1] = Gating.gatePolygon(sample.FSC_A.raw, sample.SSC_A.raw, 'semilogy'); 
-            idxP1 = subIdxP1;               % No sub-indexing for P1
-            numIdxP1 = find(idxP1);         % Find numerical indexes for P1
+            [subIdxP1, gateP1] = Gating.gatePolygon( ...
+					combinedData.FSC_A.raw(pointsIdx), ...
+					combinedData.SSC_A.raw(pointsIdx), 'semilogy'); 
+			
+			if onlyP1
+				gateP2 = [];
+				gateP3 = [];
+			else
+				if swap
+					chans = {'FSC_H', 'FSC_W', 'SSC_H', 'SSC_W'};
+				else
+					chans = {'FSC_W', 'FSC_H', 'SSC_W', 'SSC_H'};
+				end
+				
+				idxP1 = subIdxP1;               % No sub-indexing for P1
+				numIdxP1 = find(idxP1);         % Find numerical indexes for P1
 
-            % Second do FSC-W vs FSC-H
-            [subIdxP2, gateP2] = Gating.gatePolygon(sample.FSC_H.raw(idxP1), sample.FSC_W.raw(idxP1), 'linear');
-            numIdxP2 = numIdxP1(subIdxP2);  % Get positions in P1 of objects passing P2 gate
-            idxP2 = falseIdx;               % Copy this to get the full-sized indexing vector
-            idxP2(numIdxP2) = true;         % Assign TRUE values according to what passes P1 AND P2
+				% Second do FSC-W vs FSC-H
+				[subIdxP2, gateP2] = Gating.gatePolygon( ... 
+						combinedData.(chans{1}).raw(idxP1), ...
+						combinedData.(chans{2}).raw(idxP1), 'linear');
+				
+				numIdxP2 = numIdxP1(subIdxP2);  % Get positions in P1 of objects passing P2 gate
+				idxP2 = falseIdx;               % Copy this to get the full-sized indexing vector
+				idxP2(numIdxP2) = true;         % Assign TRUE values according to what passes P1 AND P2
 
-            % Third do SSC-W vs SSC-H
-            [~, gateP3] = Gating.gatePolygon(sample.SSC_H.raw(idxP2), sample.SSC_W.raw(idxP2), 'semilogy');    
-            
+				% Third do SSC-W vs SSC-H
+				[~, gateP3] = Gating.gatePolygon( ... 
+					combinedData.(chans{3}).raw(idxP2), ...
+					combinedData.(chans{4}).raw(idxP2), 'semilogy');    
+			end
         end
         
         
-        function sample = applyStandardGates(sample, gateP1, gateP2, gateP3)
+        function data = applyStandardGates(data, gateP1, gateP2, gateP3, swap)
             % Applies the standard gates (see Gating.standardGating()) to the given sample
-            % Sample should be standard struct, and gateP1/2/3 should be outputs of standardGating)
+            % 
+			%	Inputs
+			%
+			%		data		Data in a standard struct
+			%		gateP1, gateP2, gateP3	...	
+			%					Gate polygon outputs of Gating.standardGating()
+			%		swap		(optional) Logical flag to swap the FSC and SSC
+			%					plot axes (useful for Koch LSRII-HTS2)
+			%
+			%	Outputs
+			%		data		Updated data struct w/ gate logicals added in 
+			%					'gates' field.
             
+			swap = (exist('swap', 'var') && all(logical(swap)));
+			
             % Iterate over all samples in struct
-            for i = 1:numel(sample)
+            for d = 1:numel(data)
                 
+				if isempty(data(d).FSC_A) % Some FlowData tcData will be empty 
+					continue
+				end
+				
                 % Full-size false vector for setting up gates
-                falseIdx = false(sample(i).nObs, 1);
+                falseIdx = false(data(d).nObs, 1);
 
                 % Apply gates
                 [subIdxP1, ~] = Gating.gatePolygon( ...
-                    sample(i).FSC_A.raw, ...
-                    sample(i).SSC_A.raw, ...
+                    data(d).FSC_A.raw, ...
+                    data(d).SSC_A.raw, ...
                     'semilogy', gateP1);
                 numIdxP1 = find(subIdxP1);
                 idxP1 = falseIdx;
                 idxP1(numIdxP1) = true;
-
-                [subIdxP2, ~] = Gating.gatePolygon( ...
-                    sample(i).FSC_W.raw(idxP1), ...
-                    sample(i).FSC_H.raw(idxP1), ...
-                    'linear', gateP2);
-                numIdxP2 = numIdxP1(subIdxP2);
-                idxP2 = falseIdx;
-                idxP2(numIdxP2) = true;
-
-                [subIdxP3, ~] = Gating.gatePolygon( ...
-                    sample(i).SSC_W.raw(idxP2), ...
-                    sample(i).SSC_H.raw(idxP2), ...
-                    'semilogy', gateP3);
-                numIdxP3 = numIdxP2(subIdxP3);
-                idxP3 = falseIdx;
-                idxP3(numIdxP3) = true;
-
-                % Save gates in struct
-                sample(i).gates.P1 = idxP1;
-                sample(i).gates.P2 = idxP2;
-                sample(i).gates.P3 = idxP3;
+				
+				% Save Gate P1
+				data(d).gates.P1 = idxP1;
+				
+				if swap
+					chans = {'FSC_H', 'FSC_W', 'SSC_H', 'SSC_W'};
+				else
+					chans = {'FSC_W', 'FSC_H', 'SSC_W', 'SSC_H'};
+				end
+				
+				% Gates P2/3 are not always applied
+				if (exist('gateP2', 'var') && ~isempty(gateP2))
+					[subIdxP2, ~] = Gating.gatePolygon( ...
+						data(d).(chans{1}).raw(idxP1), ...
+						data(d).(chans{2}).raw(idxP1), ...
+						'linear', gateP2);
+					numIdxP2 = numIdxP1(subIdxP2);
+					idxP2 = falseIdx;
+					idxP2(numIdxP2) = true;
+					
+					% Save Gate P2
+					data(d).gates.P2 = idxP2;
+				end
+				
+				if (exist('gateP3', 'var') && ~isempty(gateP3))
+					[subIdxP3, ~] = Gating.gatePolygon( ...
+						data(d).(chans{3}).raw(idxP2), ...
+						data(d).(chans{4}).raw(idxP2), ...
+						'semilogy', gateP3);
+					numIdxP3 = numIdxP2(subIdxP3);
+					idxP3 = falseIdx;
+					idxP3(numIdxP3) = true;
+					
+					% Save Gate P3
+					data(d).gates.P3 = idxP3;
+				end
             end
         end
         
@@ -314,11 +400,8 @@ classdef Gating < handle
                 ax.XLim = [AXES_MIN, AXES_MAX];
                 ax.YLim = [AXES_MIN, AXES_MAX];
                 
-				h = impoly; %modified by JG to use impoly to determine if event is within gate - much easier this way.
+				h = impoly(ax, 'Closed', true); % modified by JG to use impoly to determine if event is within gate - much easier this way.
 				position = wait(h);
-
-				% make the gate vertices matrix a closed shape
-				position = [position; position(1,:)];
 			end
 
 			gateVertices = position;
