@@ -14,10 +14,6 @@ classdef FlowAnalysis < handle
     %   Functions:
     %
     %       data			= openFiles(varargin)
-    %       [xBleed, yComp] = compensateSC(JCFile, singleColorFile, correctFile, bC, cC, plotsOn)
-    %       compData		= compensateBatchSC(jcData, scData, channels, inputData, gate, plotsOn)
-    %       compdData		= compensateMatrix(matrixFile, inputData)
-    %       YI				= lsq_lut_piecewise(x, y, XI)
     %       data			= bin(data, constitutive, outputs, gate)
     %       data			= cluster(data, channels, method, dataType, numPop)
     %       [data, stats]	= calcStats(inputs [data, channels, dataType, threshChan, thresh, threshPct, statTypes] )
@@ -76,17 +72,29 @@ classdef FlowAnalysis < handle
             %   Updated 2015-11-18
             
             % Check inputs (should be the transfection marker channel name, then filenames)
-%             validateattributes(TF_marker, {'char'}, {}, mfilename, 'TF_marker', 1);
-            filenames = cell(1, nargin);
-            for i = 1: numel(varargin)
-                name = varargin{i};
-                if (~strcmpi(name(end-3:end), '.fcs'))
-                    name = strcat(name, '.fcs');
-                end
-                if (~exist(name, 'file'))
-                    error('Filename %s does not exist in the path', name);
-                end
-                filenames{i} = name;
+            filenames = {};
+            for i = 1:numel(varargin)
+				
+				% Check each input to see if it is a single char or a cell of
+				% filenames, since the method should take in variable inputs
+				if iscell(varargin{i})
+					names = varargin{i};
+				else
+					names = varargin(i);
+				end
+				
+				% For loop handles multiple files in a cell, but also works for
+				% a single filename
+				for n = 1:numel(names)
+					name = names{n};
+					if (~strcmpi(name(end-3:end), '.fcs'))
+						name = strcat(name, '.fcs');
+					end
+					if (~exist(name, 'file'))
+						error('Filename %s does not exist in the path', name);
+					end
+					filenames = [filenames, {name}]; %#ok<AGROW>
+				end
             end
             
             % If no filenames were given, open GUI to find files
@@ -132,18 +140,6 @@ classdef FlowAnalysis < handle
                     channelNames{channel} = chanName;
                 end
                 
-                % I've erased some fucntionality that I used to have where everything 
-                % was sorted based on a transfection marker, which is unnecessary.
-                
-%                 % Check that TF_marker exists
-%                 TF_marker_idx = find(strcmpi(TF_marker, channelNames), 1);
-%                 if (isempty(TF_marker_idx))
-%                     error('TF_marker not found in file.\nTF_marker: %s\n', TF_marker);
-%                 end
-%                 
-%                 % Sort based on the values in the TF_marker
-%                 [~, sortIDX] = sort(fcsdat(:, TF_marker_idx));
-                
                 % Extract data :: The data is in columns, so we need the column numbers
                 for channel = 1:numel(channelNames)
                     
@@ -151,18 +147,15 @@ classdef FlowAnalysis < handle
                     ch = struct();
                     
                     % Extract raw data
-%                     ch.raw = fcsdat(sortIDX, channel);
                     ch.raw = fcsdat(:, channel);
                     
                     % Only taken if the scaled is different
                     if (~isempty(fcsdatscaled) && all(fcsdatscaled(:, channel) ~= fcsdat(:, channel)))
-    %                     ch.scaled = fcsdatscaled(sortIDX, channel);
                         ch.scaled = fcsdatscaled(:, channel);
                     end
                     
                     % only taken if the comp is different
                     if (~isempty(fcsdatcomp) && all(fcsdatcomp(:, channel) ~= fcsdat(:, channel)))
-%                         ch.comp = fcsdatcomp(sortIDX, channel);
                         ch.comp = fcsdatcomp(:, channel);
                     end
                     
@@ -175,741 +168,6 @@ classdef FlowAnalysis < handle
 			end
 
             fprintf(1, 'Finished creating data struct\n');
-        end
-		
-		
-		function [xBleed, yComp] = compensateSC(JCFile, singleColorFile, correctFile, bC, cC, plotsOn)
-			% [xBleed,yComp]=compensate(JCFile, singleColorFile, correctFile, bC, cC,plotsOn)
-			% single-color compensation
-			%   JCFile = Just Cell File
-			%   singleColorFile = FCS file for single color control
-			%   correctFile = FCS file that needs to be corrected
-			%   bC = channel number of the color that is bleeding and needs to be
-			%        corrected for in other channels
-			%   cC = channel number of the color that needs to be corrected
-			%   plotsOn = optional. Turns plots on for visualization
-			%     
-			%   Example:
-			%       [fcsdat, ~, ~, ~] = fca_readfcs('sample.fcs');
-			%       GreenChannel = getChannel(fcshdr,'FIT');
-			%       RedChannel = getChannel(fcshdr,'Red');
-			%       GreenData = fcsdat(:,GreenChannel);
-			%       RedData = fcsdat(:,RedChannel);
-			%       figure()
-			%       biexplot(redData,greenData)
-			%       [newRed,newGreen]=compensateSC('JCsample.fcs','RedSample.fcs','sample.fcs',RedChannel,GreenChannel);
-			%       figure()
-			%       biexplot(newred,newgreen)
-			%
-			%   Written by
-			%   Breanna Stillo
-			%   bstillo@mit.edu
-			%   Last Updated: 2014-10-21;
-
-			[fcsdat, ~, ~, ~] = fca_readfcs(JCFile);
-			cValsJC = fcsdat(:, cC);
-			median_cJC = median(cValsJC);
-			
-			[fcsdat, ~, ~, ~] = fca_readfcs(singleColorFile);
-			bValsSC = fcsdat(:, bC);
-			cValsSC = fcsdat(:, cC);
-
-			XI = [0 10^2 10^2.5 10^3 10^3.5 10^4 10^4.5 max(bValsSC)];
-			YI = FlowAnalysis.lsq_lut_piecewise(bValsSC, cValsSC, XI);
-			
-			if exist('plotsOn','var')
-				if plotsOn
-					figure()
-					biexplot(bValsSC, cValsSC)
-					hold on
-					biexplot(XI, YI, 'r-')
-				end
-			end
-			
-			[fcsdat, ~, ~, ~] = fca_readfcs(correctFile);
-			bValsCF = fcsdat(:, bC);
-			cValsCF = fcsdat(:, cC);
-			
-			yerror = compEval(bValsCF);
-			cReal = cValsCF - yerror + median_cJC;
-			
-			xBleed = bValsCF;
-			yComp = cReal;
-			
-			
-			% --- Helper Function --- %
-			
-			
-			function y = compEval(x)
-						
-				yBuff = zeros(length(x), 1);
-				for w = 1:length(x)
-					eqn = find(XI > x(w), 1, 'first');
-					if isempty(eqn)
-						eqn = length(XI);
-					end
-					if eqn == 1
-						eqn = 2;
-					end
-
-					a = (YI(eqn) - YI(eqn - 1)) ./ (XI(eqn) - XI(eqn - 1));
-					b = YI(eqn) - a * XI(eqn);
-					yBuff(w) = a * x(w) + b;
-				end
-				
-				y = yBuff;
-					
-			end
-			
-        end
-        
-        
-        function compData = compensateBatchSC(jcData, scData, scChannels, inputData, fixChannels, dataType, gate, plotsOn)
-            % compensateBatchSC compensates data using a fitting routine to single-color bleeding.
-            % 
-            %   compData = compensateBatchSC(jcData, scData, scChannels, inputData, fixChannels, gate, plotsOn)
-            %   
-            %       Inputs: 
-            %           jcData          A standard struct with untransfected cells data
-            %            (struct)       
-            %
-            %           scData          A standard struct with single color samples data
-            %            (struct)       
-            %
-            %           scChannels      A cell array of single color channels - entries should 
-            %            (cell)         be strings with the names given by Fortessa
-            %                               eg: {'PE_Texas_Red_A', 'FITC-A'}
-            %                               Note this is case-sensitive
-            %                           The channels must match with the samples in scData!
-            %                               
-            %             ****              The order MUST BE THE SAME as the single-color samples
-            %                               given in scData. This will not be auto-checked!
-            %
-            %           inputData       A stardard struct with channel data to be compensated. 
-            %            (struct)       'fixChannels' should all exist in this struct.
-            %
-            %           fixChannels     A cell array of strings indicating the channels to be fixed
-            %            (cell)         by the compensation procedure.
-            %
-			%			dataType (opt)	A string indicating which data type to compensate with. 
-			%			 (string)		
-            %
-            %           gate (opt)      A string indicating what gated population to compensate
-            %            (string)       with, for example, 'P3'. Must match entries in 'gates'
-            %                           field of all data structs.
-            %
-            %           plotsOn (opt)   A boolean indicating whether to plot or not
-            %            (logical)
-            %
-            %       Outputs:
-            %           compData        A copy of the inputData struct with added scComp field
-            %            (struct)       for each compensated channel.
-            %
-            %   Modified from Bre's compensateSC method above for automated batch processing and
-            %   a simpler interface for the user using my data structure.
-            %
-            %   Ross Jones
-            %   Weiss Lab
-            %   2015-11-17
-            
-            % Check the inputs
-            checkInputs_compensateBatchSC();
-                        
-            % Allocate output structure
-            fields = fieldnames(inputData);
-            nSamplesToComp = length(inputData);
-            compData(nSamplesToComp) = cell2struct(cell(length(fields), 1), fields, 1);
-            
-            % Compensate using each channel pair
-            for i = 1:nSamplesToComp
-                compDataSample = inputData(i);
-                for j = 1:numel(scChannels)
-                    bleedChannel = scChannels{j};
-                    for k = 1:numel(fixChannels)
-
-                        % Skip compensation for same channel matches
-                        if strcmpi(scChannels{j}, fixChannels{k})
-                            continue
-                        end
-                        
-                        % Process compensation and store compensated data in output struct
-                        % Note that on each call of proscesCompensation, the variable 
-                        % compDataSample is updated with compensation data. Thus, this data
-                        % is added to the function output after each channel has been processed
-                        
-                        fixChannel = fixChannels{k};
-                        
-                        % -- It turns out this is slower to load/save the YI vector - computation is
-                        %    relatively fast!
-                        processCompensation(bleedChannel, fixChannel, plotsOn); 
-
-                    end
-                end
-                compData(i) = compDataSample;
-            end
-            
-            
-            % --- Helper functions --- %
-            
-            
-            function checkInputs_compensateBatchSC()
-                
-                % Check types
-                validateattributes(jcData, {'struct'}, {}, mfilename, 'jcData', 1);
-                validateattributes(scData, {'struct'}, {}, mfilename, 'scData', 2);
-                validateattributes(scChannels, {'cell', 'char'}, {}, mfilename, 'channels', 3);
-                validateattributes(inputData, {'struct'}, {}, mfilename, 'inputData', 4);
-                validateattributes(fixChannels, {'cell', 'char'}, {}, mfilename, 'channels', 5);
-				if exist('dataType', 'var')
-					validatestring(dataType, fieldnames(jcData(1).(scChannels{1})), mfilename, 'dataType', 5)
-				end
-                if exist('gate', 'var')
-                    validatestring(gate, fieldnames(jcData(1).gates), mfilename, 'gate', 6);
-                end
-                if exist('plotsOn', 'var')
-                    validateattributes(plotsOn, {'logical'}, {}, mfilename, 'plotsOn', 7);
-                else
-                    plotsOn = false;
-                end
-                
-                % Check if number of channels is less than or equal to length of single-color struct
-                %   (should be 1:1 matching, or fewer if not all are needed)
-                if ischar(scChannels), scChannels = {scChannels}; end
-                assert(length(scChannels) <= length(scData), ...
-                    'Number of channels (%d) is greater than the number of single-color controls (%d)', ...
-                    length(scChannels), length(scData));
-                
-                % Check if each given single color channel is in the measured channels
-                for iii = 1:numel(scChannels)
-                    channel = scChannels{iii};
-                    if isempty(intersect(channel, fieldnames(scData(iii))))
-                        error('Given scChannel: %s is not valid', channel{:});
-                    end
-                end
-                                
-                % Check if each given fix channel is in the measured channels
-                if ischar(fixChannels), fixChannels = {fixChannels}; end
-                for channel = reshape(fixChannels, 1, [])
-                    if isempty(intersect(channel{:}, fieldnames(inputData(1))))
-                        error('Given fixChannel: %s is not valid', channel{:});
-                    end
-                end
-            end
-            
-            
-            function YI = processCompensation(bleedChannel, fixChannel, plotsOn)
-                % Avoid overhead of repeatedly passing large data structures as inputs or 
-                % reloading data by using global variables. 
-                
-                
-                % Get gate indexes if applicable
-                if exist('gate', 'var')
-                    jcGate = jcData.gates.(gate);
-                    scGate = scData(j).gates.(gate);
-                    inGate = compDataSample.gates.(gate);
-                end
-                
-                % Extract median value of untransfected cells for the fix channel
-                jcMedianFixChannel = median(jcData.(fixChannel).raw(jcGate));
-                
-                % Extract single color data for bleed and fix channels
-                %   Sub index with j, which is the scFile corresponding with bleedchannel
-                scBleedChannel = scData(j).(bleedChannel).raw(scGate);
-                scFixChannel = scData(j).(fixChannel).raw(scGate);
-                
-                % Extract input data for the bleed and fix channels
-                cdsBleed = compDataSample.(bleedChannel);
-                if isfield(cdsBleed, 'scComp')
-                    inBleedChannel = cdsBleed.scComp;
-                else
-                    inBleedChannel = cdsBleed.raw(inGate);
-                end
-                cdsFix = compDataSample.(fixChannel);
-                if isfield(cdsFix, 'scComp')
-                    inFixChannel = cdsFix.scComp;
-                else
-                    inFixChannel = cdsFix.raw(inGate);
-                end
-                
-                % Setup arrays for curve fitting
-                XI = [-10^4, -10^3, -10^2 0, 10^2, 10^2.5, 10^3, 10^3.5, 10^4, 10^4.5, 10^5];
-                YI = FlowAnalysis.lsq_lut_piecewise(scBleedChannel, scFixChannel, XI);
-                
-                % Evaluate bleeding: subtract the difference between the yerror (the amount of
-                % bleed as determined by the single color controls) and the background.
-                yerror = interp1(XI, YI, inBleedChannel);
-                try
-                    compdInFixChannel = inFixChannel - (yerror - jcMedianFixChannel);
-                catch ME
-                    whos inFixChannel yerror 
-                    cdsBleed %#ok<NOPRT>
-                    cdsFix %#ok<NOPRT>
-                    error(ME)
-                end
-                compDataSample.(fixChannel).scComp = compdInFixChannel;
-%                 valid = ~(isnan(compdInFixChannel) | isinf(compdInFixChannel));
-%                 compDataSample.(fixChannel).scComp = compdInFixChannel(valid);
-%                 if isfield(cdsBleed, 'scComp')
-%                     compDataSample.(bleedChannel).scComp = inBleedChannel(valid);
-%                 end
-%                 compDataSample.gates.(gate) = valid;
-                
-                % Test plotting
-                if exist('plotsOn','var') && plotsOn
-                    figure()
-                    biexplot(scBleedChannel, scFixChannel, {'.', 'markersize', 5})
-                    hold on
-                    biexplot(XI, YI, '-')
-                    hold on
-                    biexplot(inBleedChannel, yerror, {'.', 'markersize', 5})
-                    hold on
-                    biexplot(inBleedChannel, inFixChannel, {'.', 'markersize', 5})
-                    hold on
-                    biexplot(inBleedChannel, compdInFixChannel, {'.', 'markersize', 5})
-                    pause()
-                end
-
-            end
-        end
-        
-        
-        function [data, wtData, scData, fitParams] = ...
-                        compensateMatrixBatch(data, channels, wtData, scData, dataType, gate, plotsOn)
-            % compensateMatrixBatch compensates an entire standard data struct by generating 
-            % coefficients with linear fitting on single-color control data and processing the
-            % data to be sent piecewise to FlowAnalysis.compensateMatrix(). 
-            % 
-            % The method first subtracts autofluorescence based on the untransfected cell
-            % sample provided (see below)
-            %
-            %   compData = compensateMatrixBatch(justCellsFile, singleColorFile, colors, inputData)
-            %   
-            %       Inputs: 
-            %           data            A stardard struct with channel data to be compensated. 
-            %            (struct)       'fixChannels' should all exist in this struct.
-            %           
-            %           channels        A cell array of strings indicating the channels to be fixed
-            %            (cell)         by the compensation procedure.
-            %
-            %                           Entries should be strings with the names given by Fortessa
-            %                           but with spaces and dashes replaced by underscores
-            %                               eg: {'PE_Texas_Red_A', 'FITC_A'}
-            %                               Note: this is case-sensitive
-            %
-            %           wtData          A standard struct with untransfected (WT) cells data
-            %            (struct)       
-            %
-            %           scData          A standard struct with single color samples data
-            %            (struct)       
-            %                       *** The order MUST BE THE SAME as the corresponding 
-            %                           colors in 'channels'. This will not be auto-checked!
-			%
-			%			dataType (opt)	A string indicating which data type to compensate with. 
-			%			 (string)		
-            %
-            %           gate (opt)      A string indicating which gated population to compensate
-            %            (string)       with, for example, 'P3'. Must match entries in 'gates'
-            %                           field of all data structs.
-            %
-            %           plotsOn (opt)   A boolean indicating whether to plot or not
-            %            (logical)
-            %
-            %       Outputs:
-            %           data            A copy of the data struct with added 'afs' and 'mComp' 
-            %            (struct)       fields for each compensated channel.
-            %                               afs = autofluorescence subtracted
-            %                               mComp = matrix compensated
-            %
-            %           wtData          A copy of the wtData struct with added 'afs' and 'mComp' 
-            %            (struct)       fields for each compensated channel.
-            %
-            %           scData          A copy of the scData struct with added 'afs' and 'mComp' 
-            %            (struct)       fields for each compensated channel.
-			%
-			%			fitParams		(Optional) The parameters fit during compensation
-            %
-            %
-            % Ross Jones, Weiss Lab
-            % jonesr18@mit.edu
-            % Created 2017-06-06
-            % 
-            % Update Log: 
-            %
-            %	2017-07-16		Added dataType input
-			%	2017-08-22		Added full compensation parameter output,
-			%					changed autofluorescence calculation
-			%
-			%	...
-			%
-			% Autofluorescence:		[ 4,  2, 0,   1]
-			% Summed Intercepts:	[13, 11, 0, -15]
-			% Ints after AF sub:	[ 1,  5, 0, -18]
-			% AF Sub effect:	  - [12,  6, 0,   3] = -3 * AF
-            
-            % Check the inputs - makes no changes to data structures
-            checkInputs_compensateMatrixBatch();
-            
-            % Find medians for each channel in jcData
-% 			autofluor = getAutofluor();
-            
-            % Find coefficients using least-squares linear fits - uses afs data
-            [coeffs, ints] = getCoefficients();
-			
-			% Calculate autofluorescence from scData fit Y-intercepts
-			autofluor = sum(ints, 2) / (numel(channels) - 1); 
-			
-			% Subtract autofluorescence - adds autofluorescence subtracted (afs) 
-            % field to existing data structures
-			for i = 1:numel(data)
-				data(i) = subtractAutofluorescence(data(i), autofluor);
-			end
-			for i = 1:numel(scData)
-				scData(i) = subtractAutofluorescence(scData(i), autofluor);
-			end
-			wtData = subtractAutofluorescence(wtData, autofluor);
-            
-            % Process the compensation - adds matrix compensated (mComp) field
-            % to existing data structures
-            for i = 1:numel(data)
-                data(i) = processCompensation(data(i), coeffs);
-            end
-            for i = 1:numel(scData)
-                scData(i) = processCompensation(scData(i), coeffs);
-            end
-            wtData = processCompensation(wtData, coeffs);
-            
-            % Check compensation results
-            [coeffs_comp, ints_comp] = getCoefficients(true);
-            
-			fitParams = struct( ...
-				'intercepts', ints, ...
-				'autofluor', autofluor, ...
-				'coefficients', coeffs, ...
-				'comp_ints', ints_comp, ...
-				'comp_coeffs', coeffs_comp);
-			
-            
-            % --- Helper functions --- %
-            
-            
-            function checkInputs_compensateMatrixBatch()
-                
-                % Check types
-                validateattributes(data, {'struct'}, {}, mfilename, 'inputData', 1);
-                validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 2);
-                validateattributes(wtData, {'struct'}, {}, mfilename, 'jcData', 3);
-                validateattributes(scData, {'struct'}, {}, mfilename, 'scData', 4);
-				if exist('dataType', 'var')
-					validatestring(dataType, fieldnames(wtData(1).(channels{1})), mfilename, 'dataType', 5);
-				end
-                if exist('gate', 'var')
-                    validatestring(gate, fieldnames(wtData(1).gates), mfilename, 'gate', 6);
-                end
-                if exist('plotsOn', 'var')
-                    validateattributes(plotsOn, {'logical'}, {}, mfilename, 'plotsOn', 7);
-                else
-                    plotsOn = false;
-                end
-                
-                % Check if number of channels is equal to length of single-color struct
-                %   (should be 1:1 matching, or fewer if not all are needed)
-                if ischar(channels), channels = {channels}; end
-                assert(length(channels) == length(scData), ...
-                    'Number of channels (%d) does not equal the number of single-color controls (%d)', ...
-                    length(channels), length(scData));
-                
-                % Check if each given single color channel is in the measured channels
-                for ch = 1:numel(channels)
-                    channel = channels{ch};
-                    if isempty(intersect(channel, fieldnames(scData(ch))))
-                        error('Given scChannel: %s is not valid', channel{:});
-                    end
-                end
-            end
-            
-            
-            function autofluor = getAutofluor()
-                % Builds an Nx1 array of autofluorescent values in each channel
-                
-                % Set up figure to view distribution (if applicable)
-                if plotsOn
-                    figure()
-                    spIdx = 0;
-                end
-                
-                autofluor = zeros(1, numel(channels));
-                if exist('gate', 'var')
-                    wtGate = wtData.gates.(gate);
-                else
-                    wtGate = true(1, numel(wtData.(channels{1}).(dataType)));
-                end
-                for ch = 1:numel(channels)
-                    autofluor(ch) = median(wtData.(channels{ch}).(dataType)(wtGate));
-                    
-                    if plotsOn
-                        spIdx = spIdx + 1;
-                        ax = subplot(1, numel(channels), spIdx);
-                        hold(ax, 'on')
-                        histogram(ax, real(wtData.(channels{ch}).(dataType)(wtGate)))
-                        histogram(ax, real(wtData.(channels{ch}).(dataType)(wtGate) - autofluor(ch)))
-                    end
-                end
-            end
-            
-            
-            function dataSubset = subtractAutofluorescence(dataSubset, autofluor)
-                % Subtracts autofluorescence from the given data subset
-                
-                % Iterate over data and subtract autofluorescence
-				% Don't gate the data to keep the .afs data full-size.
-                for ch = 1:numel(channels)
-                    dataSubset.(channels{ch}).afs = ...
-							dataSubset.(channels{ch}).(dataType) - autofluor(ch);
-                end
-            end
-            
-            
-            function [coefficients, intercepts] = getCoefficients(isComp)
-                % Finds the coefficients for linear fits between each channel
-                % when observing bleed-through.
-                %
-                % Optional input: isComp (can use to check post-comp data)
-                
-                % Set up figure to view fitting (if applicable)
-                if plotsOn
-                    figure()
-                    spIdx = 0;
-                end
-                
-                coefficients = zeros(numel(channels));
-				intercepts = zeros(numel(channels));
-                for chF = 1:numel(channels)
-                    
-                    % Find regression with each channel
-                    for chB = 1:numel(channels)
-                        
-						if exist('gate', 'var')
-							scGate = scData(chB).gates.(gate);
-						else
-							scGate = true(1, numel(scData(chB).(channels{1}).(dataType)));
-						end
-						
-						if (exist('isComp', 'var') && isComp)
-							scBleedData = scData(chB).(channels{chB}).mComp(scGate);
-							scFixData = scData(chB).(channels{chF}).mComp(scGate);
-						else
-							scBleedData = scData(chB).(channels{chB}).(dataType)(scGate);
-							scFixData = scData(chB).(channels{chF}).(dataType)(scGate);
-						end
-% 						valid = (scBleedData > 0 & scFixData > 0);
-% 						scBleedData = scBleedData(valid);
-% 						scFixData = scFixData(valid);
-                        
-                        % This is the same as calculating the slope with a least
-                        % squares metric. Rows are channels being bled into and
-                        % columns are bleeding channels. 
-%                         coefficients(chF, chB) = scBleedData(:) \ scFixData(:);
-                        [~, coefficients(chF, chB), intercepts(chF, chB)] = regression(scBleedData', scFixData');
-                        
-                        if plotsOn
-                            
-                            subSample = logspace(-1, 11, 100);
-							
-                            spIdx = spIdx + 1;
-                            ax = subplot(numel(channels), numel(channels), spIdx);
-                            hold(ax, 'on')
-%                           
-%                             plot(ax, Transforms.lin2logicle(scBleedData(1:10:end)), ...
-%                                  Transforms.lin2logicle(scFixData(1:10:end)), ...
-%                                  '.', 'MarkerSize', 2)
-%                             
-%                             plot(ax, Transforms.lin2logicle(subSample), ...
-%                                  Transforms.lin2logicle(subSample * coefficients(chF, chB)), ...
-%                                  '-', 'linewidth', 4)
-							
-							warning('off', 'MATLAB:Axes:NegativeDataInLogAxis')
-							plot(ax, scBleedData(1:10:end), ...
-                                scFixData(1:10:end), ...
-                                '.', 'MarkerSize', 2)
-                            
-                            plot(ax, subSample, ...
-                                subSample * coefficients(chF, chB) + intercepts(chF, chB), ...
-                                '-', 'linewidth', 4)
-							
-% 							Plotting.biexpAxes(ax);
-							ax.XScale = 'log';
-							ax.YScale = 'log';
-							ax.YLim = [1e-1, 1e7];
-							ax.XLim = [1e-1, 1e11];
-							if (chB ~= chF)
-% 								ax.YLim = Transforms.lin2logicle([-100, 200]);
-							end
-                        end
-                    end
-                end
-            end
-
-            
-            function dataSubset = processCompensation(dataSubset, coefficients)
-                % Processes the compensation for one data subset
-                
-                % Extract raw data into NxM matrix (N = num channels, M = num cells)
-				% Don't gate the data to keep the .mComp data full-size.
-				rawData = zeros(numel(channels), numel(dataSubset.(channels{1}).afs));
-                for ch = 1:numel(channels)
-					rawData(ch, :) = dataSubset.(channels{ch}).afs;
-                end
-                
-                % Apply matrix compensation
-                fixedData = FlowAnalysis.compensateMatrix(rawData, coefficients);
-                
-                % Implant compensated data
-                for ch = 1:numel(channels)
-                    dataSubset.(channels{ch}).mComp = fixedData(ch, :)';
-                end
-                
-%                 % Test plotting
-%                 if exist('plotsOn','var') && plotsOn
-%                     figure()
-%                     biexplot(scBleedChannel, scFixChannel, {'.', 'markersize', 5})
-%                     hold on
-%                     biexplot(inBleedChannel, inFixChannel, {'.', 'markersize', 5})
-%                     hold on
-%                     biexplot(inBleedChannel, compdInFixChannel, {'.', 'markersize', 5})
-%                     pause()
-%                 end
-
-            end
-        end
-            
-        
-        function compdData = compensateMatrix(inputData, coefficients)
-            % compensateMatrix compensates data using linear coefficients for
-            % bleed-trhough between channels.
-            % 
-            %   compData = compensateMatrix(matrixFile, inputData)
-            %   
-            %       Inputs: 
-            %           inputData       An NxM matrix of data points corresponding with
-            %                           M cells in N channels to be compensated. 
-            %
-            %           coefficients    An NxN matrix of coefficients corresponding with
-            %                           the slope of lines of best fit between N channels 
-            %                           bleeding into each other. 
-            %
-            %       Outputs:
-            %           compData        A copy of the inputData struct with added matComp field
-            %            (struct)       for each compensated channel.
-            %   
-            %   This method solves the linear set of equations:
-            %       X_observed = A * X_real
-            %
-            %   'inputData' corresponds with 'X_observed' and 'coefficients'
-            %   corresponds with the matrix 'A'. We invert 'A' to solve for
-            %   X_real, which is returned as 'compdData'.
-            %
-            % Ross Jones
-            % Weiss Lab
-            % 2017-06-06
-            %
-            % Update Log:
-            %
-            % ...
-            
-            % Check inputs are valid
-            checkInputs_compensateMatrix(inputData, coefficients);
-            
-            % Compensate data
-            compdData = coefficients \ inputData;
-            
-            
-            % --- Helper functions --- %
-            
-            
-            function checkInputs_compensateMatrix(inputData, coefficients)
-                
-                % Check types
-                validateattributes(inputData, {'numeric'}, {}, mfilename, 'inputData', 1);
-                validateattributes(coefficients, {'numeric'}, {}, mfilename, 'coefficients', 2);
-                
-                % Check sizes
-                assert(size(inputData, 1) == size(coefficients, 2), ...
-                    '# Channels in ''inputData'' (%d) and ''coefficients'' (%d) are not the same!', ...
-                    size(inputData, 1), size(coefficients, 2))
-                assert(size(coefficients, 1) == size(coefficients, 2), ...
-                    '''coefficients'' is not square! (H = %d, W = %d)', ...
-                    size(coefficients, 1), size(coefficients, 2))
-            end
-        end
-		
-		
-		function YI = lsq_lut_piecewise(x, y, XI)
-			% LSQ_LUT_PIECEWISE Piecewise linear interpolation for 1-D interpolation (table lookup)
-			%   YI = lsq_lut_piecewise( x, y, XI ) obtain optimal (least-square sense)
-			%   vector to be used with linear interpolation routine.
-			%   The target is finding Y given X the minimization of function 
-			%           f = |y-interp1(XI,YI,x)|^2
-			%   
-			%   INPUT
-			%       x measured data vector
-			%       y measured data vector
-			%       XI break points of 1-D table
-			%
-			%   OUTPUT
-			%       YI interpolation points of 1-D table
-			%           y = interp1(XI,YI,x)
-			%
-            
-            % Turn off this warning, which results from using very negative values in XI
-            warning('off', 'MATLAB:rankDeficientMatrix')
-            
-            % Check vector sizes
-			if size(x, 2) ~= 1
-				error('Vector x must have dimension n x 1.');   
-			elseif size(y, 2) ~= 1
-				error('Vector y must have dimension n x 1.');    
-			elseif size(x, 1) ~= size(y, 1)
-				error('Vector x and y must have dimension n x 1.'); 
-			end
-
-			% matrix defined by x measurements
-			A = sparse([]); 
-
-			% vector for y measurements
-			Y = []; 
-
-			for j = 2:length(XI)
-				
-				% get index of points in bin [XI(j-1) XI(j)]
-				ix = (x >= XI(j - 1) & x < XI(j) );
-				
-				% check if we have data points in bin
-                % doesn't matter
-% 				if ~any(ix)
-% 					warning('Bin [%f %f] has no data points, check estimation. Please re-define X vector accordingly.',XI(j-1),XI(j));
-% 				end
-				
-				% get x and y data subset
-				x_ = x(ix);
-				y_ = y(ix);
-				
-				% create temporary matrix to be added to A
-				tmp = [(1 - (x_ - XI(j - 1)) / (XI(j) - XI(j - 1))),...
-                       (    (x_ - XI(j - 1)) / (XI(j) - XI(j - 1))) ];
-				
-				% build matrix of measurement with constraints
-				[m1, n1] = size(A);
-				[m2, n2] = size(tmp);
-				A = [A, zeros(m1, n2 - 1); 
-                     zeros(m2, n1 - 1), tmp]; %#ok<AGROW>
-				
-				% concatenate y measurements of bin
-				Y = [Y; y_]; %#ok<AGROW>
-			end
-
-			% obtain least-squares Y estimation
-			YI = (A \ Y)';
-
         end
         
         
@@ -961,6 +219,7 @@ classdef FlowAnalysis < handle
             nDims = numel(inputChannels);
             
             % Create bins with input channels
+			% --> Only extract binDims from the first sample, then do the rest
             [data(1).bins, binDims] = generateBins(data(1), nDims);
 			for i = 2:numel(data)
 				[data(i).bins] = generateBins(data(i), nDims);
@@ -1064,9 +323,88 @@ classdef FlowAnalysis < handle
         end
         
         
-        function [bins, binDims] = simpleBin(cells, binEdges)
+        function [bins, binDims] = simpleBin(dataMatrix, binEdges)
+            % Takes an array of data values and bins them using the given edges, 
+            % returning a double array of bin IDs for each element
+            %
+			%	TIMING RESULTS: 1.3 seconds. (Fastest)
+			%
+            %   Inputs
+            %       'dataMatrix'    A N x M double matrix of N elements with M
+            %						dimensions to be binned. 
+            %       'binEdges'		An array of edges defining each bin in logicle space.
+			%						The edges are applied to all dimensions. To make unique 
+			%						edges for each dimension, pass a cell array of bin edges, 
+			%						where each cell element corresponds with a channel in the
+			%						same order as the columns of 'dataMatrix'. 
+			%						*Note: Bin edges are sorted prior to binning.
+            %
+            %   Output
+            %       'bins'          A N-dimensional cell matrix where each cell 
+            %                       holds a double array of numerical indexes 
+            %                       for each element in a given bin. The size of
+            %                       each dimension is given by the number of
+            %                       edges given in each dimensison. 
+			%		'binDims'		A vector indicating the number of bins in
+			%						each dimension. 
+            
+            % Define bins in biexponential space at a wide range
+			
+			if iscell(binEdges)
+				% Unique bin edges for all
+				binDims = zeros(1, numel(binEdges));
+				for be = 1:numel(binEdges)
+					binDims(be) = numel(binEdges{be}) - 1;
+					binEdges{be} = sort(binEdges{be});
+				end
+			else
+				% Bin edges same and apply to all channels
+				binDims = (numel(binEdges) - 1) .* ones(1, size(dataMatrix, 2));
+				be = binEdges; % Store for name override
+				binEdges = cell(1, size(dataMatrix, 2));
+				binEdges(:) = {be};
+			end
+            
+            % Setup bins as a cell array with dimensions equal to number of cell channels. 
+            nDims = length(binDims);
+            if nDims == 1
+                binDims = [binDims, 1];
+            end
+            bins = cell(binDims);
+            
+            % Find cells in each bin
+			binCoords = ones(binDims);
+			binCoords(1) = 0; % For the first iteration
+			cellsIdx = 1:size(dataMatrix, 1);
+			for i = 1:numel(bins)
+				
+				% Find bin coordinates in ND-space
+				for j = 1:nDims
+					binCoords(j) = binCoords(j) + 1;
+					if binCoords(j) > binDims(j)
+						binCoords(j) = 1;
+					else
+						break
+					end
+				end
+				
+				% Identify all cells within bin by checking bin edges in each dimension
+				cellsInBin = true(size(dataMatrix(:, 1)));
+				for j = 1:nDims
+					cellsInBin = (cellsInBin & ...
+								 (dataMatrix(:, j) <= binEdges{j}(binCoords(j) + 1)) & ...
+								 (dataMatrix(:, j) > binEdges{j}(binCoords(j))));
+				end
+				bins{i} = cellsIdx(cellsInBin);
+			end
+		end
+		
+		
+		function [bins, binDims] = simpleBin2(cells, binEdges)
             % Takes a double array of cells and bins them in biexp space, 
             % returning a double array of bin IDs for each cell
+			%
+			%	TIMING RESULTS: 7.87 seconds.
             %
             %   Inputs
             %       'cells'         A N x M double matrix of N cell fluorescence  
@@ -1076,6 +414,7 @@ classdef FlowAnalysis < handle
 			%						edges for each dimension, pass a cell array of bin edges, 
 			%						where each cell element corresponds with a channel in the
 			%						same order as the columns of 'cells'. 
+			%						*Note: Bin edges are sorted prior to binning.
             %
             %   Output
             %       'bins'          A N-dimensional cell matrix where each cell 
@@ -1091,11 +430,14 @@ classdef FlowAnalysis < handle
 				binDims = zeros(1, numel(binEdges));
 				for be = 1:numel(binEdges)
 					binDims(be) = numel(binEdges{be}) - 1;
+					binEdges{be} = sort(binEdges{be});
 				end
 			else
 				% Bin edges same and apply to all channels
 				binDims = (numel(binEdges) - 1) .* ones(1, size(cells, 2));
-				binEdges = {binEdges};
+				be = binEdges; % Store for name override
+				binEdges = cell(1, size(cells, 2));
+				binEdges(:) = {be};
 			end
             
             % Setup bins as a cell array with dimensions equal to number of cell channels. 
@@ -1104,42 +446,113 @@ classdef FlowAnalysis < handle
                 binDims = [binDims, 1];
             end
             bins = cell(binDims);
-            binsNum = reshape(1:numel(bins), binDims);
             
-            % Find cells in each bin
-			for i = 1:numel(bins)
+            % Place each cell into a bin
+			% --> Using a CellList for easy concatenation of cell IDs on the go
+			bins(:) = {CellList()};
+			for c = 1:size(cells, 1)
 				
-				% Find bin coordinates in ND-space
-				% This works by continually finding the X and Y coordinate until
-				% the Y coordinate is < numBins. Y coordinate is higher when the
-				% position is found in a higher dimension. 
-				% Note: May only work when the dimensions are square...not sure
-				[I, J] = find(binsNum == i);
-				idx = 1; 
-				while (J > binDims(idx))
-					idx = idx + 1;
-					[I2, J] = find(binsNum == J);
-					I = [I, I2]; %#ok<AGROW>
-				end
-				binCoords = [I, J];
-				if numel(binCoords) < nDims
-					% For when j has not reached dimensions higher than 2. 
-					binCoords = [binCoords, ones(1, nDims - numel(binCoords))]; %#ok<AGROW>
-				end
-				
-				% Identify all cells within bin by checking bin edges in each dimension
-				cellsInBin = true(size(cells(:, 1)));
+				% Determine cell bin coordinates
+				cellBinCoords = zeros(1, nDims);
 				for j = 1:nDims
-					cellsInBin = (cellsInBin & ...
-								 (cells(:, j) <= binEdges{j}(binCoords(j) + 1)) & ...
-								 (cells(:, j) > binEdges{j}(binCoords(j))));
+					
+					% Figure out which bin in dimension j the cell is in
+					for k = 1:binDims(j) % Number of bins, not edges
+						if (cells(c, j) >  binEdges{j}(k)) && (cells(c, j) <= binEdges{j}(k + 1))
+							cellBinCoords(j) = k;
+							break
+						end
+					end
 				end
-				bins{i} = find(cellsInBin);
+				% Sort out non-binned cells by the fact that they will be in bin "0"
+				% in at least one dimension, and thus the product will evaluate to 0
+				% and the logical index for that position will be false. 
+				if logical(prod(cellBinCoords))
+					cellBinCoords = num2cell(cellBinCoords);
+					bins{cellBinCoords{:}}.add(c);
+				end
+			end
+			
+			% Extract data from CellList objects used to collect data
+			for b = 1:numel(bins)
+				bins{b} = bins{b}.toVec();
+			end
+		end
+		
+		
+		function [bins, binDims] = simpleBin3(cells, binEdges)
+            % Takes a double array of cells and bins them in biexp space, 
+            % returning a double array of bin IDs for each cell
+            %
+			%	TIMING RESULTS: 3.17 seconds.
+			%
+            %   Inputs
+            %       'cells'         A N x M double matrix of N cell fluorescence  
+            %                       values in M pre-selected channels. 
+            %       'binEdges'		An array of edges defining each bin in logicle space.
+			%						The edges are applied to all dimensions. To make unique 
+			%						edges for each dimension, pass a cell array of bin edges, 
+			%						where each cell element corresponds with a channel in the
+			%						same order as the columns of 'cells'. 
+			%						*Note: Bin edges are sorted prior to binning.
+            %
+            %   Output
+            %       'bins'          A N-dimensional cell matrix where each cell 
+            %                       holds a double array of numerical indexes 
+            %                       for each cell in a given bin. The size of
+            %                       each dimension is given by the number of
+            %                       edges given in each dimensison. 
+            
+            % Define bins in biexponential space at a wide range
+			
+			if iscell(binEdges)
+				% Unique bin edges for all
+				binDims = zeros(1, numel(binEdges));
+				for be = 1:numel(binEdges)
+					binDims(be) = numel(binEdges{be}) - 1;
+					binEdges{be} = sort(binEdges{be});
+				end
+			else
+				% Bin edges same and apply to all channels
+				binDims = (numel(binEdges) - 1) .* ones(1, size(cells, 2));
+				be = binEdges; % Store for name override
+				binEdges = cell(1, size(cells, 2));
+				binEdges(:) = {be};
 			end
             
-        end
-        
-        
+            % Setup bins as a cell array with dimensions equal to number of cell channels. 
+            nDims = length(binDims);
+            if nDims == 1
+                binDims = [binDims, 1];
+            end
+            bins = cell(binDims);
+            
+			% Determine cell bin coordinates
+			cellBinCoords = zeros(size(cells, 1), nDims);
+			for j = 1:nDims
+
+				% Figure out which bin in dimension j the cell is in
+				for k = 1:binDims(j) % Number of bins, not edges
+					cellBinCoords(:, j) = cellBinCoords(:, j) + (cells(:, j) > binEdges{j}(k));
+				end
+				outOfRange = cells(:, j) > binEdges{j}(k + 1);
+				cellBinCoords(outOfRange, j) = 0;
+			end
+			
+			% Sort out non-binned cells by the fact that they will be in bin "0"
+			% in at least one dimension, and thus the product will evaluate to 0
+			% and the logical index for that position will be false. 
+			cellsInBins = logical(prod(cellBinCoords, 2));
+			
+			% Extract cells into bins
+			cellBinCoords = num2cell(cellBinCoords);
+			cellsIdx = 1:size(cells, 1);
+			for c = cellsIdx(cellsInBins) % cellsIdx is a row vector
+				bins{cellBinCoords{c, :}} = [bins{cellBinCoords{c, :}}, c];
+			end
+		end
+		
+		
         function data = cluster(data, channels, method, dataType, numPop)
             % CLUSTER Clusters the given data with the given clustering method
             %
