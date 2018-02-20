@@ -37,6 +37,10 @@ function gsd = geostd(x, flag, dim)
 % 
 % 
 % $ Author: Richie Cotton $     $ Date: 2006/03/17 $
+%
+% Update Log:
+%	2017-09-28		Ross Jones
+%		Empty input now returns NaN output
 
 
 % Basic error checking of inputs
@@ -44,6 +48,12 @@ if nargin < 1
     error('geostd:notEnoughInputs', 'This function requires at least one input.');
 elseif any(x(:) < 0)
     error(geostd:badData', 'All data values must be positive.');
+end
+
+% Return NaN for empty inputs
+if isempty(x)
+	gsd = NaN;
+	return;
 end
 
 % Setup default flag where required

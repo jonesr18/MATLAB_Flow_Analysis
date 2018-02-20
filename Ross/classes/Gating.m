@@ -196,7 +196,7 @@ classdef Gating < handle
         end
 		
 		
-        function [gateP1, gateP2, gateP3] = standardGating(data, onlyP1, swap, maxPoints)
+        function [gateP1, gateP2, gateP3, gateFigs] = standardGating(data, onlyP1, swap, maxPoints)
             % Creates 3 standard gates from a given samples
             %
             %   Gates
@@ -221,6 +221,7 @@ classdef Gating < handle
             %       gateP1      Logical index array for events in P1
             %       gateP2      Logical index array for events in P2
             %       gateP3      Logical index array for events in P3
+			%		gateFigs	Struct containing handles to gating figures
             %
             %
             % Written by Ross Jones
@@ -236,6 +237,7 @@ classdef Gating < handle
 			onlyP1 = (exist('onlyP1', 'var') && all(logical(onlyP1))); % Default FALSE
 			swap = (exist('swap', 'var') && all(logical(swap)));
 			if ~exist('maxPoints', 'var'), maxPoints = 20000; end
+			gateFigs = struct();
 			
 			% For each scatter channel, extract # cells/# samples from each sample
 			combinedData = struct();
@@ -258,7 +260,7 @@ classdef Gating < handle
 			pointsIdx = randperm(totalPoints, numPoints);
 
             % First do FSC-A vs SSC-A
-            [subIdxP1, gateP1] = Gating.gatePolygon( ...
+            [subIdxP1, gateP1, gateFigs.P1] = Gating.gatePolygon( ...
 					combinedData.FSC_A.raw(pointsIdx), ...
 					combinedData.SSC_A.raw(pointsIdx), 'semilogy'); 
 			
@@ -276,7 +278,7 @@ classdef Gating < handle
 				numIdxP1 = find(idxP1);         % Find numerical indexes for P1
 
 				% Second do FSC-W vs FSC-H
-				[subIdxP2, gateP2] = Gating.gatePolygon( ... 
+				[subIdxP2, gateP2, gateFigs.P2] = Gating.gatePolygon( ... 
 						combinedData.(chans{1}).raw(idxP1), ...
 						combinedData.(chans{2}).raw(idxP1), 'linear');
 				
@@ -285,7 +287,7 @@ classdef Gating < handle
 				idxP2(numIdxP2) = true;         % Assign TRUE values according to what passes P1 AND P2
 
 				% Third do SSC-W vs SSC-H
-				[~, gateP3] = Gating.gatePolygon( ... 
+				[~, gateP3, gateFigs.P3] = Gating.gatePolygon( ... 
 					combinedData.(chans{3}).raw(idxP2), ...
 					combinedData.(chans{4}).raw(idxP2), 'semilogy');    
 			end
@@ -367,7 +369,7 @@ classdef Gating < handle
         end
         
         
-		function [cellsWithinGate, gateVertices] = gatePolygon(xdata, ydata, axis_scales, position)
+		function [cellsWithinGate, gateVertices, gateFig] = gatePolygon(xdata, ydata, axis_scales, position)
 			% gates a given population.  Uses the polygon vertices specified by
 			% 'position' or if this is not given, the user is asked to specify the polygon
 			% through UI
@@ -380,7 +382,7 @@ classdef Gating < handle
             % new gate if it is not included
             
 			if ~exist('position', 'var')
-			    figure()
+			    gateFig = figure();
                 ax = gca();
 				if strcmp(axis_scales,'loglog')
 					loglog(xdata,ydata,'.','MarkerSize',2)

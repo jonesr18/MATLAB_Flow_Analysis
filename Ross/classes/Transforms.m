@@ -74,184 +74,270 @@ classdef Transforms < handle
 	
 	methods (Static)
 		
-		function out = lin2logicle(S)
-			% lin2logicle(S) converts a vector of values from a linear scale to a logicle scale 
-			%   out = lin2logicle(S) returns a vector of values corresponding to the values 
-			%   in X transformed from a linear scale to a logicle one using
-			%   the conversion function described by Parks, et al. "A New Logicle
-			%   Display Method Avoids Deceptive Effects of Logarithmic Scaling for Low
-			%   Signals and Compensated Data" Equation (5), where
-			%     S - a vector of linear 'raw' values
-			%     out - a vector of logicle converted values from S
+		function [biexpData, params] = lin2logicle(S, doMEF, params)
+			% Converts input linear data (S) to a logicle scale 
+			% 
+			%	biexpData = Transforms.lin2logicle(linspace(0, 1000));
 			%
-			%   Since Equation 5 cannot be explicitly solved for X, a spline is fitted to
-			%   X and S data. 
+			%	Inputs
+			%		S			<numeric> Linear-scale input values
 			%
-			%   Example:
-			%       out = Transforms.lin2logicle(linspace(0,1000));
+			%		doMEF		<logical> (optional) If true, the method will scale
+			%					the transformation for MEF (bead unit) conversions,
+			%					rather than raw machine-based fluorescent units
 			%
-			%   Written by
-			%   Breanna Stillo
-			%   bstillo@mit.edu
-			%   Last Updated: 2014-10-14
+			%		params		<struct> (optional) Allows the user to specify
+			%					the exact logicle transform parameters to use
+			%						Accepted input fields (see below):
+			%							T, M, r, MEF
+			%
+			%	Outputs
+			%		biexpData	<numeric> Logicle-transformed data
+			%
+			%		params		<struct> The parameters used for conversion
+			%
+			%	Notes
+			%		The logicle conversion function is described by Parks, et al. 
+			%		"A New Logicle Display Method Avoids Deceptive Effects of 
+			%		Logarithmic Scaling for Low Signals and Compensated Data" 
+			%   
+			%		This method implements the inverse of Equation (5):
+			%	
+			%			S = T * 10^(M-W) * (10^(X-W) - p^2 * 10^-((X-W)/p) + p^2 - 1)
+			%				(for X >= W)
+			%		
+			%		Where (see Figure 2):
+			%			S := linear 'raw' values
+			%			X := logicle-scale values
+			%			T := "Top" of scale data value (ie the highest data
+			%				 value expected from the machine, typically 2^18)
+			%			M := Total plot width in asmymptototic decades
+			%				 (defualt = 4.5)
+			%			W := Width of linearization, computed as such:
+			%				 W = (M - log10(T/abs(r))) / 2		| Eqn (6)
+			%				 This determines the value of lin2logicle(0)
+			%			r := Reference point for negative data range
+			%				 (default = -150)
+			%
+			%		Since Equation 5 cannot be explicitly solved for X, a 
+			%		spline is fitted to generic X data to estimate the logicle
+			%		values of S
+			%
+			%		For MEF (bead unit) data, the default is to scale the data
+			%		values by Transforms.MEF_CONVERSION_FACTOR prior to doing
+			%		the logicle transformation. This parameter can be
+			%		overwritten with the optional params.MEF input.
+			%
+			%
+			% Written by
+			% Breanna DiAndreth
+			% bstillo@mit.edu
+			%
+			% Update Log
+			%	2018-02-10 (Ross):	Merged this w/ lin2logicleMEF to do MEF 
+			%						conversion optionally, also added optional
+			%						logicle parameters input
 			
-			X = linspace(0, 4.5, 1000); % 4.5 = lin2logicle(2^18)
-			Y = Transforms.logicle2lin(X);
-			p = spline(Y, X);
-
-			out = ppval(p, S);
-
-		end
-		
-		
-		function out = logicle2lin(X)
-			% logicle2lin(X) converts a vector of values from a logicle scale to a linear scale 
-			%   out = logicle2lin(X) returns a vector of values corresponding to the values 
-			%   in X transformed from a logicle scale to a linear one using
-			%   the conversion function described by Parks, et al. "A New Logicle
-			%   Display Method Avoids Deceptive Effects of Logarithmic Scaling for Low
-			%   Signals and Compensated Data" Equation (5), where
-			%     X - a vector of logicle values
-			%     out - a vector of linear converted values from X
-			%
-			%   Example:
-			%       out = Transforms.logicle2lin(linspace(0,4));
-			%
-			%   Written by
-			%   Breanna Stillo
-			%   bstillo@mit.edu
-			%   Last Updated: 2014-10-14
-			%
-			%   Edit 2015-02-09 (Ross) - Added comments and intuitive variable names
-			%                            Major speed up by using algebraic conversion 
-            %                            instead of symbolic toolbox
-            %   Edit 2016-03-28 (Ross) - Made display breadth smaller w/ Bre's adjustment of 
-            %                            DATA_MIN, which increases the relative size of the area
-            %                            between 10^-2 and 10^2
-
-			% Set values
-			DATA_MAX = 2^18;         % (T) The maximum measurable data value ( = 26214 )
-			DISPLAY_BREADTH = 4.5;   % (M) Breadth of the display in decades ( = lin2logicle(2^18) )
-			DATA_MIN = -150;         % (r) Negative range reference value    ( lin2logicle(0) = -171 )
-
-			% This gives a range for linearization around zero (W).
-			linRange = (DISPLAY_BREADTH - log10(DATA_MAX / abs(DATA_MIN))) / 2;
-
-			% p and W (linRange) are considered one parameter, p is introduced by the 
-			% authors for compactness. Here we find p that solves their equivalence:
-			%   w = 2p ln(p)/(p + 1)
-			% Solved by WolframAlpha:
-			P = linRange / (2 * lambertw(0.5 * exp(-linRange / 2) * linRange));
-
-			% Find where the given data is out of the linear range.
-			logX = (X >= linRange);
-
-			% Compute and return the final linearized vector 
-			out = toLin(X) .* logX - toLin(2 * linRange - X) .* (1 - logX);
+			% Check inputs
+			checkInputs_lin2logicle();
+			
+			% Converting logicle to linear is solveable, but the reverse is not, 
+			% so we fit a spline to generic logicle-lin data and then project
+			% the given data onto that spline
+			X = linspace(0, params.M, 1000);				% Generic X values
+			SX = Transforms.logicle2lin(X, doMEF, params);	% S values from X
+			p = spline(SX / params.MEF, X);					% Spline fit
+			
+			% Apply spline fit to the actual given S values
+			biexpData = ppval(p, S / params.MEF);						
 			
 			
 			% --- Helper Functions --- %
 			
 			
-			function converted = toLin(convert)
-				% Does a final conversion
+			function checkInputs_lin2logicle()
 				
-				converted = DATA_MAX .* 10^-(DISPLAY_BREADTH - linRange) .* ...
-					(10.^(convert - linRange) - P^2 .* 10.^(-(convert - linRange) ./ P) + P^2 - 1);
+				% Check input arguments
+				validateattributes(S, {'numeric'}, {}, mfilename, 'S', 1);
+				
+				if exist('doMEF', 'var')
+					doMEF = all(logical(doMEF));
+				else 
+					doMEF = false;
+				end
+				
+				if exist('params', 'var')
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 3);
+				else
+					params = struct();
+				end
+				
+				% Set parameters
+				if ~isfield(params, 'T'), params.T = 2^18;	end
+				if ~isfield(params, 'M'), params.M = 4.5;	end
+				if ~isfield(params, 'r'), params.r = -150;	end
+				if doMEF 
+					if ~isfield(params, 'MEF')
+						params.MEF = Transforms.MEF_CONVERSION_FACTOR;
+					end
+				else
+					params.MEF = 1;
+				end
 			end
 		end
 		
-        
-		function out = lin2logicleMEF(S)
-			% lin2logicleMEF(S) converts a vector of MEF values from a linear scale to a logicle scale 
-			%   out = lin2logicleMEF(S) returns a vector of values corresponding to the values 
-			%   in S transformed from a linear scale to a logicle one using
-			%   the conversion function described by Parks, et al. "A New Logicle
-			%   Display Method Avoids Deceptive Effects of Logarithmic Scaling for Low
-			%   Signals and Compensated Data" Equation (5), where
-			%     S - a vector of linear 'raw' values
-			%     out - a vector of logicle converted values from S
+		
+		function [linData, params] = logicle2lin(X, doMEF, params)
+			% Converts input logicle data (X) to a linear scale 
+			% 
+			%	linData = Transforms.logicle2lin(linspace(0, 4.5));
 			%
-			%   Since Equation 5 cannot be explicitly solved for X, a spline is fitted to
-			%   X and S data. 
+			%	Inputs
+			%		X			<numeric> Logicle-scale input values
 			%
-			%   Example:
-			%       out = Transforms.lin2logicleMEF(linspace(0,1000));
+			%		doMEF		<logical> (optional) If true, the method will scale
+			%					the transformation for MEF (bead unit) conversions,
+			%					rather than raw machine-based fluorescent units
+			%
+			%		params		<struct> (optional) Allows the user to specify
+			%					the exact logicle transform parameters to use
+			%						Accepted input fields (see below):
+			%							T, M, r, MEF
+			%
+			%	Outputs
+			%		linData		<numeric> Linear-transformed data
+			%
+			%		params		<struct> The parameters used for conversion
+			%
+			%	Notes
+			%		The logicle conversion function is described by Parks, et al. 
+			%		"A New Logicle Display Method Avoids Deceptive Effects of 
+			%		Logarithmic Scaling for Low Signals and Compensated Data" 
+			%   
+			%		This method implements Equation (5):
+			%	
+			%			S = T * 10^(M-W) * (10^(X-W) - p^2 * 10^-((X-W)/p) + p^2 - 1)
+			%				(for X >= W)
+			%		
+			%		Where (see Figure 2):
+			%			S := linear 'raw' values
+			%			X := logicle-scale values
+			%			T := "Top" of scale data value (ie the highest data
+			%				 value expected from the machine, typically 2^18)
+			%			M := Total plot width in asmymptototic decades
+			%				 (defualt = 4.5)
+			%			W := Width of linearization, computed as such:
+			%				 W = (M - log10(T/abs(r))) / 2		| Eqn (6)
+			%				 This determines the value of lin2logicle(0)
+			%			r := Reference point for negative data range
+			%				 (default = -150)
+			%
+			%		For MEF (bead unit) data, the default is to scale the data
+			%		values by Transforms.MEF_CONVERSION_FACTOR after returning
+			%		from the logicle transformation. This parameter can be
+			%		overwritten with the optional params.MEF input.
 			%
 			% Written by
-			% Ross Jones
-			% jonesr18@mit.edu
-			%
-			%	Updated Log: 
-			%		2017-09-06	Converted this from Transforms.lin2logicle()
-			%					for use with MEF-converted data. 
+			% Breanna DiAndreth
+			% bstillo@mit.edu
+			% 
+			% Update Log
+			%   2015-02-09 (Ross):	Added comments and intuitive variable names
+			%						Major speed up by using algebraic conversion 
+            %						instead of symbolic toolbox
+            %   2016-03-28 (Ross):	Made display breadth smaller w/ Bre's adjustment 
+			%						of r, which increases the relative size of the
+            %						area between 10^-2 and 10^2
 			
-			% Scale down MEF data to be comparable to raw data
-			%	The yellow/green FPs are very bright and MEFL units will be ~2
-			%	decades higher than fluorescence.
-			S = S / Transforms.MEF_CONVERSION_FACTOR; 
+			checkInputs_logicle2lin()
 			
-			X = linspace(0, 4.5, 1000); % 4.5 = lin2logicle(2^18)
-			Y = Transforms.logicle2lin(X);
-			p = spline(Y, X);
-			
-			out = ppval(p, S);
-
-		end
-		
-		
-		function out = logicle2linMEF(X)
-			% logicle2linMEF(X) converts a vector of values from a logicle scale to a linear scale 
-			%   OUT = logicle2linMEF(X) returns a vector of values corresponding to the values 
-			%   in X transformed from a logicle scale to a linear one using
-			%   the conversion function described by Parks, et al. "A New Logicle
-			%   Display Method Avoids Deceptive Effects of Logarithmic Scaling for Low
-			%   Signals and Compensated Data" Equation (5), where
-			%     X - a vector of logicle values
-			%     out - a vector of linear converted values from X
-			%
-			%   Example:
-			%       out = Transforms.logicle2linMEF(linspace(0,4));
-			%
-			% Written by
-			% Ross Jones
-			% jonesr18@mit.edu
-			%
-			%	Updated Log: 
-			%		2017-09-06	Converted this from Transforms.logicle2lin()
-			%					for use with MEF-converted data. 
-			
-			% Set values
-			DATA_MAX = 2^18;			% (T) The maximum measurable data value ( ~2.6E+5 )
-			DISPLAY_BREADTH = 4.5;		% (M) Breadth of the display in decades ( = lin2logicle(2^18) )
-			DATA_MIN = -1.5e2;			% (r) Negative range reference value    ( logicle2lin(0) = -1.5E+2 )
-
 			% This gives a range for linearization around zero (W).
-			linRange = (DISPLAY_BREADTH - log10(DATA_MAX / abs(DATA_MIN))) / 2;
+			W = (params.M - log10(params.T / abs(params.r))) / 2;
 
-			% p and W (linRange) are considered one parameter, p is introduced by the 
-			% authors for compactness. Here we find p that solves their equivalence:
-			%   w = 2p ln(p)/(p + 1)
+			% p and W are considered one parameter, p is introduced by the authors
+			% for compactness. Here we find p that solves their equivalence:
+			%   w = W * ln(10) = 2 * p * ln(p) / (p + 1)
 			% Solved by WolframAlpha:
-			P = linRange / (2 * lambertw(0.5 * exp(-linRange / 2) * linRange));
-
-			% Find where the given data is out of the linear range.
-			logX = (X >= linRange);
-
+			w = W * log(10);
+			p = w / (2 * lambertw(w / 2 * exp(-w / 2)));
+			
+			% Find where the given data is below zero (thus invalid).
+			logX = (X >= W);
+			
 			% Compute and return the final linearized vector 
-			%	Note that the output is scaled back up to MEF-range units 
-			out = Transforms.MEF_CONVERSION_FACTOR * toLin(X) .* logX - toLin(2 * linRange - X) .* (1 - logX);
+			linData = params.MEF .* (toLin(X, params) .* logX ...
+						  - toLin(2 * W - X, params) .* (1 - logX));
 			
 			
 			% --- Helper Functions --- %
 			
 			
-			function converted = toLin(convert)
-				% Does a final conversion
+			function S = toLin(X, params)
+				% Does the final conversion		| Eqn (5)
 				
-				converted = DATA_MAX .* 10^-(DISPLAY_BREADTH - linRange) .* ...
-					(10.^(convert - linRange) - P^2 .* 10.^(-(convert - linRange) ./ P) + P^2 - 1);
+				S = params.T .* 10^-(params.M - W) .* ...
+					(10.^(X - W) - p^2 .* 10.^(-(X - W) ./ p) + p^2 - 1);
 			end
+						
+			
+			function checkInputs_logicle2lin()
+				
+				% Check input arguments
+				validateattributes(X, {'numeric'}, {}, mfilename, 'X', 1);
+				
+				if exist('doMEF', 'var')
+					doMEF = all(logical(doMEF));
+				else 
+					doMEF = false;
+				end
+				
+				if exist('params', 'var')
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 3);
+				else
+					params = struct();
+				end
+				
+				% Set parameters
+				if ~isfield(params, 'T'), params.T = 2^18;	end
+				if ~isfield(params, 'M'), params.M = 4.5;	end
+				if ~isfield(params, 'r'), params.r = -150;	end
+				if doMEF 
+					if ~isfield(params, 'MEF')
+						params.MEF = Transforms.MEF_CONVERSION_FACTOR;
+					end
+				else
+					params.MEF = 1;
+				end
+			end
+		end
+		
+		
+		function requestedUnits = getBeadUnits(channels)
+			% Returns the MEF-equivalent unit names for the given channels
+			%
+			%	requestedUnits = getBeadUnits(channels)
+			%
+			%	Inputs
+			%		channels		<cell, char> The channels to extract bead
+			%						values for (eg 'Pacific_Blue_A')
+			%
+			%	Outputs
+			%		requestedUnits	<cell> A cell array of string MEF unit names
+			%						in the same order as 'channels'
+			
+			% Check inputs
+			validateattributes(channels, {'char', 'cell'}, {}, mfilename, 'channels', 1);
+			if ischar(channels), channels = {channels}; end % For simplicity
+			badChannels = setdiff(channels, fieldnames(Transforms.CHANNEL_MAP));
+			assert(isempty(badChannels), ...
+				'Channel not valid: %s', badChannels{:});
+			
+			% Convert channel names to MEF units
+			requestedUnits = cell(1, numel(channels));
+			for i = 1:numel(channels)
+				requestedUnits{i} = Transforms.CHANNEL_MAP.(channels{i}); 
+			end
+
 		end
 		
 		
@@ -275,13 +361,12 @@ classdef Transforms < handle
 			validatestring(beadType, Transforms.BEAD_TYPES, mfilename, 'beadType', 1);
 			validatestring(beadLot, validBeadLots, mfilename, 'beadLot', 2);
 			validateattributes(channels, {'char', 'cell'}, {}, mfilename, 'channels', 3);
+			if ischar(channels), channels = {channels}; end % For simplicity
 			badChannels = setdiff(channels, fieldnames(Transforms.CHANNEL_MAP));
 			assert(isempty(badChannels), ...
 				'Channel not valid: %s', badChannels{:});
 			
-			% Convert channel names to MEF units
-			requestedUnits = cell(1, numel(channels));
-			for i = 1:numel(channels), requestedUnits{i} = Transforms.CHANNEL_MAP.(channels{i}); end
+			requestedUnits = Transforms.getBeadUnits(channels);
 			
 			% Collect values into struct
 			beadVals = struct();
@@ -386,7 +471,7 @@ classdef Transforms < handle
         end
 		
         
-        function [channelFits, beadDir] = calibrateMEF(beads, channels, options)
+        function [mefFits, figFits] = calibrateMEF(beads, channels, options)
             % calibrateMEF creates MEF fits for an .fcs file of a particular bead
             % sample chosen by the user. Note this is for rainbow calibration beads, not 
             % other antibody-tagged beads (see calibrateABC()). 
@@ -419,11 +504,14 @@ classdef Transforms < handle
             %
             %   Outputs:
             %
-            %       channelFits     <table> An Nx2 table of slopes/intercepts for  
+            %       mefFits			<table> An Nx2 table of slopes/intercepts for  
             %                       linear conversion of N channels to MEF equivalents. 
             %                       Rows are labeled with channel names and columns are 
 			%						labeled with slope / zero.
-            %       beadDir         <char> The folder name for storing bead fits 
+            %       figFits         <struct> A struct of handles to all figures
+            %						generated by the method. If 'showPlots' is not
+			%						included as an optional input, this will return
+			%						as empty.
             %
             %   Written by
             %   Breanna Stillo & Ross Jones
@@ -434,22 +522,6 @@ classdef Transforms < handle
             % Check inputs, initialize data struct
             [beadData, beadVals] = checkInputs_calMEF();
 			MEF_units = fieldnames(beadVals)'; % Start in same order as channels
-			
-			% Setup new directory for fitting files/figs
-			beadDir = ['Calibration', filesep];
-			if ~exist(beadDir, 'file')
-				mkdir(beadDir)
-			end
-			
-			% Check if these exact beads have already been used for calibraiton
-			% --> If so, load them and immediately return!
-			beadSaveName = [beads.date, '_', beads.type, '_', beads.lot, '_', beads.cytometer];
-			fitsFilename = [beadDir, beadSaveName '_MEF_Fits.mat'];
-			if exist(fitsFilename, 'file')
-				fprintf(1, 'Loading pre-computed bead fits\n');
-				load(fitsFilename);
-				return
-			end
 			
 			% Find max number of peaks to look for
 			% --> Some channels only have beads above a certain fluorescence
@@ -466,7 +538,7 @@ classdef Transforms < handle
 			if ismember('fitGaussian', options)
 				warning('off', 'stats:gmdistribution:IllCondCov')
 				warning('off', 'stats:gmdistribution:FailedToConvergeReps')
-				means = fitGaussians(extractedBeadData);
+				[means, figFits.manualPeaks] = fitGaussians(extractedBeadData);
 			else
 				means = fitFindPeaks(extractedBeadData);
 			end
@@ -594,20 +666,13 @@ classdef Transforms < handle
 							10.^fits(2, chID), rsq(chID)), 'fontsize', 14)
 					xlabel(ax2, 'Fluorescence')
 					ylabel(ax2, MEF_units{chID});
-					
-					% Save figures to bead directory
-					saveas(figFits.(channels{chID}), ...
-								[beadDir, beadSaveName, '_', MEF_units{chID}, '_Fit.fig']); 
 				end
 			end
 			
 			% Convert fits to a table
-			channelFits = array2table(fits);
-			channelFits.Properties.RowNames = {'slope', 'zero'};
-			channelFits.Properties.VariableNames = channels;
-			
-			% Save channel fits (and figures if applicable)
-			save(fitsFilename, 'channelFits')
+			mefFits = array2table(fits);
+			mefFits.Properties.RowNames = {'slope', 'zero'};
+			mefFits.Properties.VariableNames = channels;
 			
 			
 			% --- Helper Functions --- %
@@ -684,19 +749,21 @@ classdef Transforms < handle
 			end
 			
 			
-			function means = fitGaussians(extractedBeadData)
+			function [means, figManualPeaks] = fitGaussians(extractedBeadData)
 				
 				extrBeadDataBiex = Transforms.lin2logicle(extractedBeadData);
 				
 				% Have the user draw a set of lines where each point corresponds
 				% with the center of a peak
 				[~, sortIdx] = sort(max(extractedBeadData, [], 1));
-				figPreGauss = figure(); axG = gca(); %#ok<NASGU>
+				figManualPeaks = figure(); axG = gca();
 				Plotting.densityplot(axG, ...
 						extrBeadDataBiex(:, sortIdx(end)), ...
 						extrBeadDataBiex(:, sortIdx(end-1)), ...
 						5000, 'hist', ColorMap('parula'));
 				title('Draw a line connecting the peaks (in any order)')
+				xlabel([strrep(channels{sortIdx(end)}, '_', '-'), ' (AFU)'])
+				ylabel([strrep(channels{sortIdx(end - 1)}, '_', '-'), ' (AFU)'])
 				h = impoly();
 				position = wait(h);
 				numPops = size(position, 1);
@@ -771,7 +838,7 @@ classdef Transforms < handle
 		
 		
 		
-		function meflFits = calibrateMEFL(controlData, channels, dataType, saveName, showPlots)
+		function [meflFits, figFits] = calibrateMEFL(controlData, channels, dataType, showPlots)
 			% Computes conversions for MEF units to MEFL units using two-color controls 
 			%
 			%	Fits are calulated by simple linear regression - only the slope
@@ -790,43 +857,32 @@ classdef Transforms < handle
 			%						 - This should be the post-MEF conversion 
 			%						   compensated dataType (eg 'mComp')
 			%
-			%		saveName		<char> A name for saving the fits in the
-			%						current directory in the 'Calibration' folder 
-			%						created by Tranforms.calibrateMEF()
-			%
 			%		showPlots		(optional) <logical> Flag to show fitting plots
 			%
 			%	Outputs
 			%		meflFits		<struct> A struct array where each field is
 			%						the channel name of a converted channel and the 
 			%						value is the conversion factor to get MEFL units. 
+			%       figFits         <struct> A struct of handles to all figures
+            %						generated by the method. If 'showPlots' is not
+			%						included as an optional input, this will return
+			%						as empty.
+
 			
 			checkInputs_calibrateMEFL();
 			
-			% Check if conversions already exist
-			beadDir = ['Calibration', filesep];
-			if ~exist(beadDir, 'file')
-				error('Bead directory not found! It should be set up during MEF calibration')
-			end
-			meflFname = [beadDir, saveName, '_MEFL_Conversions.mat'];
-			if exist(meflFname, 'file')
-				fprintf(1, 'Loading pre-computed MEFL conversions\n');
-				load(meflFname)
-				return
-			end
-			
 			% Compute conversions
 			meflFits = struct();
-			for ch = 1:numel(channels)
-				currChan = channels{ch};
-				if strcmpi(currChan, 'FITC_A') 
+			figFits = struct();
+			for chID = 1:numel(channels)
+				if strcmpi(channels{chID}, 'FITC_A') 
 					% Skip FITC channel since it is the reference channel
-					meflFits.(currChan) = 1;
+					meflFits.(channels{chID}) = 1;
 				else
-					currChanMEF = Transforms.CHANNEL_MAP.(currChan);
+					currChanMEF = Transforms.CHANNEL_MAP.(channels{chID});
 					
-					xdata = controlData(ch).(currChan).(dataType);
-					ydata = controlData(ch).FITC_A.(dataType);
+					xdata = controlData(chID).(channels{chID}).(dataType);
+					ydata = controlData(chID).FITC_A.(dataType);
 					pos = ((xdata > 0) & (ydata > 0));
 					xdataLog = log10(xdata(pos));
 					ydataLog = log10(ydata(pos));
@@ -845,39 +901,28 @@ classdef Transforms < handle
 % 					[rval, slope, ~] = regression(xdata', ydata'); % Convert column vectors to rows
 % 					rsq = rval.^2;
 
-					meflFits.(currChan) = slope;
+					meflFits.(channels{chID}) = slope;
 					
 					if (exist('showPlots', 'var') && showPlots)
-						figMEFL = figure(); 
-						ax = gca(); hold(ax, 'on');
-						xrange = logspace(-2, 7, 50);
 						
-% 						plot(ax, Transforms.lin2logicleMEF(xdata), ...
-% 							 Transforms.lin2logicleMEF(ydata), ...
-% 							 '.', 'MarkerSize', 2)
-% 						plot(ax, Transforms.lin2logicleMEF(xrange), ...
-% 							 Transforms.lin2logicleMEF(xrange * slope), ...
-% 							 '-', 'LineWidth', 4)
+						figFits.(channels{chID}) = figure(); 
+						ax = gca(); hold(ax, 'on');
+						xrange = logspace(0, 9, 50);
 						 
 						plot(ax, xdata, ydata, ...
 							 '.', 'MarkerSize', 2)
 						plot(ax, xrange, xrange * slope, ...
 							 '-', 'LineWidth', 4)
 						
-% 						Plotting.biexpAxesMEF(ax);
 						ax.YScale = 'log';
 						ax.XScale = 'log';
 						title(sprintf('Scale Factor: %.2f | R^2: %.3f', ...
 								slope, rsq), 'fontsize', 14)
 						ylabel('MEFL')
 						xlabel(currChanMEF);
-						
-						figFname = [beadDir, saveName, '_', currChanMEF, '_MEFL_Conversion.fig'];
-						saveas(figMEFL, figFname)
 					end
 				end
 			end
-			save(meflFname, 'meflFits')
 			
 			
 			% --- Helper Functions --- %
@@ -894,7 +939,6 @@ classdef Transforms < handle
 				assert(isempty(badChannels), 'Channel not in controlData: %s\n', badChannels{:});
 				
 				validatestring(dataType, fieldnames(controlData(1).(channels{1})), mfilename, 'dataType', 3);
-				validateattributes(saveName, {'char'}, {}, mfilename, 'saveName', 4);
 			end
 		end
 		
@@ -973,7 +1017,7 @@ classdef Transforms < handle
         end
         
         
-        function channelFits = calibrateABCfromMedians(beadsFilenames, channel, hasBlank)
+        function [abcFits, figFits] = calibrateABCfromMedians(beadsFnames, channel, hasBlank)
             % calibrateABCfromMedians creates antibody binding capacity (ABC) fits for an 
             % .fcs file of a particular bead sample supplied by the user using medians of 
             % each file. Note this is for Quantum Simply Cellular (R) beads, not rainbow 
@@ -983,7 +1027,7 @@ classdef Transforms < handle
             %
             %   Inputs: 
             %   
-            %       beadFilename        A cell array of .fcs filenames which contain Ab-stained 
+            %       beadFnames			A cell array of .fcs filenames which contain Ab-stained 
             %                           bead data. Can be given in any order (median is sorted).
             %
             %       channel             The channel name to calibrate bead data
@@ -993,22 +1037,26 @@ classdef Transforms < handle
             %
             %   Outputs:
             %
-            %       channelFit          An Nx2 table of slopes/intercepts for linear conversion of 
+            %       abcFits				An Nx2 table of slopes/intercepts for linear conversion of 
             %                           N channels to ABC equivalents. Rows are labeled with 
             %                           channel names and columns are labeled with slope / zero
             %       
-            %       medians             A 1xN array of medians values in order the files are given
+            %       figFits             A struct containing all figures generated by the function
             %
             % Written by Ross Jones
             % 2016-06-01
             % MIT Weiss Lab
             % jonesr18@mit.edu
+			%
+			% Update Log:
+			%	2018-01-26:		Added figure handle output
             
             % Import data
-            beadData = FlowAnalysis.openFiles(beadsFilenames{:});
+			if ischar(beadsFnames), beadsFnames = {beadsFnames}; end
+            beadData = FlowAnalysis.openFiles(beadsFnames{:});
             
             % Initialize as an array, convert to a table later
-            channelFits = zeros(1, 2);
+            abcFits = zeros(1, 2);
             
             % Calculate medians
             beadMedians = zeros(1, numel(beadData));
@@ -1034,15 +1082,13 @@ classdef Transforms < handle
             beadMediansSorted = sort(Transforms.lin2logicle(beadMedians));
             
             % Extract channel data and plot as histogram
-            figPeaks = figure();
-            ax1 = subplot(1, 2, 1);
-            hold(ax1, 'on');
+            figFits = figure('Position', [400 200 1000 400]);
+            ax1 = subplot(1, 2, 1); hold(ax1, 'on');
             for i = 1:length(beadData)
                 channelData = beadData(i).(channel).raw; 
-                numBeads = length(channelData);
-                numBins = numBeads / 100;
+				
 				% Create histogram w/ biexp data so that peaks are easier to find
-                [binCounts, binCenters] = Plotting.biexhist(channelData, numBins);
+                [binCounts, binCenters] = Plotting.biexhist(channelData, 25, true);
                 
                 % Match closest bin to medians
                 [~, binIdx] = min(abs(binCenters - Transforms.lin2logicle(beadMedians(i))));
@@ -1078,7 +1124,7 @@ classdef Transforms < handle
             ax2.XLim = [1e-1, 1e5];
             ax2.YLim = [1e3, 1e7];
             ax2.FontSize = 14;
-            
+			
             % Calculate R^2 value
             yresid = ABC - 10.^polyval(fit, log10(peakIntensity));
             SSresid = sum(yresid.^2);
@@ -1088,24 +1134,23 @@ classdef Transforms < handle
             xlabel('Fluorescence')
             ylabel('ABC')
             hold(ax2, 'off')
-
+			
             % Assign fit data
-            channelFits(1, :) = fit;
-
+            abcFits(1, :) = fit;
+			
             fprintf(1, 'Finished fitting %s. # Peaks = %d\n', channel, length(peaks));
-            savefig(figPeaks, [channel '_ABC_Fit.fig'])
-
+			
             % Convert fits to a table
-            channelFits = array2table(channelFits);
-            channelFits.Properties.VariableNames = {'slope', 'zero'};
-            channelFits.Properties.RowNames = {channel};
-
+            abcFits = array2table(abcFits);
+            abcFits.Properties.VariableNames = {'slope', 'zero'};
+            abcFits.Properties.RowNames = {channel};
+			
             % Save channelFits
-            save([channel, '_ABC_Fit.mat'], 'channelFits')
+%             save([channel, '_ABC_Fit.mat'], 'channelFits')
         end
         
         
-        function [channelFits, locs, peaks] = calibrateABC(beadsFilename, channel, largePeaks, hasBlank, locs, peaks)
+        function [abcFits, locs, peaks, figFits] = calibrateABC(beadsFilename, channel, largePeaks, hasBlank, locs, peaks)
             % calibrateABC creates antibody binding capacity (ABC) fits for an .fcs file 
             % of a particular bead sample supplid by the user. Note this is for Quantum 
             % Simply Cellular (R) beads, not rainbow beads (see calibrateMEF()). 
@@ -1159,7 +1204,7 @@ classdef Transforms < handle
             end
             
             % Initialize as an array, convert to a table later
-            channelFits = zeros(1, 2);
+            abcFits = zeros(1, 2);
 
             % Extract channel data
             channelData = [];
@@ -1169,12 +1214,11 @@ classdef Transforms < handle
             numBeads = length(channelData);
             
             % Plot figure to show fitting
-            figPeaks = figure('Position', [500 500 700 350]);
-            subplot(1, 2, 1)
+            figFits = figure('Position', [400 200 1000 400]);
+            ax1 = subplot(1, 2, 1); hold(ax1, 'on')
             numBins = round(numBeads / 100);
             [counts, centers] = Plotting.biexhist(channelData, numBins);
-            hold on
-
+            
             % Find highest peaks
             if ~(exist('locs', 'var') && exist('peaks', 'var'))
                 [peaks, locs] = findpeaks(counts);
@@ -1185,16 +1229,14 @@ classdef Transforms < handle
             end
             
             % Plot peaks on data
-            subplot(1, 2, 1)
-            hold on
-            plot(centers(locs), peaks, '*r')
+            plot(ax1, centers(locs), peaks, '*r')
             title(strrep(channel, '_', '-'))
             ylabel('COUNT')
             
             % Assume we have the P highest peaks and an unstained population
-            ABC = [68458, 281582, 621651];
-%             ABC = [5899, 68458, 281582, 621651];
-
+%             ABC = [68458, 281582, 621651];
+            ABC = [5899, 68458, 281582, 621651];
+			
             if (exist('hasBlank', 'var') && hasBlank)
                 P = min(length(locs) - 1, numel(ABC));
             else
@@ -1202,21 +1244,17 @@ classdef Transforms < handle
             end
             ABC = ABC(end-P+1:end);
             peakIntensity = Transforms.logicle2lin(centers(locs));
-            peakIntensity = peakIntensity(end-P+1:end);
+			peakIntensity = peakIntensity(end-P+1:end);
             
             % Calculate fit
-            r = 2^18;   % resolution
-            n = 5;      % log decades
-            peakRelChannel = r / n * log10(peakIntensity);
-            fit = polyfit(peakRelChannel, log10(ABC), 1);
+            fit = polyfit(peakIntensity, log10(ABC), 1);
             
-            subplot(1,2,2)
-            semilogy(peakRelChannel, ABC, 'ob')
-            hold on
-            semilogy(peakRelChannel, 10.^polyval(fit, peakRelChannel), 'r-')
+            ax2 = subplot(1, 2, 2); hold(ax2, 'on')
+            semilogy(ax2, peakIntensity, ABC, 'ob')
+            semilogy(ax2, peakIntensity, 10.^polyval(fit, peakRelChannel), 'r-')
             
             % Calculate R^2 value
-            yresid = ABC - 10.^polyval(fit, peakRelChannel);
+            yresid = ABC - 10.^polyval(fit, peakIntensity);
             SSresid = sum(yresid.^2);
             SStotal = (length(ABC) - 1) * var(ABC);
             rsq = 1 - SSresid / SStotal;
@@ -1227,15 +1265,15 @@ classdef Transforms < handle
             hold off
 
             % Assign fit data
-            channelFits(1, :) = fit;
+            abcFits(1, :) = fit;
 
             fprintf(1, 'Finished fitting %s. # Peaks = %d\n', channel, length(peaks));
             savefig(figPeaks, [channel '_ABC_Fit.fig'])
 
             % Convert fits to a table
-            channelFits = array2table(channelFits);
-            channelFits.Properties.VariableNames = {'slope', 'zero'};
-            channelFits.Properties.RowNames = {channel};
+            abcFits = array2table(abcFits);
+            abcFits.Properties.VariableNames = {'slope', 'zero'};
+            abcFits.Properties.RowNames = {channel};
 
             % Save channelFits
             save([channel, '_ABC_Fit.mat'], 'channelFits')

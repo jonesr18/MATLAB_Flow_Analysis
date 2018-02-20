@@ -320,7 +320,7 @@ classdef Compensation < handle
         end
         
         
-        function [sampleData, controlData, fitParams] = ...
+        function [sampleData, controlData, fitParams, fitFigs] = ...
                         compensateMatrixBatch(sampleData, controlData, channels, dataType, gate, plotsOn)
             % compensateMatrixBatch compensates an entire standard data struct by generating 
             % coefficients with linear fitting on single-color control data and processing the
@@ -402,12 +402,13 @@ classdef Compensation < handle
             
             % Check the inputs - makes no changes to data structures
             checkInputs_compensateMatrixBatch();
-            
+			fitFigs = struct();
+			
             % Find medians for each channel in jcData
 % 			autofluor = getAutofluor();
             
             % Find coefficients using least-squares linear fits - uses afs data
-            [coeffs, ints] = getCoefficients();
+            [coeffs, ints, fitFigs.pre] = getCoefficients();
 			
 			% Calculate autofluorescence from scData fit Y-intercepts
 			autofluor = sum(ints, 2) / (numel(channels) - 1); 
@@ -434,7 +435,7 @@ classdef Compensation < handle
             end
             
             % Check compensation results
-            [coeffs_comp, ints_comp] = getCoefficients(true);
+            [coeffs_comp, ints_comp, fitFigs.post] = getCoefficients(true);
             
 			fitParams = struct( ...
 				'intercepts', ints, ...
@@ -524,17 +525,19 @@ classdef Compensation < handle
             end
             
             
-            function [coefficients, intercepts] = getCoefficients(isComp)
+            function [coefficients, intercepts, fitFig] = getCoefficients(isComp)
                 % Finds the coefficients for linear fits between each channel
                 % when observing bleed-through.
                 %
                 % Optional input: isComp (can use to check post-comp data)
                 
                 % Set up figure to view fitting (if applicable)
-                if plotsOn
-                    figure()
-                    spIdx = 0;
-                end
+				if plotsOn
+					fitFig = figure();
+					spIdx = 0;
+				else
+					fitFig = [];
+				end
                 
                 coefficients = zeros(numel(channels));
 				intercepts = zeros(numel(channels));
@@ -594,37 +597,24 @@ classdef Compensation < handle
 							points = randperm(numel(scFixData), numPoints);
 							switch dataType
 								case {'mef', 'mefl'}
-									
 									xrange = logspace(-1, 9, 100);
-									
-									spIdx = spIdx + 1;
-									ax = subplot(numel(channels), numel(channels), spIdx);
-									hold(ax, 'on')
-									
-									plot(ax, Transforms.lin2logicleMEF(scBleedData(points)), ...
-										 Transforms.lin2logicleMEF(scFixData(points)), ...
-										 '.', 'MarkerSize', 4)
-									plot(ax, Transforms.lin2logicleMEF(xrange), ...
-										 Transforms.lin2logicleMEF(xrange * coefficients(chF, chB) + intercepts(chF, chB)), ...
-										 '-', 'linewidth', 4)
-									Plotting.biexpAxesMEF(ax);
-																	
+									doMEF = true;
 								otherwise
-									
 									xrange = logspace(-1, 6, 100);
-									
-									spIdx = spIdx + 1;
-									ax = subplot(numel(channels), numel(channels), spIdx);
-									hold(ax, 'on')
-
-									plot(ax, Transforms.lin2logicle(scBleedData(points)), ...
-										 Transforms.lin2logicle(scFixData(points)), ...
-										 '.', 'MarkerSize', 4)
-									plot(ax, Transforms.lin2logicle(xrange), ...
-										 Transforms.lin2logicle(xrange * coefficients(chF, chB) + intercepts(chF, chB)), ...
-										 '-', 'LineWidth', 4)
-									Plotting.biexpAxes(ax);
+									doMEF = false;
 							end
+							
+							spIdx = spIdx + 1;
+							ax = subplot(numel(channels), numel(channels), spIdx);
+							hold(ax, 'on')
+
+							plot(ax, Transforms.lin2logicle(scBleedData(points), doMEF), ...
+								 Transforms.lin2logicle(scFixData(points), doMEF), ...
+								 '.', 'MarkerSize', 4)
+							plot(ax, Transforms.lin2logicle(xrange, doMEF), ...
+								 Transforms.lin2logicle(xrange * coefficients(chF, chB) + intercepts(chF, chB), doMEF), ...
+								 '-', 'linewidth', 4)
+							Plotting.biexpAxes(ax, true, true, false, doMEF);
 							
 							% Axis labeling
 							title(sprintf('Slope: %.2f | Intercept: %.2f', ...
@@ -862,16 +852,17 @@ classdef Compensation < handle
             % ...
             
             % Check inputs are valid
-            checkInputs_compensateMatrix(inputData, coefficients);
+            checkInputs_compensateMatrix();
             
             % Compensate data
+			coefficients = coefficients .* (1 * ones(size(coefficients)) - 0 * eye(size(coefficients)));
             compdData = coefficients \ inputData;
             
             
             % --- Helper functions --- %
             
             
-            function checkInputs_compensateMatrix(inputData, coefficients)
+            function checkInputs_compensateMatrix()
                 
                 % Check types
                 validateattributes(inputData, {'numeric'}, {}, mfilename, 'inputData', 1);

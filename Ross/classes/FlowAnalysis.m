@@ -1197,7 +1197,46 @@ classdef FlowAnalysis < handle
                 validateattributes(par, {'numeric', 'logical'}, {}, mfilename, 'par', 5);
             end
             
-        end
+		end
+		
+		
+		function [indices] = subSample(len, numPoints)
+			% Returns a logical indices vector for subsampling numPoints 
+			% values from a vector of length len.
+			%
+			%	Inputs 
+			%		len			<numeric> The length of the target vector/matrix
+			%		numPoints	<numeric> The number of points to subsample
+			%
+			%	Outputs
+			%		indices		<logical> A logical [len x 1] vector with numPoints
+			%					true values spaced as evenly as possible
+			%
+			% Written by Ross Jones
+			% jonesr18@mit.edu
+			% 
+			% Update Log:
+			%	
+			
+			% Check inputs
+			validateattributes(len, {'numeric'}, {'scalar'}, mfilename, 'length', 1);
+			validateattributes(numPoints, {'numeric'}, {'scalar'}, mfilename, 'numPoints', 2);
+			len = round(len);
+			numPoints = round(numPoints);
+			
+			% Handle illegal case where numPoints > length
+			assert(numPoints <= len, 'Number of points (%d) is greater than the length (%d)!', numPoints, len)
+			
+			% Handle special case where length = numPoints
+			if (len == numPoints)
+				indices = true(numPoints, 1);
+				return
+			end
+			
+			indices = false(numPoints, 1);
+			numericIdxs = round(linspace(1, len, numPoints));
+			indices(numericIdxs) = true;
+		end
         
         
         function [x1, x2, p1, p2, yfit1, yfit2, rsq_both] = LSB_fit(constitutive, reporter, doLog, skip)
