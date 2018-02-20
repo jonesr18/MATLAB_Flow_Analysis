@@ -629,6 +629,160 @@ classdef Compensation < handle
                     end
                 end
             end
+            
+            function [coefficients, intercepts, fitFig] = getCoefficientsBre(isComp)
+                % Finds the coefficients for linear fits between each channel
+                % when observing bleed-through.
+                %
+                % Optional input: isComp (can use to check post-comp data)
+                
+                % Set up figure to view fitting (if applicable)
+				if plotsOn
+					fitFig = figure();
+					spIdx = 0;
+				else
+					fitFig = [];
+				end
+                
+
+                coefficients = ones(numel(channels));
+%                 for ch=1:numel(channels)
+%                     coefficients(ch,ch) = 1;
+%                 end
+				intercepts = zeros(numel(channels),1);
+                     
+                
+                A0 = [10;10;10];
+                K0 =[1 0 0
+                    0 1 0
+                    0 0 1];
+                
+%                 A = zeros(3,1);
+%                 K =ones(3);
+                
+                inds = [1:numel(channels)];
+                    
+                for chF = 1:numel(channels)  
+                     f = @(x) compFunc(x,chF);
+                     [minresult, fval] = fminsearch(f,[A0(chF),K0(chF,inds(inds~=chF))]);
+                     
+                     intercepts(chF) = minresult(1);
+                     coefficients(chF,inds(inds~=chF)) = minresult(2:end);
+
+
+                     
+                     
+                     %%%%%   added so Ross's plot stuff will work  but chB looping is done in compFunc %%%%%
+                    if plotsOn
+                        for chB = 1:numel(channels) 
+                            if exist('gate', 'var')
+                                scGate = controlData(chB).gates.(gate);
+                            else
+                                scGate = true(size(controlData(chB).(channels{chB}).(dataType)));
+                            end
+
+                            if (exist('isComp', 'var') && isComp)
+                                scBleedData = controlData(chB).(channels{chB}).mComp(scGate);
+                                scFixData = controlData(chB).(channels{chF}).mComp(scGate);
+                            else
+                                scBleedData = controlData(chB).(channels{chB}).(dataType)(scGate);
+                                scFixData = controlData(chB).(channels{chF}).(dataType)(scGate);
+                            end
+                            
+                            maxPoints = 6000;
+							numPoints = min(numel(scFixData), maxPoints);
+							points = randperm(numel(scFixData), numPoints);
+							switch dataType
+								case {'mef', 'mefl'}
+									
+									xrange = logspace(-1, 9, 100);
+									
+									spIdx = spIdx + 1;
+									ax = subplot(numel(channels), numel(channels), spIdx);
+									hold(ax, 'on')
+									
+									plot(ax, Transforms.lin2logicleMEF(scBleedData(points)), ...
+										 Transforms.lin2logicleMEF(scFixData(points)), ...
+										 '.', 'MarkerSize', 4)
+									plot(ax, Transforms.lin2logicleMEF(xrange), ...
+										 Transforms.lin2logicleMEF(xrange * coefficients(chF, chB) + intercepts(chF)), ...
+										 '-', 'linewidth', 4)
+									Plotting.biexpAxesMEF(ax);
+																	
+								otherwise
+									
+									xrange = logspace(-1, 6, 100);
+									
+									spIdx = spIdx + 1;
+									ax = subplot(numel(channels), numel(channels), spIdx);
+									hold(ax, 'on')
+
+									plot(ax, Transforms.lin2logicle(scBleedData(points)), ...
+										 Transforms.lin2logicle(scFixData(points)), ...
+										 '.', 'MarkerSize', 4)
+									plot(ax, Transforms.lin2logicle(xrange), ...
+										 Transforms.lin2logicle(xrange * coefficients(chF, chB) + intercepts(chF)), ...
+										 '-', 'LineWidth', 4)
+									Plotting.biexpAxes(ax);
+                            end
+                            
+                            % Axis labeling
+							title(sprintf('Slope: %.2f | Intercept: %.2f', ...
+								coefficients(chF, chB), intercepts(chF)), 'fontsize', 14)
+							if (chF == numel(channels))
+								xlabel(strrep(channels{chB}, '_', '-'))
+							end
+							if (chB == 1)
+								ylabel(strrep(channels{chF}, '_', '-'))
+							end
+
+
+                        end
+                    end
+                    %%% 
+                end
+                
+          
+        end
+            
+        function out = compFunc(fit_vals,chF)
+            
+            A = zeros(numel(channels),1);
+            K =[1 0 0
+                0 1 0
+                0 0 1];
+            
+            inds=1:numel(channels);
+
+            A(chF) = fit_vals(1);
+            K(chF,inds(inds~=chF)) = fit_vals(2:end);
+
+            
+            R_vals = zeros(1,numel(channels));
+                    
+                    % Find regression with each channel
+                    for chB = 1:numel(channels)
+                        if chB~=chF
+                            if exist('gate', 'var')
+                                scGate = controlData(chB).gates.(gate);
+                            else
+                                scGate = true(size(controlData(chB).(channels{chB}).(dataType)));
+                            end
+
+                            % build data matrix
+                            scFixData = zeros(numel(channels), numel(controlData(chB).(channels{1}).(dataType)(scGate)));
+                            for ch = 1:numel(channels)
+                                scFixData(ch, :) = controlData(chB).(channels{ch}).(dataType)(scGate);
+                            end
+
+                            scFixedData = K\(scFixData-A);
+
+                            R_vals(chB) = mean(abs(scFixedData(chF,:)));
+                        end
+                    end
+                    
+            out = sum(R_vals);
+        end
 
             
             function dataSubset = processCompensation(dataSubset, coefficients)
