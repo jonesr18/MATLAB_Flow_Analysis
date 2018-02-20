@@ -54,6 +54,11 @@ classdef Plotting < handle
 			%
 			%		nonZero			(Optional) <logical> Flag to only estimate using
 			%						non-zero values
+			%
+			% Written by
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
 			
 			% Check inputs
 			dataValid = checkInputs_computeDensity();
@@ -128,7 +133,7 @@ classdef Plotting < handle
 						% Add a little extra padding to ensure all data is
 						% captured. Was having issues with small values getting
 						% chopped off and density to be returned as NaN
-						sh = (max(dataValid(:, d)) - min(dataValid(:, d))) / 20;
+						sh = range(dataValid(:, d)) / 20;
 						binEdges{d} = linspace(min(dataValid(:, d)) - sh, max(dataValid(:, d)) + sh, numBins + 1);
 					end
 					
@@ -230,79 +235,152 @@ classdef Plotting < handle
 		end
 		
 		
-		function [sortIdx, colors] = getColors(inputData, colorMap, options)
+		function [colors, sortIdx] = getColors(inputData, cmap, options)
 			% Generates a color representing the value of each element of a
 			% given input vector using a given ColorMap object
 			%
-			%	[sortedInput, colors] = getColors(input, colorMap, options)
+			%	[colors, sortIdx] = getColors(input, colorMap, options)
 			%
 			%	Inputs
 			%		inputData	<numeric> A vector for which to generate colors.
 			%					NaN values are set to the lowest possible value.
 			%		
-			%		colorMap	<ColorMap> A ColorMap object initialized with
-			%					the desired colormap to grab colors from
+			%		cmap		<numeric, char, ColorMap> (Optional) 
+			%					The colormap to represent data values. 
+			%					 - Can input an Nx3 matrix of RGB values, a
+			%					   ColorMap object pre-initialized with a
+			%					   color, or a string indicating which
+			%					   ColorMap to initialize. 
+			%					 - ColorMap and char inputs will yield 100
+			%					   unique color values on the given scale
+			%					 - Defualt = parula(100);
 			%
 			%		options		<struct> A number of optional inputs:
-			%						'numColors': An integer (default = 100)
 			%						'min': The minimum color threshold 
 			%							(default = min(inputData))
 			%						'max': The maximum color threshold 
 			%							(default = max(inputData))
+			%						'nan': The color to set NaN values to. 
+			%						Accepted options: 'white', 'grey', 'black', <color>
+			%						where <color> is an RGB triplet
+			%							(default = 'white')
+			%						'imag': The color to set complex values to. 
+			%						Accepted options: 'white', 'grey', 'black', <color>
+			%						where <color> is an RGB triplet
+			%							(default = 'grey')
 			%
 			%	Outputs
-			%		sortIdx		The sorting order for inputData
 			%
 			%		colors		An Nx3 matrix of color values corresponding
-			%					with each N elements in sort(inputData)
+			%					with each N elements in inputData
+			%					*** Returned unsorted unless 'sortIdx' is
+			%						requested as an output!
+			%					*** NaN and complex inputData values are
+			%						converted to white. If this behavior is not
+			%						desired, change the 'nan' and 'imag' options
+			%
+			%		sortIdx		The sorting order for inputData. 
+			%					*** If this output is requested, then 'colors'
+			%						is returned in sorted order!
+			%
+			% Written by
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
 			
 			% Check inputs
-			[numColors, MIN, MAX] = checkInputs_getColors();
+			[inputSize, MIN, MAX, nanInfo, imagInfo] = checkInputs_getColors();
+			numColors = size(cmap, 1);
 			
-			% Sort so brightest cells are plotted on top
-			[sortedInput, sortIdx] = sort(inputData);
-			
-			% Convert density to color
-			cm = colorMap.getColormap(numColors);
-			% The -1/+1 ensures that no value is exactly 0 or > max index
-			colorIdxs = max(min(ceil((sortedInput - MIN) ./ (MAX - MIN) .* numColors), numColors), 1);
+			% Convert values to color
+			colorIdxs = max(min(ceil((inputData - MIN) ./ (MAX - MIN) .* numColors), numColors), 1);
 			try
-				colors = cm(colorIdxs, :);
+				colors = cmap(colorIdxs, :);
 			catch ME
-				MIN
-				MAX
-				numColors
-				min(colorIdxs)
-				max(colorIdxs)
+				fprintf(2, 'Min: %d\n', MIN)
+				fprintf(2, 'Max: %d\n', MAX)
+				fprintf(2, 'Min index: %d\n', min(colorIdxs))
+				fprintf(2, 'Max index: %d\n', max(colorIdxs))
+				fprintf(2, 'NaNs present: %d\n', any(isnan(colorIdxs)))
+				fprintf(2, 'All vals real: %d\n', all(isreal(colorIdxs)))
 				error('Encountered error getting colors')
+				
 			end
+			
+			% Set NaN/Imag colors
+			nanColors = repmat(nanInfo.color, size(colors, 1), 1);
+			colors(nanInfo.idxs, :) = nanColors(nanInfo.idxs, :);
+			imagColors = repmat(imagInfo.color, size(colors, 1), 1);
+			colors(imagInfo.idxs, :) = imagColors(imagInfo.idxs, :);
+			
+			% If sortIdx output requested, sort so brightest values come out last
+			if nargout > 1
+				[~, sortIdx] = sort(inputData);
+				colors = colors(sortIdx, :);
+			end
+			
+			% Re-shape back to the original input dimensions, and put 
+			% the colors in the N+1th dimension.
+			if (inputSize(2) == 1)
+				reshapeSize = [inputSize(1), 3];	% Handles column vector input
+			elseif (inputSize(1) == 1)
+				reshapeSize = [3, inputSize(2)];	% Handles row vector input
+			else
+				reshapeSize = [inputSize, 3];		% Handles 2D+ input
+			end
+			colors = reshape(colors, reshapeSize);
 			
 			
 			% --- Helper Functions --- %
 			
 			
-			function [numColors, MIN, MAX] = checkInputs_getColors()
+			function [inputSize, MIN, MAX, nanInfo, imagInfo] = checkInputs_getColors()
 				
-				validateattributes(inputData, {'numeric'}, {'vector'}, mfilename, 'inputData', 1);
-				validateattributes(colorMap, {'ColorMap'}, {}, mfilename, 'colorMap', 2);
+				validateattributes(inputData, {'numeric'}, {}, mfilename, 'inputData', 1);
+				inputSize = size(inputData);
+				inputData = reshape(inputData, [], 1); % For simplicity
 				
-				% Fix for inf/nan values
-				inputData(inputData == inf) = max(inputData(~isinf(inputData)));
-				inputData(inputData == -inf) = min(inputData(~isinf(inputData)));
-				inputData(isnan(inputData)) = min(inputData);
-				
-				% Default options
-				numColors = 100;
-				MIN = min(inputData);
-				MAX = max(inputData);
-				
-				if exist('options', 'var')
+				if exist('cmap', 'var')
+					validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, ...
+							{}, mfilename, 'cmap', 2);
 					
-					if isfield(options, 'numColors')
-						numColors = round(options.numColors);
-						validateattributes(numColors, {'numeric'}, {'scalar', 'positive'}, mfilename, 'options.numColors', 3);
+					if ischar(cmap)
+						cmap = ColorMap(cmap).getColormap(100);
+					elseif strcmpi(class(cmap), 'ColorMap')
+						cmap = cmap.getColormap(100);
 					end
 					
+					if (min(cmap(:)) < 0)
+						warning('Colormap min value less than 0! Shifting up...')
+						cmap = cmap + min(cmap(:));
+					end
+					if (max(cmap(:)) > 1)
+						warning('Colormap max value greater than 1! Scaling down...')
+						cmap = cmap ./ max(cmap(:));
+					end
+				else
+					cmap = parula(100);
+				end
+				
+				% Fix for inf values
+				inputData(inputData == inf) = max(inputData(~isinf(inputData)));
+				inputData(inputData == -inf) = min(inputData(~isinf(inputData)));
+				
+				% Treat NaNs (no data) and complex (log(neg values)) as min 
+				% values, then later overwrite them with white so they don't 
+				% show up on normal plots
+				nanIdxs = isnan(inputData);
+				inputData(nanIdxs) = min(inputData);
+				imagIdxs = (imag(inputData) ~= 0);
+				inputData(imagIdxs) = min(inputData(~imagIdxs));
+				
+				% Default options
+				MIN = min(inputData);
+				MAX = max(inputData);
+				nanColor = [1, 1, 1];	
+				imagColor = [0.5, 0.5, 0.5];
+				
+				if exist('options', 'var')
 					if isfield(options, 'min')
 						MIN = options.min;
 						validateattributes(MIN, {'numeric'}, {'scalar'}, mfilename, 'options.min', 3)
@@ -312,14 +390,60 @@ classdef Plotting < handle
 						MAX = options.max;
 						validateattributes(MAX, {'numeric'}, {'scalar'}, mfilename, 'options.max', 3)
 					end
+					
+					if isfield(options, 'nan')
+						nanColor = options.nan;
+						validateattributes(nanColor, {'numeric', 'char'}, {}, mfilename, 'options.nan', 3)
+						if ischar(nanColor)
+							if strcmpi(nanColor, 'white')
+								nanColor = [1, 1, 1];
+							elseif strcmpi(nanColor, 'grey')
+								nanColor = [0.5, 0.5, 0.5];
+							elseif strcmpi(nanColor, 'black')
+								nanColor = [0, 0, 0];
+							else
+								error('NaN color not recognized')
+							end
+						else
+							nanColor = reshape(nanColor, 1, []);
+							assert(numel(nanColor) == 3);
+							if (min(nanColor) < 0), nanColor = nanColor + min(nanColor); end
+							if (max(nanColor) > 1), nanColor = nanColor ./ max(nanColor); end
+						end
+					end
+					
+					if isfield(options, 'imag')
+						imagColor = options.imag;
+						validateattributes(imagColor, {'numeric', 'char'}, {}, mfilename, 'options.imag', 3)
+						if ischar(imagColor)
+							if strcmpi(imagColor, 'white')
+								imagColor = [1, 1, 1];
+							elseif strcmpi(imagColor, 'grey')
+								imagColor = [0.5, 0.5, 0.5];
+							elseif strcmpi(imagColor, 'black')
+								imagColor = [0, 0, 0];
+							else
+								error('Imag color not recognized')
+							end
+						else
+							imagColor = reshape(imagColor, 1, []);
+							assert(numel(imagColor) == 3);
+							if (min(imagColor) < 0), imagColor = imagColor + min(imagColor); end
+							if (max(imagColor) > 1), imagColor = imagColor ./ max(imagColor); end
+						end
+					end
 				end
+				
+				nanInfo = struct('idxs', nanIdxs, 'color', nanColor);
+				imagInfo = struct('idxs', imagIdxs, 'color', imagColor);
 			end
 		end
 		
 		
-		function densityplot(ax, xdata, ydata, nPoints, mode, colorMap, nonZero)
-			%DENSITYPLOT(XDATA,YDATA) plots the vector Y vs vector X in dot-plot form with colors
-            %   of the dots indicating density
+		function densityplot(ax, xdata, ydata, nPoints, mode, cmap, dotSize, nonZero)
+			% Plots a scatterplot with colors of the dots indicating density
+			%
+			%	densityplot(ax, xdata, ydata, nPoints, mode, cmap, dotSize, nonZero)
 			%   
             %   Inputs
             %   
@@ -339,7 +463,17 @@ classdef Plotting < handle
             %                            <numerical>     Colors the points based on a given set of values
             %                                            Must be the same size as xdata/ydata
             %       
-            %       colorMap (ColorMap) The ColorMap opject to use for plotting
+			%		cmap (numeric, char, ColorMap) (Optional) 
+			%							The colormap to represent data values. 
+			%							 - Can input an Nx3 matrix of RGB values, a
+			%							   ColorMap object pre-initialized with a
+			%							   color, or a string indicating which
+			%							   ColorMap to initialize. 
+			%							 - ColorMap and char inputs will yield 100
+			%							   unique color values on the given scale
+			%							 - Defualt = parula(100);
+			%
+			%		dotSize (integer)	(Optional) The size of dots to use (default = 8)
 			%
 			%		nonZero (logicle)	(Optional) Indicates whether to force
 			%							non-zero values
@@ -355,332 +489,148 @@ classdef Plotting < handle
             %       ax = subplot(1, 5, 1);
 			%       densityplot(ax, greenData, redData, 5000, 'kernel', ColorMap('red'));
 			%
-			%   Written by
-			%   Breanna Stillo
-			%   bstillo@mit.edu
-			%   Last Updated: 2014-10-14
+			% Written by
+			% Breanna Stillo
+			% bstillo@mit.edu
 			%
-			%   Edit 2015-02-06 (Ross) - Doubled speed by slightly changing how neighbours is calculated
-            %   Edit 2016-03-28 (Ross) - Added kernel density estimation and merged with fastdensity
-            %                            calculation function
+			% Edit 2015-02-06 (Ross) - Doubled speed by slightly changing how neighbours is calculated
+            % Edit 2016-03-28 (Ross) - Added kernel density estimation and merged with fastdensity
+            %                          calculation function
             
             % Check inputs
-            assert(all(size(xdata) == size(ydata)), 'xdata and ydata are different sizes!')
-            validateattributes(xdata, {'numeric'}, {'vector'}, mfilename, 'xdata', 2);
-            validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'ydata', 3);
-            validateattributes(nPoints, {'numeric'}, {'scalar'}, mfilename, 'nPoints', 4);
-            validateattributes(mode, {'char', 'numeric'}, {'vector'}, mfilename, 'mode', 5);
-            if ischar(mode)
-                validatestring(mode, {'normal', 'fast', 'kernel', 'hist'}, mfilename, 'mode', 5);
-            else
-                assert(all(size(mode) == size(xdata)), 'If numeric, mode must be the same size as the data!')
-            end
-            validateattributes(colorMap, {'ColorMap'}, {}, mfilename, 'colorMap', 6);
-			if exist('nonZero', 'var')
-				nonZero = any(logical(nonZero(:)));
-				validateattributes(nonZero, {'logical'}, {}, mfilename, 'nonZero', 7);
+            checkInputs_densityplot();
+			
+			% Determine if density-based or directly-supplied coloration
+			if ischar(mode)
+				density = Plotting.computeDensity([xdata, ydata], mode, nPoints, nonZero);
+				[colors, sortIdx] = Plotting.getColors(density, cmap);
 			else
-				nonZero = false;
+				[colors, sortIdx] = Plotting.getColors(mode, cmap, struct('min', 0, 'max', 4.5, 'numColors', 100));
 			end
-			nPoints = round(nPoints);
-
-            % Remove complex values
-            x = real(xdata);
-            y = real(ydata);
-            
-            % Fix NaN and inf values by removing them.
-			if any(isnan(x) | isinf(x) | isnan(y) | isinf(y))
-				warning('Inf/NaN values detected - removing')
-				valid = ~(isnan(x) | isinf(x) | isnan(y) | isinf(y));
-			else
-				valid = true(size(x));
-			end
-			if (nonZero), valid = (valid & (x >= 0) & (y >= 0)); end
-            
-			% Check mode of point coloration
-            if ischar(mode)
-				
-				% Only need to check x and y for valid points
-				x = x(valid);
-				y = y(valid);
-				numPoints = min(numel(x), nPoints);
-				subsample = randperm(numel(x), numPoints);
-				x = x(subsample);
-				y = y(subsample);
-				switch mode 
-					case {'fast', 'normal'}
-						% Find how many neighbours there are less than dX and dY away.
-						if (strcmpi(mode, 'fast'))
-							skip = 10;
-						else
-							skip = 1;
-						end
-
-						% Find the range of each vector
-						xdist = max(x) - min(x);
-						ydist = max(y) - min(y);
-
-						% Find the density of each vector by dividing the number of points by the
-						% range. Dividing 100 by this number defines some distance one would expect 
-						% close data points to be from one another.
-						xdens = numPoints / xdist;
-						ydens = numPoints / ydist;
-						dX = 100 / xdens;
-						dY = 100 / ydens;
-
-						neighbors = zeros(numPoints, 1);
-						for j = 1:numPoints
-							xval = x(j);
-							yval = y(j);
-
-							neighbors(j) = sum( ...
-								(abs(x(1:skip:end) - xval) < dX) & ...
-								(abs(y(1:skip:end) - yval) < dY));
-						end
-
-	%                     % Convert neighbors to log scale to get better view of data
-	%                     neighbors = round(10 * Transforms.lin2logicle(neighbors));
-
-						[sortedNeighbors, sortIdx] = sort(neighbors);
-
-						% Convert # neighbors to color
-						nColors = max(sortedNeighbors) + 1;
-						cm = colorMap.getColormap(nColors);
-						colors = cm(sortedNeighbors + 1, :);
-
-					case 'kernel'
-						% Reshape input vector to column format
-						x = reshape(x, [], 1);
-						y = reshape(y, [], 1);
-
-						% Estimate density with kernel
-						[bw, density, meshX, meshY] = kde2d([x, y]);
-
-	%                     % Convert density to log scale to get better view of data
-	%                     density = Transforms.lin2logicle(density);
-
-	%                     fprintf(1, 'Kernal density estimation with bandwidth: %.3f\n', bw);
-						interpDensity = interp2(meshX, meshY, density, x, y);
-
-						[sortedDensity, sortIdx] = sort(interpDensity);
-
-						% Convert density to color
-						nColors = 100;
-						cm = colorMap.getColormap(nColors);
-						% The -1/+1 ensures that no value is exactly 0 or > max index
-						MIN = min(sortedDensity);
-						if (nonZero), MIN = max(0, MIN); end
-						colors = cm(ceil((sortedDensity - MIN) ...
-										./ (max(sortedDensity) - MIN) ...
-										.* (nColors - 1) + 1), :);
-
-					case 'hist'
-						% Reshape input vector to column format
-						x = reshape(x, [], 1);
-						y = reshape(y, [], 1);
-						nBins = 25;
-
-						% Use histogram to calculate true density - select # bins based on # points
-						edgesX = linspace(median(x) - 5 * std(x), median(x) + 5 * std(x), nBins + 1);
-						edgesY = linspace(median(y) - 5 * std(y), median(y) + 5 * std(y), nBins + 1);
-						[binCounts, edgesX, edgesY] = histcounts2(x, y, edgesX, edgesY);
-
-						% Estimate bin centers by averaging the edges
-						binCoordX = zeros(numel(edgesX) - 1, 1);
-						binCoordY = zeros(numel(edgesY) - 1, 1);
-						for i = 2:length(edgesX)
-							binCoordX(i - 1) = mean(edgesX([i - 1, i]));
-						end
-						for i = 2:length(edgesY)
-							binCoordY(i - 1) = mean(edgesY([i - 1, i]));
-						end
-
-						% Create mesh of X and Y values for the bins
-						[binMeshX, binMeshY] = meshgrid(binCoordX, binCoordY);
-
-						% Interpolate over the 2D histogram counts to make a PDF for the data points
-						interpDensity = interp2(binMeshX, binMeshY, binCounts', x, y);
-
-						% Sort so brightest cells are plotted on top
-						[sortedDensity, sortIdx] = sort(interpDensity);
-						validInterp = ~(isnan(sortedDensity) | isinf(sortedDensity));
-						sortedDensity = sortedDensity(validInterp);
-						sortIdx = sortIdx(validInterp);
-
-						% Convert density to color
-						nColors = 100;
-						cm = colorMap.getColormap(nColors);
-						% The -1/+1 ensures that no value is exactly 0 or > max index
-						MIN = min(sortedDensity);
-						if (nonZero), MIN = max(0, MIN); end
-						colors = cm(ceil((sortedDensity - MIN) ...
-										./ (max(sortedDensity) - MIN) ...
-										.* (nColors - 1) + 1), :);
-
+			
+			scatter(ax, xdata(sortIdx), ydata(sortIdx), 8, colors(sortIdx, :), 'filled');
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function checkInputs_densityplot()
+				assert(all(size(xdata) == size(ydata)), 'xdata and ydata are different sizes!')
+				validateattributes(xdata, {'numeric'}, {'vector'}, mfilename, 'xdata', 2);
+				validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'ydata', 3);
+				validateattributes(nPoints, {'numeric'}, {'scalar'}, mfilename, 'nPoints', 4);
+				nPoints = round(nPoints);
+				validateattributes(mode, {'char', 'numeric'}, {'vector'}, mfilename, 'mode', 5);
+				if ischar(mode)
+					validatestring(mode, {'normal', 'fast', 'kernel', 'hist'}, mfilename, 'mode', 5);
+				else
+					assert(all(size(mode) == size(xdata)), 'If numeric, mode must be the same size as the data!')
 				end
-			else
-				z = real(reshape(mode, [], 1));
-				valid = (valid & ~(isnan(z) | isinf(z)));
-				if (nonZero), valid = (valid & (z >= 0)); end
-				x = x(valid);
-				y = y(valid);
-				z = z(valid);
 				
-				% Reduce number of points to speed density calculation
-				numPoints = min(numel(x), nPoints);
-				subsample = randperm(numel(x), numPoints);
-				x = x(subsample);
-				y = y(subsample);
-                z = z(subsample);       
-                [sortedZ, sortIdx] = sort(z);
+				% Check colormap
+				if exist('cmap', 'var')
+					validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, {}, mfilename, 'cmap', 6);
+				else
+					cmap = parula(100);
+				end
 				
-                nColors = 100;
-                cm = colorMap.getColormap(nColors);
-				colorIdx = ceil(sortedZ ./ 4.5 .* (nColors - 1) + 1);
-				colorIdx = max(min(colorIdx, nColors), 0);
-                colors = cm(colorIdx, :);
-% 				colors = cm(sortedZ, :);
-            end
-            
-            % Plot data in sorted order so highest density points are plotted last.
-            scatter(ax, x(sortIdx), y(sortIdx), 8, colors, 'filled')
-        end
+				if exist('dotSize', 'var')
+					validateattributes(dotSize, {'numerical'}, {'scalar'}, mfilename, 'dotSize', 7);
+					dotSize = round(dotSize);
+				else
+					dotSize = 8;
+				end
+				
+				if exist('nonZero', 'var')
+					nonZero = any(logical(nonZero(:)));
+					validateattributes(nonZero, {'logical'}, {}, mfilename, 'nonZero', 8);
+				else
+					nonZero = false;
+				end
+			end
+		end
         
         
-        function violinplot(ax, ydata, xcenter, mode, faceColor)
-            %VIOLINPLOT(DATA, MODE, COLORMAP) plots the data as a violin plot, which represents 
-            % density as a vertical, horizontally symmetric histogram
+		function violinplot(ax, ydata, xcenter, mode, faceColor)
+			% Plots the data as a violin plot, which represents 
+			% density as a vertical, horizontally symmetric histogram
 			%   
-            %   Inputs
-            %   
-			%       ydata (vector)       values of data to plot
-            %
-            %       xcenter (integer)   The value to center the x-values on
-            %
-            %       mode (string)       Determines how density is calculated
-            %                            'normal'        Computes density directly from the points
-            %                            'fast'          Uses 1/10 points to compute density
-            %                            'kernel'        Kernel density estimation 
-            %                                            (auto-selects bandwidth - see kde.m)
-            %                            'hist'          Interpolates density from a 2D histogram
-            %       
-            %       faceColor (rgb)     The color of the violin face. The face is plotted with an
-            %                           alpha value of 0.5 to look nice.
-            %
+			%	violinplot(ax, ydata, xcenter, mode, faceColor)
+			%
+			%   Inputs
+			%   
+			%		ax (handle)			The axis handle to plot to
+			%
+			%       ydata (vector)      Values of data to plot
+			%
+			%       xcenter (integer)   The value to center the x-values on
+			%
+			%       mode (string)       Determines how density is calculated
+			%                            'normal'        Computes density directly from the points
+			%                            'fast'          Uses 1/10 points to compute density
+			%                            'kernel'        Kernel density estimation 
+			%                                            (auto-selects bandwidth - see kde.m)
+			%                            'hist'          Interpolates density from a 2D histogram
+			%       
+			%       faceColor (rgb)     The color of the violin face. The face is plotted with an
+			%                           alpha value of 0.5 to look nice.
 			%
 			%
-			%   Written by
-			%   Ross Jones
-            %   jonesr18@mit.edu
-			%   Weiss Lab, MIT
-			%   Last Updated: 2016-04-04
-            
-            % Check inputs
-            checkInputs_violinplot(ydata, xcenter, mode, faceColor); 
-            xcenter = round(xcenter(1)); % Ensure integer and only one point
-            
-            % Remove complex values
-            y = real(ydata);
-            
-            % Fix negative infinite values by setting the resulting values to the 
-            % otherwise minimum value.
-            if any(y == -inf)
-                warning('Negative values detected - setting to min value')
-                y(y == -inf) = min(y(y ~= -inf));
-            end
-            
-            % Reduce number of points to speed density calculation
-            numPoints = min(numel(y), 5000);
-            subsample = randperm(numel(y), numPoints);
-            y = y(subsample);
-            
-            switch mode
-                case {'fast', 'normal'}
-                    % Find how many neighbours there are less than dD away.
-                    if (strcmpi(mode, 'fast'))
-                        skip = 10;
-                    else
-                        skip = 1;
-                    end
-                    
-                    % Find the range of each vector
-                    dRange = max(y) - min(y);
+			%
+			% Written by
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			%
+			% Update Log:
+			%
+			%	2018-01-28 Switched to using separate density computing function
 
-                    % Find the density of each vector by dividing the number of points by the
-                    % range. Dividing 100 by this number defines some distance one would expect 
-                    % close data points to be from one another.
-                    yDens = numel(y) / dRange;
-                    dY = 100 / yDens;
-                    
-                    neighbors = zeros(numPoints, 1);
-                    for j = 1:numPoints
-                        neighbors(j) = sum((abs(y(1:skip:end) - y(j)) < dY));
-                    end
-                    
-                    % Sub-sample d and neighbors to reduce number of points again for plotting a
-                    % more smooth violin
-                    smallNumPoints = min(numel(y));
-                    smallSubsample = randperm(numel(y), smallNumPoints);
-                    [points, sortIdx] = sort(y(smallSubsample));
-                    density = neighbors(sortIdx);
-                    
-                case 'kernel'
-                    % Reshape input vector to column format
-                    y = reshape(y, [], 1);
-                    
-                    % Estimate density with kernel
-                    [bw, density, points] = kde(y, 512);
-                    points = reshape(points, [], 1);
-                    
-%                     % Convert density to log scale to get better view of data
-%                     density = Transforms.lin2logicle(density);
-                    
-%                     fprintf(1, 'Kernal density estimation with bandwidth: %.3f\n', bw);
-                
-                case 'hist'
-                    % Reshape input vector to column format
-                    y = reshape(y, [], 1);
-                    
-                    % Use histogram to calculate true density
-                    [count, edges] = histcounts(y);
-                    density = reshape(count, [], 1);
-                    
-%                     % Convert counts to log scale to get better view of data
-%                     binCounts = Transforms.lin2logicle(binCounts);
-                    
-                    % Estimate bin centers by averaging the edges
-                    points = zeros(length(edges) - 1, 1);
-                    for i = 2:length(edges)
-                        points(i - 1) = mean(edges([i - 1, i]));
-                    end
-            end
-            
-            % Adjust density scale
-            density = Transforms.lin2logicle(density);
-            density = interp1([min(density), max(density)], [0, 0.4], density);
-            
-            % Plot violins
-            axes(ax);
-            fill( [xcenter + density; xcenter - flipud(density)], ...
-                  [points; flipud(points)], ...
-... %                   faceColor, 'FaceAlpha', 0.5, 'EdgeColor', 'none');
-                  faceColor, 'EdgeColor', 'none');
-           
-            % --- Helper Function --- %
-            
-            
-            function checkInputs_violinplot(ydata, xcenter, mode, faceColor)
-              
-                validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'data', 2);
-                validateattributes(xcenter, {'numeric'}, {}, mfilename, 'xcenter', 3);
-                validatestring(mode, {'normal', 'fast', 'kernel', 'hist'}, mfilename, 'mode', 4);
-                validateattributes(faceColor, {'numeric'}, {'vector'}, mfilename, 'faceColor', 5);
-                assert(length(faceColor) == 3);
-            end
-        end
+			% Check inputs
+			checkInputs_violinplot(); 
+			xcenter = round(xcenter(1)); % Ensure integer and only one point
+
+			% Fix negative infinite values by setting the resulting values to the 
+			% otherwise minimum value.
+			if any(ydata == -inf)
+				warning('Negative values detected - setting to min value')
+				ydata(ydata == -inf) = min(ydata(ydata ~= -inf));
+			end
+
+			% Reduce number of points to speed density calculation
+			numPoints = min(numel(ydata), 5000);
+			
+			% Compute density
+			density = Plotting.computeDensity(ydata, mode, numPoints);
+
+			% Put density on log scale for better visualization
+			density = log10(density);
+			density = interp1([min(density), max(density)], [0, 0.4], density);
+
+			% Plot violins
+			axes(ax);
+			fill( [xcenter + density; xcenter - flipud(density)], ...
+				  [points; flipud(points)], ...
+				  faceColor, 'EdgeColor', 'none');
+
+			% --- Helper Function --- %
+
+
+			function checkInputs_violinplot()
+
+				validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'data', 2);
+				ydata = reshape(ydata, [], 1); % Force column vector
+				validateattributes(xcenter, {'numeric'}, {}, mfilename, 'xcenter', 3);
+				validatestring(mode, {'normal', 'fast', 'kernel', 'hist'}, mfilename, 'mode', 4);
+				validateattributes(faceColor, {'numeric'}, {'vector'}, mfilename, 'faceColor', 5);
+				assert(length(faceColor) == 3);
+			end
+		end
         
         
 		function biexplot(x, y, plotArgs, options)
+			% NOTE: #Decrepit - to be removed before full release
+			%
 			%BIEXPLOT(...) is the same as PLOT(...) except that logicle scales (Parks,
 			%et al.) are used for both the X- and Y- axes.
 			%   As with PLOT(...), various line types, plot symbols and colors may be obtained with
@@ -712,17 +662,12 @@ classdef Plotting < handle
 			%       RedData = fcsdat(:,RedChannel);
 			%       biexplot(greenData,redData,'density')
 			%
-			%   Written by
-			%   Breanna Stillo
-			%   bstillo@mit.edu
-			%   Last Updated: 2014-10-14;
+			% Written by
+			% Breanna Stillo
+			% bstillo@mit.edu
+			% Last Updated: 2014-10-14;
 			%
-			%   Edited 2-22-16 by Ross Jones
-			%   Cleaned up some code
-            
-            if (~exist('ax', 'var'))
-                ax = gca();
-            end
+			% Edited 2-22-16 by Ross Jones: Cleaned up some code
             
 			% Check inputs
 			validateattributes(x, {'numeric'}, {}, mfilename, 'x', 1);
@@ -763,71 +708,82 @@ classdef Plotting < handle
         end
 		
         
-        function biexpAxes(ax, biexpX, biexpY, biexpZ)
+        function biexpAxes(ax, biexpX, biexpY, biexpZ, doMEF, params)
             % Tranforms the given axes to a scale used for biexponential veiws.
             %   
-            %   Inputs
+            %   Inputs (all optional - defaults to X/Y both logicle)
             %       
-            %       biexpX (logical)        TRUE - make x-axis biexponential
-            %       biexpY (logical)        TRUE - make y-axis biexponential
-            %       biexpZ (logical)        TRUE - make z-axis biexponential
+            %       biexpX	(logical)		TRUE - make x-axis biexponential
+            %       biexpY	(logical)       TRUE - make y-axis biexponential
+            %       biexpZ	(logical)       TRUE - make z-axis biexponential
+			%		doMEF	(logical)		TRUE - use MEF-scaled axes
+			%		params  (struct)		Biexp axes parameters
+			%								(see Transforms.lin2logicle)
             %
-            %   If inputs are not given, default to biexponential for both X 
-            %   and Y axes with axis labels on.
-            
-% 			axes(ax)
-% 			ax2 = axes;
-			
-            % Ensure boolean inputs
-            if (exist('biexpX', 'var'))
-                biexpX = logical(biexpX);
-            else
-                biexpX = true;
-            end
-            if (exist('biexpY', 'var'))
-                biexpY = logical(biexpY);
-            else
-                biexpY = true;
-            end
-			if (exist('biexpZ', 'var'))
-				biexpZ = logical(biexpZ);
-			else
-				biexpZ = false;
-			end
+            %   If inputs are not given, default to normal biexponential for 
+            %   both X and Y axes with axis labels on.
+			%
+			% Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+            			
+            % Check inputs
+			checkInputs_biexpAxes();
 			
             % Set axes limits
-			AXES_MAX = 2^18;
-			AXES_MIN = -1.5e2;
-            axTransformed = Transforms.lin2logicle([AXES_MIN, AXES_MAX]);
+			if doMEF
+				
+				AXES_MAX = 1.1e9;
+				AXES_MIN = -4e5;
+				axTransformed = Transforms.lin2logicle( ...
+					[AXES_MIN, AXES_MAX], doMEF, params);
+				
+				% Tick values
+				minorTickVals = Transforms.lin2logicle( sort( ...
+					[-10^6, -(1:9).*10^5, -(1:9).*10^4, 0, ...
+					 (1:9).*10^4, (1:9).*10^5, (1:9).*10^6, ...
+					 (1:9).*10^7, (1:9).*10^8, 1e9]), ...
+					 doMEF, params);
 
-            % Major tick values
-%             majorTickVals = Transforms.lin2logicle([-1e2 -1e1 0 1e1 1e2 1e3 1e4 1e5]);
-		    
-			% Minor tick values
-			minorTickVals = Transforms.lin2logicle( sort( ...
-                [-10^2, -(1:9).*10^1, 0, ...
-                 (1:9).*10^1, (1:9).*10^2, ...
-				 (1:9).*10^3, (1:9).*10^4, 1e5]));
-            
-                       % Major tick labels
+				% Tick labels
+				text = {'-10^6', '', '', '', '', '', '', '', '', '', ...
+						 '', '', '', '', '', '', '', '', '', '  0^{ }', '', ...
+						 '', '', '', '', '', '', '', '', '', ...
+						 '', '', '', '', '', '', '', '', '10^6', ...
+						 '', '', '', '', '', '', '', '', '10^7', ...
+						 '', '', '', '', '', '', '', '', '10^8', ...
+						 '', '', '', '', '', '', '', '', '10^9'};
+					 
+			else
+				
+				AXES_MAX = 2^18;
+				AXES_MIN = -1.5e2;
+				axTransformed = Transforms.lin2logicle( ...
+					[AXES_MIN, AXES_MAX], doMEF, params);
+				
+				% Tick values
+				minorTickVals = Transforms.lin2logicle( sort( ...
+					[-10^2, -(1:9).*10^1, 0, ...
+					 (1:9).*10^1, (1:9).*10^2, ...
+					 (1:9).*10^3, (1:9).*10^4, 1e5]), ...
+					 doMEF, params);
+
+				% Tick labels
+				text = {'-10^2', '', '', '', '', '', '', '', '', '', '  0^{ }', '', ...
+						 '', '', '', '', '', '', '', '', '10^2', ...
+						 '', '', '', '', '', '', '', '', '10^3', ...
+						 '', '', '', '', '', '', '', '', '10^4', ...
+						 '', '', '', '', '', '', '', '', '10^5'};
 			
-% 			text = {'-10^6', '', '  0^{ }', '', '10^6', '10^7', '10^8', '10^9'};
-			text = {'-10^2', '', '', '', '', '', '', '', '', '', '  0^{ }', '', ...
-					 '', '', '', '', '', '', '', '', '10^2', ...
-					 '', '', '', '', '', '', '', '', '10^3', ...
-					 '', '', '', '', '', '', '', '', '10^4', ...
-					 '', '', '', '', '', '', '', '', '10^5'};
-            
+			end	
+			
 			% Write on X-axis
 			if (biexpX)
 				set(ax, ...
 				   'XLim', axTransformed, ...
 				   'XTick', minorTickVals, ...
 				   'XTickLabel', text) 
-% 			   set(ax2, ...
-% 				   'XLim', axTransformed, ...
-% 				   'XTick', minorTickVals, ...
-% 				   'XTickLabel', {})
 			end
             
 			% Write on Y-axis
@@ -836,10 +792,6 @@ classdef Plotting < handle
 				   'YLim', axTransformed, ...
 				   'YTick', minorTickVals, ...
 				   'YTickLabel', text)
-% 			   set(ax2, ...
-% 				   'YLim', axTransformed, ...
-% 				   'YTick', minorTickVals, ...
-% 				   'YTickLabel', {})
 			end
             
 			% Write on Z-axis
@@ -848,163 +800,163 @@ classdef Plotting < handle
 				   'ZLim', axTransformed, ...
 				   'ZTick', minorTickVals, ...
 				   'ZTickLabel', text)
-% 			   set(ax2, ...
-% 				   'YLim', axTransformed, ...
-% 				   'YTick', minorTickVals, ...
-% 				   'YTickLabel', {})
 			end
 			
             % Set remaining axes properties
-% 			set(ax, ...
-% 				'TickLength', [0.04 0.05], ...
-% 				'TickDir', 'out', ...
-% 				'LineWidth', 1.5, ...
-% 				'Box', 'off', ...
-% 				'FontSize', 8)
 			set(ax, ...
 				'TickLength', [0.02, 0.025], ...
 				'TickDir', 'out', ...
 				'LineWidth', 1, ...
 				'box', 'off')
 			
-			% Make sure ax is current before returning
-% 			axes(ax);
 			
-%             hha3=axes;
-%             set(hha3,'color','none', ...
-%                 'XTick',[],'XTickLabel',{},...
-%                 'YTick',[],'YTickLabel',{},...
-%                 'xlim', axTransformed,...
+			% --- Helper Functions --- %
+			
+			
+			function checkInputs_biexpAxes()
 
+				% Ensure boolean inputs
+				if exist('biexpX', 'var')
+					biexpX = all(logical(biexpX));
+				else
+					biexpX = true;
+				end
+				if exist('biexpY', 'var')
+					biexpY = all(logical(biexpY));
+				else
+					biexpY = true;
+				end
+				if exist('biexpZ', 'var')
+					biexpZ = all(logical(biexpZ));
+				else
+					biexpZ = false;
+				end
+				if exist('doMEF', 'var')
+					doMEF = all(logical(doMEF));
+				else
+					doMEF = false;
+				end
+				if exist('params', 'var')
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 5);
+				else
+					params = struct();
+				end
+				
+				% Set parameters
+				if ~isfield(params, 'T'), params.T = 2^18;	end
+				if ~isfield(params, 'M'), params.M = 4.5;	end
+				if ~isfield(params, 'r'), params.r = -150;	end
+				if doMEF 
+					if ~isfield(params, 'MEF')
+						params.MEF = Transforms.MEF_CONVERSION_FACTOR;
+					end
+				else
+					params.MEF = 1;
+				end
+			end
 		end
 		
 		
-		function biexpAxesMEF(ax, biexpX, biexpY, biexpZ)
-            % Tranforms the given MEF unit axes to a scale used for biexponential veiws.
-            %   
-            %   Inputs
-            %       
-            %       biexpX (logical)        TRUE - make x-axis biexponential
-            %       biexpY (logical)        TRUE - make y-axis biexponential
-            %       biexpZ (logical)        TRUE - make z-axis biexponential
-            %
-            %   If inputs are not given, default to biexponential for both X 
-            %   and Y axes with axis labels on.
-            
-			% Make sure current figure is brought forward, which is necessary
-			% for adding axis layers for minor tick vals. We have to create them
-			% manually because the built-in minor tick vals are auto-generated!
-% 			axes(ax)
-% 			ax2 = axes;
+		function cbar = biexpColorbar(ax, doMEF, params)
+			% Generates a colorbar w/ biexponential labels for a given axes
+			%
+			%	cbar = biexpColorbar(ax)
+			%
+			%	Optional inputs:
+			%
+			%		doMEF	(logical)		TRUE - use MEF-scaled axes
+			%		params  (struct)		Biexp axes parameters
+			%								(see Transforms.lin2logicle)
+			%
+			% Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
 			
-            % Ensure boolean inputs
-            if (exist('biexpX', 'var'))
-                biexpX = logical(biexpX);
-            else
-                biexpX = true;
-            end
-			if (exist('biexpY', 'var'))
-				biexpY = logical(biexpY);
-			else
-				biexpY = true;
-			end
-			if (exist('biexpZ', 'var'))
-                biexpZ = logical(biexpZ);
-            else
-                biexpZ = false;
-			end
-            
-            % Set axes limits
-			AXES_MAX = 1.1e9;
-			AXES_MIN = -4e5;
-            axTransformed = Transforms.lin2logicleMEF([AXES_MIN, AXES_MAX]);
-
-            % Major tick values
-% 			majorTickVals = Transforms.lin2logicleMEF([-1e6 -1e5 0 1e5 1e6 1e7 1e8 1e9]);
+			checkInputs_biexpColorbar()
+			
+			cbar = colorbar('peer', ax, 'EastOutside');
+			
+			% Set axes limits
+% 			cbar.LimitsMode = 'manual';
+% 			AXES_MAX = 2^18;
+% 			AXES_MIN = -1.5e2;
+% 			cbar.Limits = Transforms.lin2logicle([AXES_MIN, AXES_MAX]);
 		    
-			% Minor tick values
-			minorTickVals = Transforms.lin2logicleMEF( sort( ...
-                [-10^6, -(1:9).*10^5, -(1:9).*10^4, 0, ...
-                 (1:9).*10^4, (1:9).*10^5, (1:9).*10^6, ...
-				 (1:9).*10^7, (1:9).*10^8, 1e9]));
+			if doMEF
+				% Tick values
+				tickVals = Transforms.lin2logicleMEF( sort( ...
+					[-10^6, -(1:9).*10^5, -(1:9).*10^4, 0, ...
+					 (1:9).*10^4, (1:9).*10^5, (1:9).*10^6, ...
+					 (1:9).*10^7, (1:9).*10^8, 1e9]));
+
+				% Tick labels
+				text = {'-10^6', '', '', '', '', '', '', '', '', '', ...
+						 '', '', '', '', '', '', '', '', '', '  0^{ }', '', ...
+						 '', '', '', '', '', '', '', '', '', ...
+						 '', '', '', '', '', '', '', '', '10^6', ...
+						 '', '', '', '', '', '', '', '', '10^7', ...
+						 '', '', '', '', '', '', '', '', '10^8', ...
+						 '', '', '', '', '', '', '', '', '10^9'};
+			else
+				% Tick values
+				tickVals = Transforms.lin2logicle( sort( ...
+					[-10^2, -(1:9).*10^1, 0, ...
+					 (1:9).*10^1, (1:9).*10^2, ...
+					 (1:9).*10^3, (1:9).*10^4, 1e5]));
             
-            % Major tick labels
-% 			text = {'-10^6', '', '  0^{ }', '', '10^6', '10^7', '10^8', '10^9'};
-			text = {'-10^6', '', '', '', '', '', '', '', '', '', ...
-					 '', '', '', '', '', '', '', '', '', '  0^{ }', '', ...
-					 '', '', '', '', '', '', '', '', '', ...
-					 '', '', '', '', '', '', '', '', '10^6', ...
-					 '', '', '', '', '', '', '', '', '10^7', ...
-					 '', '', '', '', '', '', '', '', '10^8', ...
-					 '', '', '', '', '', '', '', '', '10^9'};
-            
-			% Write on X-axis
-			if (biexpX)
-				set(ax, ...
-				   'XLim', axTransformed, ...
-				   'XTick', minorTickVals, ...
-				   'XTickLabel', text) 
-% 			   set(ax2, ...
-% 				   'XLim', axTransformed, ...
-% 				   'XTick', minorTickVals, ...
-% 				   'XTickLabel', {})
-			end
-            
-			% Write on Y-axis
-			if (biexpY)
-				set(ax, ...
-				   'YLim', axTransformed, ...
-				   'YTick', minorTickVals, ...
-				   'YTickLabel', text)
-% 			   set(ax2, ...
-% 				   'YLim', axTransformed, ...
-% 				   'YTick', minorTickVals, ...
-% 				   'YTickLabel', {})
+				% Tick labels
+				text = {'-10^2', '', '', '', '', '', '', '', '', '', '  0^{ }', '', ...
+						 '', '', '', '', '', '', '', '', '10^2', ...
+						 '', '', '', '', '', '', '', '', '10^3', ...
+						 '', '', '', '', '', '', '', '', '10^4', ...
+						 '', '', '', '', '', '', '', '', '10^5'};
 			end
 			
-			% Write on Z-axis
-			if (biexpZ)
-				set(ax, ...
-				   'ZLim', axTransformed, ...
-				   'ZTick', minorTickVals, ...
-				   'ZTickLabel', text)
-% 			   set(ax2, ...
-% 				   'YLim', axTransformed, ...
-% 				   'YTick', minorTickVals, ...
-% 				   'YTickLabel', {})
+			cbar.Ticks = tickVals;
+			cbar.TickLabels = text;
+			cbar.TickDirection = 'out';
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function checkInputs_biexpColorbar()
+				
+				if exist('doMEF', 'var')
+					doMEF = all(logical(doMEF));
+				else
+					doMEF = false;
+				end
+				if exist('params', 'var')
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 5);
+				else
+					params = struct();
+				end
+				
+				% Set parameters
+				if ~isfield(params, 'T'), params.T = 2^18;	end
+				if ~isfield(params, 'M'), params.M = 4.5;	end
+				if ~isfield(params, 'r'), params.r = -150;	end
+				if doMEF 
+					if ~isfield(params, 'MEF')
+						params.MEF = Transforms.MEF_CONVERSION_FACTOR;
+					end
+				else
+					params.MEF = 1;
+				end
+				
 			end
-            
-            % Set remaining axes properties
-% 			set(ax, ...
-% 				'TickLength', [0.04 0.05], ...
-% 				'TickDir', 'out', ...
-% 				'LineWidth', 1.5, ...
-% 				'Box', 'off', ...
-% 				'FontSize', 8)
-			set(ax, ...
-				'TickLength', [0.02, 0.025], ...
-				'TickDir', 'out', ...
-				'LineWidth', 1, ...
-				'box', 'off')
-			
-			% Make sure ax is current before returning
-% 			axes(ax);
-			
-%             hha3=axes;
-%             set(hha3,'color','none', ...
-%                 'XTick',[],'XTickLabel',{},...
-%                 'YTick',[],'YTickLabel',{},...
-%                 'xlim', axTransformed,...
-        end
+		end
 
         
-		function [nelements , centers] = biexhist(Y, M, showPlot)
+		function [numElements, binCenters] = biexhist(Y, numBins, showPlot)
 			%BIEXHIST Logiclly-scaled (Parks,et al.) histogram. 
-			%   BIEXHIST(Y) bins the elements of Y into 10 equally spaced containers
+			%   BIEXHIST(Y) bins the elements of Y into 25 equally spaced containers
 			%   and produces a histogram plot of the results.  If Y is a
 			%   matrix, hist works down the columns.
 			% 
-			%   N = hist(Y, M, showPlot), where M is a scalar, uses M bins.
+			%   N = hist(Y, numBins, showPlot), where numBins is a scalar, uses numBins bins.
 			%	
 			%	showPlot is an optional logical flag to plot the histogram.
 			%
@@ -1014,22 +966,25 @@ classdef Plotting < handle
 			%       GreenData = fcsdat(:,GreenChannel);
 			%       biexhist(greenData)
 			%
-			%   Written by
-			%   Breanna Stillo
-			%   bstillo@mit.edu
-			%   Last Updated: 2014-10-31;
+			% Written by
+			% Breanna Stillo
+			% bstillo@mit.edu
 			%
-			%   UPDATES:
+			% UPDATES:
 			%   10/31 -- changed ylimits to reflect FlowJo.  Change default number of
 			%   bins
-
-			trf = Transforms();
-			ylog = trf.lin2logicle(Y);
 			
-			if ~exist('M','var')
-				M = round(77 * range(ylog));
+			if (~exist('numBins', 'var')), numBins = 25; end
+			
+			ylog = Transforms.lin2logicle(Y);
+			sh = range(ylog) / 20;
+			binEdges = linspace(min(ylog) - sh, max(ylog) + sh, numBins + 1);
+			binCenters = zeros(1, numel(binEdges) - 1);
+			for b = 1:(numel(binCenters))
+				binCenters(b) = mean([binEdges(b), binEdges(b + 1)]);
 			end
-			[nelements, centers] = hist(ylog, M);
+			
+			numElements = histcounts(ylog, binEdges);
 			
 %             % Normalize to max
 %             maxN = round(max(nelements) * 1e-3) / 1e-3;
@@ -1039,10 +994,9 @@ classdef Plotting < handle
 %             nelements=nelements./max(nelements).*100;
 
 			if (exist('showPlot', 'var') && showPlot)
-				area(centers, nelements, 'FaceColor', [0.5 0.5 0.5], 'LineWidth', 1.5);
+				area(binCenters, numElements, 'FaceColor', [0.5 0.5 0.5], 'LineWidth', 1.5);
 				Plotting.biexpAxes(gca(), true, false);
 			end
-			
         end
         
         
@@ -1055,6 +1009,11 @@ classdef Plotting < handle
             %
             % - optional input axPosition sets spacing between histograms. Useful to increase size of
             % plots for best visuals.
+			%
+			% Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
             
             % Check existence of optional input dataType, assign default
             %   faceColor and axPosition are also optional, but they are looked for later
@@ -1146,10 +1105,11 @@ classdef Plotting < handle
             %                        - options: 'log10', 'logicle' (default)
             %
             %
-            % Written by Ross Jones
-            %   Weiss Lab, MIT
-            %   2016-03-26
-            %   
+            % Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+            % 
             % Update log:
             
             % Check inputs
@@ -1159,10 +1119,10 @@ classdef Plotting < handle
             hold(ax, 'on');
             
             % Set colorbar for density plotting
-            if (~exist('colorMaps', 'var'))
-                colorMaps = cell(size(data));
-                colorMaps(:) = {ColorMap('parula')};
-            end
+			if (~exist('colorMaps', 'var'))
+				colorMaps = cell(size(data));
+				colorMaps(:) = {ColorMap('parula')};
+			end
             
             % Plot data
             for i = 1:numel(data)
@@ -1230,9 +1190,10 @@ classdef Plotting < handle
             %                        - options: 'log10' (default), 'logicle'
             %
             %
-            % Written by Ross Jones
-            %   Weiss Lab, MIT
-            %   2016-03-26
+            % Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
             %   
             % Update log:
             
@@ -1330,9 +1291,10 @@ classdef Plotting < handle
             %                        - N must be numel(data)
             %                        - Defaults to standard MATLAB sequence if no input given
             %
-            % Written by Ross Jones
-            %   Weiss Lab, MIT
-            %   2016-04-04
+            % Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
             %   
             % Update log:
             
@@ -1413,9 +1375,10 @@ classdef Plotting < handle
 			%	Outputs
 			%		ax				The axes handle for the generated plot
             %
-            % Written by Ross Jones
-            %   Weiss Lab, MIT
-            %   2016-05-09
+            % Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
             %   
             % Update log:
             
@@ -1546,6 +1509,11 @@ classdef Plotting < handle
 			%						'shade'		Flag to shade in the area under the line. 
 			%						'counts'	Flag to plot bin counts rather than PDF
 			%						'smooth'	Flag to smooth the histogram data
+			%
+			% Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
 			
 			checkInputs_singleLineDensity();
 			
@@ -1585,7 +1553,7 @@ classdef Plotting < handle
 				area(ax, binCenters, binCounts, 'FaceColor', color, 'linewidth', 1, 'FaceAlpha', 0.4);
 				plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 3);
 				line(ax, [binCenters(1), binCenters(1)], [1, binCounts(1)], 'color', color, 'linewidth', 3);
-				line(ax, [binCenters(end), binCenters(end)], [1, binCounts(end)], 'color', colors(i, :), 'linewidth', 3);
+				line(ax, [binCenters(end), binCenters(end)], [1, binCounts(end)], 'color', color, 'linewidth', 3);
 			else
 				plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 5);
 			end
@@ -1621,41 +1589,7 @@ classdef Plotting < handle
 		end
 		
         
-		function orthogonalityMatrix(A,labels)
-			%orthogonalityMatrix(A,labels)
-			%generates an orthogonality plot for the matrix A
-			%   A = matrix of data vlaues (must be square)
-			%   labels = labels for the matrix
-			%
-			%Ex:
-			%   A =[ 4.5000    0.5000    0.2500    0.5500
-			%     0.0500    3.5000    1.0000    0.2500
-			%     0.5000    0.7500    4.2500    0.1500
-			%     0.6500    0.4500    1.2500    4.7500];
-			%   orthoMatrix(A,{'A1','A2','A3','A4'})
-			%
-			%   Written by
-			%   Breanna Stillo
-			%   bstillo@mit.edu
-			%   Last Updated: 2014-10-14;
-
-
-			map=[linspace(0,1)' zeros(100,1) linspace(1,0)'];
-			colormap(map)
-			imagesc(A)
-			colorbar('southoutside')
-
-			set(gca,'Xtick',1:length(A),...
-				'Ytick',1:length(A),...
-				'XAxisLocation','top')
-
-            if exist('labels','var')
-                set(gca,'XTickLabel',labels,'YTickLabel',labels)
-            end
-        end
-		
-        
-        function [ax, h] = standardHeatmap(data, cmap, rowLabels, colLabels, norm, doCluster, symmetric, range, rowpdist, colpdist)
+        function [ax, h, cbar] = standardHeatmap(data, cmap, rowLabels, colLabels, options)
             % Generates a standard heatmap with fontsize 14 and data arranged nicely
             %
             %   Inputs:
@@ -1667,47 +1601,59 @@ classdef Plotting < handle
             %       cmap            The colormap to use for the heatmap (Nx3 matrix of RGB colors)
             %
             %       rowLabels       Cell list of strings with row labels
+			%						(the function accounts for flipping as mentioned above). 
             %
-            %       colLabels       Cell list of strings with row labels (the function accounts 
-            %                       for flipping as mentioned above). 
-            %
-            %       norm            (optional) The dimension to normalize on
-            %                           1 or 'column' = within columns
-            %                           2 or 'row' = within rows
-            %                           3 or 'none' = no normalization
-            %
-            %       doCluster       (optional) Boolean value which flags to create a clustergram
-            %                       rather than a heatmap. Clustergram is created with standard
-            %                       euclidean distance calculation for both rows and cols.
-            %
-            %       symmetric       (optional) Boolean value which flags the heatmap to be 
-            %                       symmetric around zero. (Default = False)
+            %       colLabels       Cell list of strings with col labels 
+            %		
+			%		options			(optional) Struct of additional optional inputs
+			%			norm            The dimension to normalize on
+            %								1 or 'column' = within columns
+            %								2 or 'row' = within rows
+            %								3 or 'none' = no normalization
+			%			dataType		The type of data being plotted
+			%								'mef'/'mefl' will plot onto standard biexpMEF colorbar
+			%								'raw' will plot onto standard bixep colorbar
+			%								'null' (defualt) will not adjust the colobar
+			%			position		A 1x4 position description for the figure to be plotted
+			%			doCluster       Boolean value which flags to create a clustergram
+            %							rather than a heatmap. Clustergram is created with standard
+            %							euclidean distance calculation for both rows and cols.
+            %			symmetric       Boolean value which flags the heatmap to be 
+            %							symmetric around zero. (Default = False)
+			%			colpdist		The distance metric to use for columns
+			%								[If using dendrograms]
+			%			rowpdist		The distance metric to use for rows
+			%								[If using dendrograms]
+			%
             %   Outputs: 
             %
             %       ax              A handle to the figure axes created
             %       h               A handle to the heatmap/clustergram object
             % 
-            % Written by Ross Jones
-            % jonesr18@mit.edu
-            % Weiss Lab, MIT
-            % 2016-04-13
+            % Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
             %
             % Update Log:
             %   2016-05-02 Added symmetric argument
-            
+			%	2018-01-15 Changed extra inputs to options, added colorbar editing
+			%
+			
             % Invert data rows because stupid heatmap
             flippedData = flipud(data);
             
             % Create heatmap/clustergram
-            if (exist('doCluster', 'var') && doCluster)
+            if (ismember('doCluster', fieldnames(options)) && options.doCluster)
+				doCluster = true;
                 h = clustergram(flippedData);
-                if exist('rowpdist', 'var')
-                    h.RowPDist = rowpdist;
+                if ismember('rowpdist', fieldnames(options))
+                    h.RowPDist = options.rowpdist;
                 else
                     h.RowPDist = 'correlation';
                 end
-                if exist('colpdist', 'var')
-                    h.ColumnPDist = colpdist;
+                if ismember('colpdist', fieldnames(options))
+                    h.ColumnPDist = options.colpdist;
                 else
                     h.ColumnPDist = 'correlation';
                 end
@@ -1715,14 +1661,14 @@ classdef Plotting < handle
                 doCluster = false;
                 h = HeatMap(flippedData);
             end
-            if exist('norm', 'var')
-                h.Standardize = upper(norm);
-                if exist('range', 'var')
-                    h.DisplayRange = range; 
+            if ismember('norm', fieldnames(options))
+                h.Standardize = upper(options.norm);
+                if ismember('range', fieldnames(options))
+                    h.DisplayRange = options.range; 
                 end
             end
-            if exist('symmetric', 'var')
-                h.Symmetric = symmetric;
+            if ismember('symmetric', fieldnames(options))
+                h.Symmetric = options.symmetric;
             else
                 h.Symmetric = false;
             end
@@ -1730,16 +1676,299 @@ classdef Plotting < handle
             h.RowLabels = fliplr(rowLabels);
             h.ColumnLabels = colLabels;
             
-            h.view();
+%             h.view();
             
             % Create figure/axes object and update font size / add colorbar
             ax = h.plot();
-            if (~doCluster)
-                % The colorbar throws off the dendrogram, so it needs to be generated in other ways
-                colorbar('peer', ax, 'EastOutside');
-            end
+			if (~doCluster)
+				% The colorbar throws off the dendrogram, so it needs to be generated in other ways
+				if ismember('dataType', fieldnames(options))
+					switch options.dataType
+						case {'raw'}
+							cbar = Plotting.biexpColorbar(ax);
+						case {'mef', 'mefl'}
+							cbar = Plotting.biexpColorbarMEF(ax);
+						otherwise
+							cbar = colorbar('peer', ax, 'EastOutside');
+							cbar.TickDirection = 'out';
+							% No major changes to colorbar, just move ticks out
+					end
+				end
+			end
+			
+			% Change figures size/position
+			if ismember('position', fieldnames(options))
+				set(gcf(), 'position', options.position);
+			end
+			
             ax.FontSize = 14;
-        end
+		end
+		
+		
+		function figBinHmap = binHeatmap(data, edges, labels, cmap, axProperties, options)
+			% Creates a heatmap representing the given bin data. The presentation 
+			% depends on the dimensionality of the data.
+			%
+			%	figBinHmap = binHeatmap(data, cmap, axProperties)
+			%
+			%	 - 2D data is plotted as a simple heatmap on a single axis
+			%	 - 3D data is plotted as a series of 2D heatmaps stacked in
+			%	   the 3rd dimension on a single axis
+			%		* To plot individual Z-stacks on different axes, pass the
+			%		  3rd dimension as a singleton and push the data to 4/5. 
+			%	 - 4D data os plotted as a series of 3D data in multiple
+			%	   subplots occupying one row of the figure. 
+			%	 - 5D data is plotted like 4D data, with the 5th dimension
+			%	   occupying individual subplot rows of the figure. 
+			%
+			%	Inputs
+			%
+			%		data			<numeric> A 2-5 dimensional matrix containing
+			%						data to be plotted. Each element represents a
+			%						summary statistic from a single bin.
+			%
+			%		edges			<cell> A cell list of numeric arrays
+			%						containing the edge values for each bin.
+			%						Each element of the cell list corresponds
+			%						with one dimension. 
+			%						 - For dimensions 3+, edges can be given as
+			%						   bin center values, which is convenient if
+			%						   the dimension is defined by small molecule 
+			%						   inputs or other non-binning factors.
+			%						 - Edges for dimensions 3+ can also be
+			%						   categorical, given as a cell list of
+			%						   strings with length equal to size(data, N)
+			%
+			%		labels			<cell> A cell list of labels for each dimension.
+			%						NOTE: The last entry is the label for the
+			%						bin statistic being plotted! 
+			%						Thus, # labels = ndims(data) + 1
+			%
+			%		cmap			<numeric, char, ColorMap> (Optional) 
+			%						The colormap to represent data values. 
+			%						 - Can input an Nx3 matrix of RGB values, a
+			%						   ColorMap object pre-initialized with a
+			%						   color, or a string indicating which
+			%						   ColorMap to initialize. 
+			%						 - ColorMap and char inputs will yield 100
+			%						   unique color values on the given scale
+			%						 - Defualt = parula(100);
+			%
+			%		axProperties	<struct> (Optional) Property-value pairs for
+			%						the axes properties for each axes object
+			%						plotted by the function. 
+			%
+			%		options			<struct> Optional property-value pairs:
+			%							'biexp', <dimensions> enables biexponential 
+			%							  axes in the given dimensions 
+			%								({'C', 'X', 'Y', 'Z'} accepted, where 
+			%								'C' corresponds w/ the colorbar)
+			%							'logicle', <params> enables setting the
+			%						      logicle function parameters
+			%								(see Transforms.lin2logicle())
+			%							'min', <min val> enables setting the
+			%							  lower bound for color-data conversion
+			%								(default = 0)
+			%							'max', <max val> enables setting the
+			%							  upper bound for color-data conversion
+			%								(default = 4.5)
+			%
+			%	Outputs
+			%
+			%		figBinHmap		<handle> A handle to the generated figure 
+			%
+			% Written by 
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			
+			checkInputs_binHeatmap();
+			
+			figBinHmap = figure();
+			
+			spIdx = 0;
+			for d5 = 1:size(data, 5)
+				for d4 = 1:size(data, 4)
+					
+					spIdx = spIdx + 1;
+					ax = subplot(size(data, 5), size(data, 4), spIdx);
+					
+					for d3 = 1:size(data, 3)
+						
+						% Setup patch coordinates
+						patchesX = zeros(4, size(data, 1) * size(data, 2));
+						patchesY = zeros(size(patchesX));
+						patchesZ = ones(size(patchesX)) * (d3 - 1);
+						patIdx = 0;
+						
+						% Extract patch coordinates
+						for d2 = 1:size(data, 2)
+							for d1 = 1:size(data, 1)
+								
+								patIdx = patIdx + 1;
+								
+								patchesX(:, patIdx) = [
+									edges{1}(d1)
+									edges{1}(d1 + 1)
+									edges{1}(d1 + 1)
+									edges{1}(d1)];
+								
+								patchesY(:, patIdx) = [
+									edges{2}(d2)
+									edges{2}(d2)
+									edges{2}(d2 + 1)
+									edges{2}(d2 + 1)];
+								
+							end
+						end
+						
+						% Get colors for each patch
+						colors = Plotting.getColors(data(:, :, d3, d4, d5), cmap, options);
+						
+						% Plot all patches
+						patch(ax, patchesX, patchesY, patchesZ, ...
+							reshape(colors, [size(patchesX, 2), 1, 3]), ...
+							'EdgeColor', 'none', 'FaceColor', 'flat');
+						
+						% Set axes properties/labels
+						set(ax, axProperties);
+						xlabel(ax, labels{1});
+						ylabel(ax, labels{2});
+						Plotting.biexpAxes(ax, ismember('X', options.biexp), ...
+										   ismember('Y', options.biexp), ...
+										   ismember('Z', options.biexp), ...
+										   options.logicle.MEF ~= 1, ...
+										   options.logicle)
+					end
+					
+					% Plot Z (3D) labels if applicable
+					if (size(data, 3) > 1)
+						centers3 = cell(1, size(data, 3));
+						for c3i = 1:numel(centers3)
+							if (size(data, 3) < numel(edges{3}))
+								centers3{c3i} = num2str(mean([edges{3}(c3i), edges{3}(c3i + 1)]));
+							else
+								if iscell(edges{3}(c3i))
+									centers3{c3i} = edges{3}{c3i};
+								else
+									centers3{c3i} = num2str(edges{3}(c3i));
+								end
+							end
+						end
+						ax.ZTickLabel = centers3;
+						zlabel(ax, labels{3});
+					end
+					
+					% Plot titles w/ 4/5D labels if applicable
+					if (size(data, 4) > 1)
+						if (size(data, 4) < numel(edges{4}))
+							center4 = num2str(mean([edges{4}(d4), edges{4}(d4 + 1)]));
+						else
+							if iscell(edges{4}(d4))
+								center4 = edges{4}{d4};
+							else
+								center4 = num2str(edges{4}(d4));
+							end
+						end
+						titleLine1 = sprintf('%s = %s', labels{4}, center4);
+					else
+						titleLine1 = '';
+					end
+					if (size(data, 5) > 1)
+						if (size(data, 5) < numel(edges{5}))
+							center5 = num2str(mean([edges{5}(d5), edges{5}(d5 + 1)]));
+						else
+							if iscell(edges{5}(d5))
+								center5 = edges{5}{d5};
+							else
+								center5 = num2str(edges{5}(d5));
+							end
+						end
+						titleLine2 = sprintf('%s = %s', labels{5}, center5);
+					else
+						titleLine2 = '';
+					end
+					title(ax, {titleLine1; titleLine2})
+				end
+			end
+			
+			if ismember('C', options.biexp)
+				cbar = Plotting.biexpColorbar(ax, ...
+						   options.logicle.MEF ~= 1, ...
+						   options.logicle);
+			else
+				cbar = colorbar(ax);
+				cbar.Limits = [min(data(:)), max(data(:))];
+			end
+			cbar.Label.String = labels{end};
+			if isfield(axProperties, 'FontSize')
+				cbar.Label.FontSize = axProperties.FontSize;
+			end
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function checkInputs_binHeatmap()
+				
+				% Check data + dimensions
+				validateattributes(data, {'numeric'}, {}, mfilename, 'data', 1);
+				assert(ndims(data) > 1, 'Data must have at least two dimensions!')
+				assert(ndims(data) < 6, 'Data must have no more than 5 dimensions!')
+				
+				% Check edges
+				validateattributes(edges, {'cell'}, {}, mfilename, 'edges', 2);
+				assert(numel(edges) == ndims(data), ...
+					'Number of edges (%d) does not match data dimensionality! (%d)', ...
+					numel(edges), ndims(data));
+				for ei = 1:numel(edges)
+					if ei <= 2
+						assert(numel(edges{ei}) == (size(data, ei) + 1), ...
+							   'Number of edges supplied for dim %d is incorrect!', ei)
+					else % Allow specifying exact positions for dims 3+
+						assert(numel(edges{ei}) == size(data, ei) || ...
+							   numel(edges{ei}) == (size(data, ei) + 1), ...
+							   'Number of edges supplied for dim %d is incorrect!', ei)
+					end
+				end
+				
+				% Check labels
+				validateattributes(labels, {'cell'}, {}, mfilename, 'labels', 3);
+				assert(numel(labels) == (ndims(data) + 1), ...
+					'Number of labels (%d) does not match data dimensionality + 1! (%d)', ...
+					numel(labels), ndims(data));
+				
+				% Check colormap
+				if exist('cmap', 'var')
+					validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, ...
+							{}, mfilename, 'cmap', 4);
+				else
+					cmap = parula(100);
+				end
+				
+				% Check axes properties
+				if exist('axProperties', 'var')
+					validateattributes(axProperties, {'struct'}, {}, mfilename, 'axProperties', 5);
+				else
+					axProperties = struct();
+				end
+				
+				% Check options
+				if exist('options', 'var')
+					validateattributes(options, {'struct'}, {}, mfilename, 'options', 6);
+				else
+					options = struct();
+				end
+				if ~isfield(options, 'biexp'), options.biexp = {}; end
+				if ~isfield(options, 'logicle'), options.logicle = struct(); end
+				if ~isfield(options.logicle, 'MEF'), options.logicle.MEF = 1; end % Pre-set to 1 for later checking
+				if ~isfield(options, 'min'), options.min = 0; end
+				if ~isfield(options, 'max'), options.max = 4.5; end
+				
+			end
+			
+		end
+		
 	end
 	
 end
