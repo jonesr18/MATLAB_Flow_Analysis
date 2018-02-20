@@ -6,6 +6,8 @@ classdef FlowData < handle
 	%
 	%		name			<char>		Experiment name
 	%		date			<char>		Experiment start date
+	%		folder			<char>		The full path name for the experiment
+	%		cytometer		<char>		The cytometer used for the experiment
 	%
 	%		numSamples		 <numeric>	The number of data samples
 	%		numCells		 <array>	The number of cells in each sample
@@ -19,7 +21,8 @@ classdef FlowData < handle
 	%		controlData		 <struct>	Similar to sampleData but for controls.
 	%									The order of controls should be the same
 	%									as their corresponding channels. 
-	%		fitParams		 <struct>	Struct containing matrix compensation fitting results.
+	%		controlsFolder	 <char>		The full path name for the controls
+	%		compFits		 <struct>	Struct containing matrix compensation fitting results.
 	%		compDataType	 <char>		Data type used for compensation
 	%		beadFitsControls <table>	Table containing MEF unit fits for controls
 	%		meflConversions  <struct>	Mapping between channel names to MEF-MEFL conversion factors 
@@ -30,16 +33,11 @@ classdef FlowData < handle
 	%									numerical cell indexes (IDs) in each bin. 
 	%										N = numel(binChannels)
 	%										M = numBins
-	%										IDs will depend on binDataType & binGate
+	%		numBins			 <numeric>	Number of bins
+	%		binSizes		 <numeric>	Number of bins in each dimension (order depends 
+	%									on the order of channels in binInputs).
 	%		binInputs		 <struct>	Struct w/ bin channels as fields and edges as values
 	%		binDataType		 <char>		Binned dataType ('raw', 'mComp', 'mefl', etc)
-	%		binGate			 <char>		Gate name for cell population to bin
-	%		binStats		 <struct>	Struct w/ most recently generated bin statistics.
-	%									Each field is a different measurement (median, 
-	%									stdev, etc) and each value is an N-dimensional 
-	%									matrix containing the measured values. The
-	%									dimensionality is determined by which channels
-	%									are requested in self.getBinStats()
 	%
 	%	Public Methods
 	%
@@ -67,6 +65,7 @@ classdef FlowData < handle
 	properties (SetAccess = private)
 		name = '';					% Experiment name
 		date = '';					% Experiment start date
+		folder = '';				% Experiment full path name
 		cytometer = '';				% Experiment cytometer used
 		
 		numSamples = 0;				% The number of data samples
@@ -76,11 +75,12 @@ classdef FlowData < handle
 		
 		gateNames = {};				% Cell array of gate names (strings)
 		gatePolygons = struct();	% Mapping between gate names and polygons for sampleData
-		
 		dataTypes = {'raw'};		% Cell array of data types ('raw', 'mComp', 'mefl', etc)
 		channels = {};				% Cell array of channel names
+		
 		controlData = struct();		% Similar to sampleData but for controls
-		fitParams = struct();		% Struct containing matrix compensation fitting results
+		controlsFolder = '';		% Controls full path name
+		compFits = struct();		% Struct containing matrix compensation fitting results
 		compDataType = '';			% Data type used for compensation
 		
 		beadFitsControls = table();	% Table containing MEF unit fits for controls
@@ -88,10 +88,16 @@ classdef FlowData < handle
 		meflConversions = struct(); % Mapping between channel names to MEF-MEFL conversion factors 
 		
 		bins = {};					% Cell array where each element corresponds with a data sample
+		numBins = 0;				% Number of bins
+		binSizes = [];				% Number of bins in each dimension
 		binInputs = struct();		% Struct w/ bin channels as fields and edges as values
 		binDataType = '';			% Binned dataType ('raw', 'mComp', 'mefl', etc)
-		binGate = '';				% Gate name for cell population to bin
-		binStats = struct();		% Most recently generated bin statistics
+		
+		logicleParams = struct( ... % Logicle transformation parameters to use
+			'T', 2^18, ...
+			'M', 4.5, ...
+			'r', -150, ...
+			'MEF', Transforms.MEF_CONVERSION_FACTOR);
 	end
 	
 	
@@ -123,7 +129,7 @@ classdef FlowData < handle
 	
 	methods (Access = public)
 		
-		function self = FlowData(dataFnames, channels, exptDetails, sampleMapFname)
+		function self = FlowData(dataFnames, channels, exptDetails)
 			% Initializes the FlowData object 
 			% by importing data from the given files, which should correspond
 			% with the given sample map and contain data in the given channels.
@@ -144,10 +150,13 @@ classdef FlowData < handle
 			%
 			%		exptDetails		<struct> A struct with the following fields
 			%						recording experimental details:
-			%							name  |  <char>
-			%							date  |  <char>
+			%							name		|	<char>
+			%							date		|	<char>
+			%							folder		|	<char> (full-path folder name)
+			%							sampleMap*	|	<char>
+			%							cytometer	|	<char>
 			%
-			%		sampleMapFname	<char> The name of the .txt file containing 
+			%						*sampleMap: name of the .txt file containing 
 			%						treatments information for each sample. 
 			%						**See example file in source folder.
 			%
@@ -157,11 +166,12 @@ classdef FlowData < handle
 			% When loading, we need to make a blank version of the object
 			if strcmpi(dataFnames, 'load'), return, end
 			
-			dataStruct = checkInputs();
+			[dataStruct, sampleMapFname] = checkInputs(self);
 			
 			% Extract experiment details
 			self.date = exptDetails.date;
 			self.name = exptDetails.name;
+			self.folder = exptDetails.folder;
 			self.cytometer = exptDetails.cytometer;
 			
 			% Extract sample map
@@ -220,7 +230,7 @@ classdef FlowData < handle
 			
 			% Add listeners for settable public properties
 % 			addlistener(self, 'test', 'PostSet', @self.handlePropEvents);
-% 			addlistener(self, {'binInputs', 'binDataType', 'binGate'}, ...
+% 			addlistener(self, {'binInputs', 'binDataType'}, ...
 % 				'PostSet', @self.handlePropEvents);
 			
 			fprintf(1, 'Finished constructing FlowData object\n')
@@ -229,26 +239,31 @@ classdef FlowData < handle
 			% -- Helper functions -- %
 			
 			
-			function dataStruct = checkInputs()
+			function [dataStruct, sampleMapFname] = checkInputs(self)
 				validateattributes(dataFnames, {'cell', 'char'}, {}, mfilename, 'dataFilenames', 1);
 				validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 2);
 				validateattributes(exptDetails, {'struct'}, {}, mfilename, 'exptDetails', 3);
-				validateattributes(sampleMapFname, {'char'}, {}, mfilename, 'sampleMap', 4);
 				
 				% Convert channels to cell array if single char value is given
 				if ischar(channels), channels = {channels}; end
 				channels = reshape(channels, 1, []); % Ensure row vector
 				
 				% Check required experiment details are present
-				requiredFields = {'date', 'name', 'cytometer'};
+				requiredFields = {'date', 'name', 'folder', 'sampleMap', 'cytometer'};
 				missingFields = setdiff(requiredFields, fieldnames(exptDetails));
 				assert(isempty(missingFields), 'Experiment details missing field: %s\n', missingFields{:});
+				assert(logical(exist(exptDetails.folder, 'file')), 'Experiment folder does not exist!');
+				if ~(exptDetails.folder(end) == filesep)
+					exptDetails.folder = [exptDetails.folder, filesep];
+				end
 				
 				% Check sampleMap is a real file
+				sampleMapFname = self.convertToFullFile(exptDetails.sampleMap, exptDetails.folder);
 				assert(logical(exist(sampleMapFname, 'file')), ...
 					'File not found: %s\n', sampleMapFname)
 				
 				% Import data
+				dataFnames = self.convertToFullFile(dataFnames, exptDetails.folder);
 				dataStruct = FlowAnalysis.openFiles(dataFnames{:});
 				
 				% Check channels are present in dataStruct
@@ -259,7 +274,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function addControls(self, wildTypeFilename, singleColorFilenames, twoColorFilenames)
+		function addControls(self, controlsFolder, wildTypeFname, singleColorFnames, twoColorFnames)
 			% Adds wild-type, single-color, and two-color (optional) data to the dataset
 			% so that we can do compensation (single-colors) and MEFL conversion (two-colors).
 			%
@@ -268,23 +283,26 @@ classdef FlowData < handle
 			% in position 2*X (if applicable), and wild-type data is in the last
 			% position (regardless of the presence of two-color data). 
 			% 
-			%	self.addControls(wildTypeFilename, singleColorFilenames, twoColorFilenames)
+			%	self.addControls(controlsFolder, wildTypeFname, singleColorFnames, twoColorFnames)
 			%
 			%	Inputs
-			%		wildTypeFilenames		<cell, char> Wild-type cell data
-			%		
-			%		singleColorFilenames	<cell, char> Single-color controls data files
-			%								** Order of colors should coincide with
-			%								the order of FlowData.channels
+			%		controlsFolder		<char> The full-path folder name for controls
 			%
-			%		twoColorFilenames		(optional) <cell, char> Two-color controls data files
-			%								** As with single colors, the order should match
-			%								those in self.channels, but with no yellow/green 
-			%								file (since all other colors are converted to MEFL 
-			%								units using the FITC channel).
+			%		wildTypeFnames		<cell, char> Wild-type cell data
+			%		
+			%		singleColorFnames	<cell, char> Single-color controls data files
+			%							** Order of colors should coincide with
+			%							the order of FlowData.channels
+			%
+			%		twoColorFnames		(optional) <cell, char> Two-color controls data files
+			%							** As with single colors, the order should match
+			%							those in self.channels, but with no yellow/green 
+			%							file (since all other colors are converted to MEFL 
+			%							units using the FITC channel).
 			
 			[wildTypeData, singleColorData, twoColorData] = checkInputs_addControls(self);
 			FITC_IDX = find(strcmpi('FITC_A', self.channels));
+			self.controlsFolder = controlsFolder;
 			
 			% Extract data
 			self.controlData = extractData([self.channels, {'nObs'}], ...
@@ -303,28 +321,37 @@ classdef FlowData < handle
 			
 			function [wildTypeData, singleColorData, twoColorData] = checkInputs_addControls(self)
 				
-				validateattributes(wildTypeFilename, {'cell', 'char'}, {}, mfilename, 'wildTypeFilename', 1);
-				validateattributes(singleColorFilenames, {'cell', 'char'}, {}, mfilename, 'singleColorFilenames', 2);
-
+				validateattributes(controlsFolder, {'char'}, {}, mfilename, 'controlsFolder', 1);
+				assert(logical(exist(controlsFolder, 'file')), 'Controls folder does not exist!');
+				if ~(controlsFolder(end) == filesep), controlsFolder = [controlsFolder, filesep]; end
+				
+				validateattributes(wildTypeFname, {'cell', 'char'}, {}, mfilename, 'wildTypeFname', 2);
+				validateattributes(singleColorFnames, {'cell', 'char'}, {}, mfilename, 'singleColorFnames', 3);
+				
 				% Convert to cell arrays if necessary for convenience
-				if ischar(wildTypeFilename), wildTypeFilename = {wildTypeFilename}; end
-				if ischar(singleColorFilenames), singleColorFilenames = {singleColorFilenames}; end
-
+				if ischar(wildTypeFname), wildTypeFname = {wildTypeFname}; end
+				if ischar(singleColorFnames), singleColorFnames = {singleColorFnames}; end
+				
 				% Check number of scFiles
-				assert(numel(singleColorFilenames) == numel(self.channels), ...
+				assert(numel(singleColorFnames) == numel(self.channels), ...
 					'Incorrect number of single color controls');
-
+				
+				% Add full-path to filenames
+				wildTypeFname = self.convertToFullFile(wildTypeFname, controlsFolder);
+				singleColorFnames = self.convertToFullFile(singleColorFnames, controlsFolder);
+				
 				% Open files
-				wildTypeData = FlowAnalysis.openFiles(wildTypeFilename{:});
-				singleColorData = FlowAnalysis.openFiles(singleColorFilenames{:});
-
+				wildTypeData = FlowAnalysis.openFiles(wildTypeFname{:});
+				singleColorData = FlowAnalysis.openFiles(singleColorFnames{:});
+				
 				% Add twoColorData if applicable
-				if exist('twoColorFilenames', 'var')
-					validateattributes(twoColorFilenames, {'cell', 'char'}, {}, mfilename, 'twoColorFilenames', 3);
-					if ischar(twoColorFilenames), twoColorFilenames = {twoColorFilenames}; end
-					assert(numel(twoColorFilenames) == sum(~strcmpi('FITC_A', self.channels)), ...
+				if exist('twoColorFnames', 'var')
+					validateattributes(twoColorFnames, {'cell', 'char'}, {}, mfilename, 'twoColorFnames', 4);
+					if ischar(twoColorFnames), twoColorFnames = {twoColorFnames}; end
+					assert(numel(twoColorFnames) == sum(~strcmpi('FITC_A', self.channels)), ...
 						'Incorrect number of two color controls');
-					twoColorData = FlowAnalysis.openFiles(twoColorFilenames{:});
+					twoColorFnames = self.convertToFullFile(twoColorFnames, controlsFolder);
+					twoColorData = FlowAnalysis.openFiles(twoColorFnames{:});
 				else
 					twoColorData = [];
 				end
@@ -384,32 +411,42 @@ classdef FlowData < handle
 			self.onlyP1 = onlyP1;
 			if strcmpi(self.cytometer, 'Koch-LSRII-HTS2'), swap = true; else, swap = false; end
 			
-			% Setup new directory for gates
-			gateDir = ['Gating', filesep];
-			if ~exist(gateDir, 'file')
-				mkdir(gateDir)
+			% Setup new directories for gates
+			gateDirSamples = [self.folder, 'Gating', filesep];
+			if ~exist(gateDirSamples, 'file')
+				mkdir(gateDirSamples)
+			end
+			gateDirControls = [self.controlsFolder, 'Gating', filesep];
+			if ~exist(gateDirControls, 'file')
+				mkdir(gateDirControls)
 			end
 			
-			% Check if gates have already been made for this data
-			% --> If so, load them and immediately return!
+			% Check if gates have already been made for this data first, then
+			% process if necessary. 
 			gatesSaveName = [self.date, '_', self.name];
-			gatesFname = [gateDir, gatesSaveName '_GatePolygons.mat'];
-			gatesFnameControls = [gateDir, 'Controls', '_GatePolygons.mat'];
-			if exist(gatesFname, 'file') 
+			gatesFnameSamples = [gateDirSamples, gatesSaveName '_GatePolygons.mat'];
+			gatesFnameControls = [gateDirControls, 'Controls_GatePolygons.mat'];
+			if exist(gatesFnameSamples, 'file')
 				% Load existing sample gates
-				load(gatesFname);
+				load(gatesFnameSamples);
 			else
 				% Do manual sample gating
-				[gateP1s, gateP2s, gateP3s] = Gating.standardGating(self.sampleDataScatter, onlyP1, swap);
-				save(gatesFname, 'gateP1s', 'gateP2s', 'gateP3s');
+				[gateP1s, gateP2s, gateP3s, gateFigs] = Gating.standardGating(self.sampleDataScatter, onlyP1, swap);
+				save(gatesFnameSamples, 'gateP1s', 'gateP2s', 'gateP3s');
+				for f = fieldnames(gateFigs)
+					saveas(gateFigs.(f{:}), [gateDirSamples, gatesSaveName, '_gate', f{:}, 's']);
+				end
 			end
 			if exist(gatesFnameControls, 'file')
 				% Load existing control gates
 				load(gatesFnameControls);
 			else
 				% Do manual control gating
-				[gateP1c, gateP2c, gateP3c]	= Gating.standardGating(self.controlDataScatter, onlyP1, swap);
+				[gateP1c, gateP2c, gateP3c, gateFigs] = Gating.standardGating(self.controlDataScatter, onlyP1, swap);
 				save(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
+				for f = fieldnames(gateFigs)
+					saveas(gateFigs.(f{:}), [gateDirControls, 'Controls_gate', f{:}, 'c']);
+				end
 			end
 			
 			% Only extract polygons and such for sampleData, not controlData
@@ -477,15 +514,65 @@ classdef FlowData < handle
 			% Check inputs
 			checkInputs_convertToMEF();
 			
-			% Get MEF fits 
-			fitsControls = Transforms.calibrateMEF(beadsControls, self.channels, options);
-			if isequaln(beadsControls, beadsSamples)
-				% If the bead properties are the same, then skip the fitting for
-				% samples' beads and just use the controls' beads. This is for 
-				% the case where samples and controls are run the same day.
-				fitsSamples = fitsControls;
-			else
-				fitsSamples = Transforms.calibrateMEF(beadsSamples, self.channels, options);
+			% Setup new directory for fitting files/figs
+			beadDirControls = [self.controlsFolder, 'Calibration', filesep];
+			if ~exist(beadDirControls, 'file')
+				mkdir(beadDirControls)
+			end
+			beadDirSamples = [self.folder, 'Calibration', filesep];
+			if ~exist(beadDirSamples, 'file')
+				mkdir(beadDirSamples)
+			end
+			
+			% Extract MEF units from Transforms class for naming
+			MEF_units = Transforms.getBeadUnits(self.channels);
+			
+			beads = {beadsControls, beadsSamples};
+			beadDirs = {beadDirControls, beadDirSamples};
+			for b = 1:numel(beads)
+				
+				if isequaln(beadsControls, beadsSamples)
+					% If the bead properties are the same, then skip the fitting for
+					% samples' beads and just use the controls' beads. This is for 
+					% the case where samples and controls are run the same day.
+					fitsSamples = fitsControls;
+					fprintf(1, 'Sample beads match control beads...using them for calibration\n');
+					break
+				end
+				
+				% Setup filenames, check if already exists
+				beadSaveName = [beads{b}.date, '_', beads{b}.type, '_', ...
+						beads{b}.lot, '_', beads{b}.cytometer];
+				mefFname = [beadDirs{b}, beadSaveName '_MEF_Fits.mat'];
+				
+				if exist(mefFname, 'file')
+					fprintf(1, 'Loading pre-computed bead fits\n');
+					load(mefFname);
+				else
+					% Get Controls MEF fits 
+					[mefFits, figFits] = Transforms.calibrateMEF(beadsControls, self.channels, options);
+
+					% Save channel fits (and figures if applicable)
+					save(mefFname, 'mefFits')
+
+					% Save figures to bead directory
+					if ~isempty(fieldnames(figFits))
+						for chID = 1:numel(self.channels)
+							saveas(figFits.(self.channels{chID}), ...
+									[beadDirs{b}, beadSaveName, '_', MEF_units{chID}, '_Fit.fig']); 
+						end
+						if isfield(figFits, 'manualPeaks')
+							saveas(figFits.manualPeaks, [beadDirs{b}, beadSaveName, '_manualPeaks.fig']);
+						end
+					end
+				end
+				
+				% Extract fits to unique local variables
+				if (b == 1)
+					fitsControls = mefFits; 
+				else
+					fitsSamples = mefFits; 
+				end
 			end
 			
 			% Save fit information
@@ -567,6 +654,21 @@ classdef FlowData < handle
 			validatestring(gate, self.gateNames, mfilename, 'gate', 3);
 			plotsOn = (exist('plotsOn', 'var') && all(logical(plotsOn)));
 			
+			% Setup new directory for compensation fits/figs
+			compDir = [self.controlsFolder, 'Compensation', filesep];
+			if ~exist(compDir, 'file')
+				mkdir(compDir)
+			end
+			
+			% Check if compensation has already been done for this data
+			% --> If so, load and apply to data!
+			compFname = [compDir, 'CompFits.mat'];
+			if exist(compFname, 'file') 
+				% Load existing sample gates
+% 				load(compFname);
+% 				method = 'preload';
+			end
+			
 			switch method
 				case 'scComp'
 					self.sampleData = Compensation.compensateBatchSC( ...
@@ -576,16 +678,25 @@ classdef FlowData < handle
 					self.addDataTypes('scComp');
 				
 				case 'mComp'
-					[self.sampleData, self.controlData, self.fitParams] = ...
+					[self.sampleData, self.controlData, compFits, compFigs] = ...
 						Compensation.compensateMatrixBatch( ...
 							self.sampleData, self.controlData, self.channels, ...
-							dataType, gate, plotsOn);
+							dataType, gate, plotsOn); %#ok<PROPLC>
 					self.addDataTypes({'afs', 'mComp'});
 			end
 			
+			% Save data/figures
+			save(compFname, 'compFits')
+			if ~isempty(compFigs.pre)
+				saveas(compFigs.pre, [compDir, 'pre-comp.fig'])
+				saveas(compFigs.post, [compDir, 'post-comp.fig'])
+			end
+			
+			self.compFits = compFits; %#ok<PROPLC>
 			self.compensated = true;
 			self.compDataType = dataType;
 			fprintf(1, 'Finished compensation\n')
+						
 		end
 		
 		
@@ -613,13 +724,38 @@ classdef FlowData < handle
 			elseif ismember('scComp', self.dataTypes)
 				dataType = 'scComp';
 			else
-				error('Compensated data not found!\n')
+				error('Compensated data not found!')
 			end
 			
-			% Compute mefl conversions
-			meflSaveName = self.name;
-			tcData = self.controlData(numel(self.channels) + 1 : 2 * numel(self.channels));
-			meflFits = Transforms.calibrateMEFL(tcData, self.channels, dataType, meflSaveName, showPlots);
+			% Extract MEF units from Transforms class for naming
+			MEF_units = Transforms.getBeadUnits(self.channels);
+			
+			% Check if conversions already exist
+			beadDir = [self.controlsFolder, 'Calibration', filesep];
+			if ~exist(beadDir, 'file')
+				error('Controls bead directory not found! It should be set up during MEF calibration')
+			end
+			meflFname = [beadDir, 'MEFL_Conversions.mat'];
+			
+			if exist(meflFname, 'file')
+				fprintf(1, 'Loading pre-computed MEFL conversions\n');
+				load(meflFname)
+			else
+				% Compute mefl conversions
+				tcData = self.controlData(numel(self.channels) + 1 : 2 * numel(self.channels));
+				[meflFits, figFits] = Transforms.calibrateMEFL(tcData, self.channels, dataType, showPlots);
+			
+				save(meflFname, 'meflFits');
+				
+				if ~isempty(fieldnames(figFits))
+					for chID = 1:numel(self.channels)
+						if ~strcmpi(self.channels{chID}, 'FITC_A')
+							saveas(figFits.(self.channels{chID}), ...
+									[beadDir, MEF_units{chID}, '_MEFL_Conversion.fig']); 
+						end
+					end
+				end
+			end
 			
 			% Add converted data as 'mefl' data type
 			for ch = self.channels
@@ -642,10 +778,11 @@ classdef FlowData < handle
 		end
 		
 		
-		function binStats = bin(self, binInputs, binDataType, binGate)
-			% Bins the data by the input channels into the given number of bins 
+		function bin(self, binInputs, binDataType)
+			% Sorts the sample data using the given set of channels/edges into a
+			% number of bins using the given dataType for assignments. 
 			%
-			%	self.bin(binEdges, binChannels, binDataType, binGate)
+			%	self.bin(binInputs, binDataType)
 			%
 			%	Inputs
 			%		binInputs		<struct> A struct with channel names as keys and 
@@ -656,18 +793,6 @@ classdef FlowData < handle
 			%		
 			%		binDataType		<char> The cell dataType to use (eg 'mefl', 'mComp')
 			%
-			%		binGate			(optional) <char> The gated cell population 
-			%						to use for binning (default: 'P3')
-			%
-			%	Outputs
-			%		binStats		<struct> A nested struct where each element corresponds
-			%						with a sample and has the following heirarchy: 
-			%							binStats --> channel --> statistic --> calculation
-			%							Statistics:
-			%								numCells, 10th, 50th (median), 90th %iles, 
-			%								mean, geomean, stdev, geostdev, sem, semb*
-			%								 * semb = bootstrapped SEM, currently
-			%								   <not done because it is too slow>
 			%
 			%	Implementation notes:
 			%		The binning method (FlowAnalysis.simpleBin()) operates in 
@@ -688,37 +813,33 @@ classdef FlowData < handle
 			[binChannels, binEdges] = checkInputs_bin(self);
 			
 			for i = 1:self.numSamples
-				
-				sliceParams = struct( ...
-					'channels', {binChannels}, ...
-					'dataType', binDataType);
-				
-				slicedData = self.slice(i, sliceParams);
+								
+				slicedData = self.slice(i, struct( ...
+						'channels', {binChannels}, ...
+						'dataType', binDataType, ...
+						'equalize', false));
 				
 				% Transform to logicle space based on the dataType
-				if (strcmpi(binDataType, 'raw') || ...
-						(ismember(binDataType, {'afs', 'scComp', 'mComp'}) && ...
-						 strcmpi(self.compDataType, 'raw')))
+				if (strcmpi(binDataType, 'raw') ...
+						|| (ismember(binDataType, {'afs', 'scComp', 'mComp'}) ...
+							&& strcmpi(self.compDataType, 'raw')))
 					% Raw data (comp or not)
-					slicedData = Transforms.lin2logicle(slicedData);
-% 					disp('Data tranformed to log')
+					doMEF = false;
 				else
 					% MEF or MEFL transformed data (comp or not)
-					slicedData = Transforms.lin2logicleMEF(slicedData);
-% 					disp('Data transformed to logMEF')
+					doMEF = true;
 				end
 				
+				slicedData = Transforms.lin2logicle(slicedData, doMEF, self.logicleParams);
 				self.bins{i} = FlowAnalysis.simpleBin(slicedData, binEdges);
 				
 			end
 			
-			binStats = self.computeBinStats(binDataType, binGate);
-			
+			self.numBins = numel(self.bins{1});
+			self.binSizes = size(self.bins{1});
 			self.binInputs = binInputs;
 			self.binDataType = binDataType;
-			self.binGate = binGate;
 			self.binned = true;
-			self.binStats = binStats;
 			fprintf(1, 'Finished binning\n')
 			
 			
@@ -747,80 +868,86 @@ classdef FlowData < handle
 				validateattributes(binDataType, {'char'}, {}, mfilename, 'binDataType', 2);
 				assert(any(strcmp(binDataType, self.dataTypes)), ...
 						'Bin data type does not match any existing data types: %s\n', binDataType);
-
-				validateattributes(binGate, {'char'}, {}, mfilename, 'binGate', 3);
-				assert(any(strcmp(binGate, self.gateNames)), ...
-						'Gate does not exist in data: %s\n', binGate);
+				
 			end
 		end
 		
 		
-		function binStats = computeBinStats(self, dataType, gate)
-			% Computes bin statistics based on the given bin dataType and bin gate. 
+		function binStats = computeBinStats(self, sampleIDs, sliceParams, metrics)
+			% Computes the given bin statistic metrics on the combined data 
+			% from the given sampleIDs.
 			%
 			%	Inputs
-			%		dataType	<char> Data type to compute stats with
-			%		gate		<char> Gate to cross with the bins
+			%		sampleIDs		<integer> The sample(s) as given by the numerical 
+			%						sample ID(s) to combine and compute bin stats with.
 			%
-			%	Outputs
-			%		binStats	<struct> A nested struct where each element corresponds
-			%					with a sample and has the following heirarchy: 
-			%						binStats --> channel --> statistic --> calculation
-			%						Statistics:
+			%		sliceParams		<struct> Optional, struct with optional fields:
+			%						'channels': <cell, char>, defaults to self.channels
+			%						'dataType': <char>, defaults to self.binDataType
+			%						'gate':		<char>, defaults to no gate
+			%						'equalize': <logical>, TRUE returns an equal
+			%									number of points from each sample
+			%									(default = FALSE), operation
+			%									performed before applying bins
+			%						'bins':		<numeric> defaults to all cells
+			%									An Nx1 set of numerical bin IDs or an 
+			%									NxD set of bin coordinates where D = #
+			%									of bin channels. 
+			%									Automatically forces 'dataType' to be 
+			%									'self.binDataType' regardless of whether 
+			%									they are given or not
+			%									<Can input 'all' to select all bins>
+			%
+			%		metrics			<char, cell> (Optional) A list of metrics to compute
+			%						Valid metrics:
 			%							numCells, 10th, 50th (median), 90th %iles, 
 			%							mean, geomean, stdev, geostdev, sem, semb*
-			%							 * semb = bootstrapped SEM, currently
-			%							   <not done because it is too slow>
+			%							 * semb = bootstrapped SEM
+			%							 -> If no metrics input given, then all
+			%								metrics except 'semb' are computed
+			%
+			%	Outputs
+			%		binStats	<struct> A struct where each field is the name of 
+			%					a statistical metric and the value is a BxC
+			%					matrix of the metric values in B bins across C
+			%					channels (channels given in sliceParams). 
 			
 			checkInputs_computeBinStats(self);
 			
-			statTypes = {'p10', 'p50', 'p90', 'mean', 'geomean', 'stdev', 'geostdev', 'sem'};
+			% Set up binStats struct
+			sliceBins = sliceParams.bins;
+			for m = metrics
+				binStats.(m{:}) = zeros(size(sliceBins, 1), numel(sliceParams.channels));
+			end
+			binStats.numCells = zeros(size(sliceBins, 1), 1);
 			
-			for i = 1:self.numSamples
+			% Iterate over bins, compute stats for each one independently
+			for b = 1:size(sliceBins, 1)
 				
-				cellsIdx = 1:self.numCells(i);
-				passGate = cellsIdx(self.sampleData(i).gates.(gate));
-				binStats(i).numCells = zeros(size(self.bins{i}));
+				% Slice out data to compute stats with
+				sliceParams.bins = sliceBins(b, :);
+				slicedData = self.slice(sampleIDs, sliceParams);
+				binStats.numCells(b) = size(slicedData, 1);
 				
-				% Setup stats vectors
-				for ch = 1:numel(self.channels)
+				for ch = 1:numel(sliceParams.channels)
 					
-					channel = self.channels{ch};
+					% Extract channel data
+					dataInBin = slicedData(:, ch);
+					dataInBin = dataInBin(~isnan(dataInBin));
+					posData = (dataInBin > 0);
 					
-					% Set up binStats struct
-					for st = statTypes
-						binStats(i).(channel).(st{:}) = zeros(size(self.bins{i}));
-					end
-				end
-				
-				for b = 1:numel(self.bins{i})
-					
-					% Extract data
-					inBin = intersect(self.bins{i}{b}, passGate);
-					binStats(i).numCells(b) = numel(inBin);
-					
-					for ch = 1:numel(self.channels)
-					
-						channel = self.channels{ch};
-						
-						% Get data
-						dataInBin = self.sampleData(i).(channel).(dataType)(inBin);
-						dataInBin = dataInBin(~isnan(dataInBin));
-						posData = (dataInBin > 0);
-						
-						% Calculate
-						prctiles = prctile(dataInBin, [10, 50, 90]);
-						binStats(i).(channel).p10(b) = prctiles(1);
-						binStats(i).(channel).p50(b) = prctiles(2);
-						binStats(i).(channel).p90(b) = prctiles(3);
-						binStats(i).(channel).mean(b) = mean(dataInBin);
-						binStats(i).(channel).geomean(b) = geomean(dataInBin(posData));
-						binStats(i).(channel).stdev(b) = std(dataInBin);
-						binStats(i).(channel).geostdev(b) = geostd(dataInBin(posData));
-						binStats(i).(channel).sem(b) = std(dataInBin) / sqrt(numel(dataInBin));
-% 						binStats(i).(channel).semb(b) = semBootstrap(dataInBin); % SUUUUPER SLOW
-% 						binStats(i).(channel).CI95 = ci95(dataInBin);
-					end
+					% Calculate requested metrics
+					prctiles = prctile(dataInBin, [10, 50, 90]);
+					if ismember('p10', metrics), binStats.p10(b, ch) = prctiles(1); end
+					if ismember('p50', metrics), binStats.p50(b, ch) = prctiles(2); end
+					if ismember('p90', metrics), binStats.p90(b, ch) = prctiles(3); end
+					if ismember('mean', metrics), binStats.mean(b, ch) = mean(dataInBin); end
+					if ismember('geomean', metrics), binStats.geomean(b, ch) = geomean(dataInBin(posData)); end
+					if ismember('stdev', metrics), binStats.stdev(b, ch) = std(dataInBin); end
+					if ismember('geostdev', metrics), binStats.geostdev(b, ch) = geostd(dataInBin(posData)); end
+					if ismember('sem', metrics), binStats.sem(b, ch) = std(dataInBin) / sqrt(numel(dataInBin)); end
+					if ismember('semb', metrics), binStats.semb(b, ch) = semBootstrap(dataInBin); end % NOTE: SUPER SLOW
+% 					if ismember('ci95', metrics), binStats.CI95(b, ch) = ci95(dataInBin); end
 				end
 			end
 			
@@ -830,19 +957,39 @@ classdef FlowData < handle
 			
 			function checkInputs_computeBinStats(self)
 				
-				validateattributes(dataType, {'char'}, {}, mfilename, 'binDataType', 1);
-				assert(any(strcmp(dataType, self.dataTypes)), ...
-						'Bin data type does not match any existing data types: %s\n', dataType);
-
-				validateattributes(gate, {'char'}, {}, mfilename, 'binGate', 2);
-				assert(any(strcmp(gate, self.gateNames)), ...
-						'Gate does not exist in data: %s\n', gate);
+				validateattributes(sampleIDs, {'numeric'}, {'positive'}, mfilename, 'sampleIDs', 1);
+				sampleIDs = unique(ceil(sampleIDs));
+				assert(max(sampleIDs) <= self.numSamples, 'Sample ID(s) too large!')
 				
+				% Only need to check sliceParams for fields that are used by
+				% this function, so we let slice() itself check the rest.
+				validateattributes(sliceParams, {'struct'}, {}, mfilename, 'sliceParams', 2);
+				if (isfield(sliceParams, 'channels') && ischar(sliceParams.channels))
+					sliceParams.channels = {sliceParams.channels}; % For simplicity
+				end
+				if (isfield(sliceParams, 'bins') && ischar(sliceParams.bins))
+					if strcmpi(sliceParams.bins, 'all')
+						sliceParams.bins = (1:self.numBins)';
+					else
+						error('Bin char input not recognized: %s', sliceParams.bins)
+					end
+				end
+				
+				validMetrics = {'p10', 'p50', 'p90', 'mean', 'geomean', 'stdev', 'geostdev', 'sem', 'semb'};
+				if exist('metrics', 'var')
+					validateattributes(metrics, {'cell', 'char'}, {}, mfilename, 'metrics', 3);
+					if ischar(metrics), metrics = {metrics}; end % For simplicity
+					metrics = reshape(metrics, 1, []); % Force row vector
+					badMetrics = setdiff(metrics, validMetrics);
+					assert(isempty(badMetrics), 'Metric not recognized: %s\n', badMetrics{:});
+				else
+					metrics = validMetrics(1:end-1);
+				end
 			end
 		end
 		
 		
-		function values = getValues(self, varargin)
+		function values = getValues(self, varargin) %% TODO ADD ABILITY TO SUB FIRST
 			% Returns unique values for each given experimental parameter.
 			%
 			%	values = self.getValues(paramters)
@@ -976,13 +1123,18 @@ classdef FlowData < handle
 			%						'channels': <cell, char>, defaults to self.channels
 			%						'dataType': <char>, defaults to 'raw'
 			%						'gate':		<char>, defaults to no gate
+			%						'equalize': <logical>, TRUE returns an equal
+			%									number of points from each sample
+			%									(default = FALSE), operation
+			%									performed before applying bins
 			%						'bins':		<numeric> defaults to all cells
 			%									An Nx1 set of numerical bin IDs or an 
 			%									NxD set of bin coordinates where D = #
 			%									of bin channels. 
-			%									Automatically forces 'gate' and 'dataType' 
-			%									to be 'self.binGate' and 'self.binDataType'
-			%									regardless of whether they are given or not
+			%									Automatically forces 'dataType' to be 
+			%									'self.binDataType' regardless of whether 
+			%									they are given or not
+			%									<Can input 'all' to select all bins>
 			%
 			%	Ouputs
 			%		dataMatrix		<double> N x M matrix of data from the given
@@ -996,8 +1148,10 @@ classdef FlowData < handle
 			% Slice out data
 			dataMatrix = [];
 			for s = 1:numel(sampleIDs)
+				
+				% Extract data
 				sID = sampleIDs(s);
-				dataS = zeros(sum(sliceGates{s}), numel(sliceChannels));
+				dataS = zeros(numel(sliceGates{s}), numel(sliceChannels));
 				for ch = 1:numel(sliceChannels)
 					dataS(:, ch) = self.sampleData(sID).(sliceChannels{ch}).(sliceDataType)(sliceGates{s});
 				end
@@ -1017,7 +1171,7 @@ classdef FlowData < handle
 				sampleIDs = unique(round(sampleIDs)); 
 				assert(all(sampleIDs <= numel(self.sampleData)), ...
 					'At least one sampleID is too large!')
-				
+								
 				% Check and update slice parameters as needed
 				if exist('sliceParams', 'var')
 					validateattributes(sliceParams, {'struct'}, {}, mfilename, 'sliceParams', 2);
@@ -1025,7 +1179,8 @@ classdef FlowData < handle
 					sliceParams = struct();
 				end
 				
-				if ismember('channels', fieldnames(sliceParams))
+				% Slices data from the given channels
+				if isfield(sliceParams, 'channels')
 					sliceChannels = sliceParams.channels;
 					if ischar(sliceChannels), sliceChannels = {sliceChannels}; end % Force cell
 					sliceChannels = reshape(sliceChannels, 1, []); % Force row vector
@@ -1036,34 +1191,55 @@ classdef FlowData < handle
 					sliceChannels = self.channels; % Default is all channels
 				end
 				
-				if ismember('dataType', fieldnames(sliceParams))
+				% Slices data of the given dataType
+				if isfield(sliceParams, 'dataType')
 					validatestring(sliceParams.dataType, self.dataTypes, mfilename, 'sliceParams.dataType');
 					sliceDataType = sliceParams.dataType;
 				else
 					sliceDataType = 'raw'; % Default is raw data
 				end
 				
-				if ismember('gate', fieldnames(sliceParams))
+				% Applies the given gate to the sliced data
+				if isfield(sliceParams, 'gate')
 					validatestring(sliceParams.gate, self.gateNames, mfilename, 'sliceParams.gate');
 					sliceGates = cell(1, numel(sampleIDs));
 					for id = 1:numel(sampleIDs)
 						sampleID = sampleIDs(id);
-						sliceGates{id} = self.sampleData(sampleID).gates.(sliceParams.gate);
+% 						sliceGates{id} = self.sampleData(sampleID).gates.(sliceParams.gate);
+						sliceGates{id} = find(self.sampleData(sampleID).gates.(sliceParams.gate));
 					end
 				else
 					for id = 1:numel(sampleIDs)
 						sampleID = sampleIDs(id);
-						sliceGates{id} = true(self.numCells(sampleID), 1); % Default is all cells
+% 						sliceGates{id} = true(self, numCells(sampleID), 1);
+						sliceGates{id} = (1:self.numCells(sampleID))'; % Default is all cells
 					end
 				end
 				
-				if (ismember('bins', fieldnames(sliceParams)) && ~isempty(self.bins))
-					validateattributes(sliceParams.bins, {'numeric'}, {}, mfilename, 'sliceParams.bins');
+				% Slice the same number of points from each sample
+				if isfield(sliceParams, 'equalize')
+					numPoints = min(cellfun(@numel, sliceGates));
+					for id = 1:numel(sampleIDs)
+						ss = FlowAnalysis.subSample(numel(sliceGates{id}), numPoints);
+						sliceGates{id} = sliceGates{id}(ss);
+					end
+				end
+				
+				% Slices from the given bins
+				if (isfield(sliceParams, 'bins') && ~isempty(self.bins))
+					validateattributes(sliceParams.bins, {'numeric', 'char'}, {}, mfilename, 'sliceParams.bins');
+					if ischar(sliceParams.bins)
+						if strcmpi(sliceParams.bins, 'all')
+							sliceParams.bins = (1:self.numBins)';
+						else
+							error('Bin char input not recognized: %s', sliceParams.bins)
+						end
+					end
 					assert(size(sliceParams.bins, 2) == 1 || ...
 						   size(sliceParams.bins, 2) == numel(fieldnames(self.binInputs)), ...
-						   'Bin IDs formatted incorrectly!\n')
-					assert(size(sliceParams.bins, 1) <= numel(self.bins{sampleID}), ...
-						   'Too many bins requested!\n')
+						   'Bin IDs formatted incorrectly!')
+					assert(size(sliceParams.bins, 1) <= self.numBins, ...
+						   'Too many bins requested!')
 					
 					% Convert bin indexes to linear 
 					if (size(sliceParams.bins, 2) == 1)
@@ -1089,9 +1265,10 @@ classdef FlowData < handle
 							cellsInBins = [cellsInBins, self.bins{sampleID}{b}];
 						end
 						
-						inBin = false(size(sliceGates{id}));  % Make 'gate' for cells in bins
-						inBin(cellsInBins) = true;		 % Fill out logical index array
-						sliceGates{id} = (sliceGates{id} & inBin); % Combine w/ sliceGate for simplicity
+% 						inBin = false(size(sliceGates{id}));  % Make 'gate' for cells in bins
+% 						inBin(cellsInBins) = true;		 % Fill out logical index array
+% 						sliceGates{id} = (sliceGates{id} & inBin); % Combine w/ sliceGate for simplicity
+						sliceGates{id} = intersect(sliceGates{id}, cellsInBins);
 					end
 				end
 			end
@@ -1128,8 +1305,16 @@ classdef FlowData < handle
 			
 			checkInputs_threshGate(self);
 			
+			% Setup new directory for gates
+			gateDir = [self.folder, 'Gating', filesep];
+			if ~exist(gateDir, 'file')
+				mkdir(gateDir)
+			end
+			gatesSaveName = [self.date, '_', self.name, '_Thresh_'];
+						
 			thrGateNames = cell(1, numel(channels));
 			for ch = 1:numel(channels)
+				
 				chan = channels{ch};
 				
 				if (ischar(thresh) && strcmpi(thresh, 'auto'))
@@ -1146,22 +1331,24 @@ classdef FlowData < handle
 						combData = [combData; self.sampleData(i).(chan).raw(1:self.numSamples:end)];
 					end
 					
-					figure();
+					figThresh = figure();
 					ax = gca(); hold(ax, 'on')
-					histogram(ax, Transforms.lin2logicle(combData))
+					histogram(ax, Transforms.lin2logicle(combData, false, self.logicleParams))
 					title('Draw a line to set an x-axis threshold', 'fontsize', 16)
 					ylabel('Count', 'fontsize', 14)
 					xlabel(strrep(chan, '_', '-'), 'fontsize', 14)
-					Plotting.biexpAxes(ax, true, false);
+					Plotting.biexpAxes(ax, true, false, false, false, self.logicleParams);
 					
 					h = imline();
 					position = wait(h);
+					
+					saveas(figThresh, [gateDir, gatesSaveName, chan, '.fig']);
 					
 					% Fit the points to get a line, then use that to find the
 					% x-intercept (threshold value)
 					fit = polyfit(position(:, 1), position(:, 2), 1);
 % 					plot(ax, (0:0.5:4.5), fit(1) * (0:0.5:4.5) + fit(2), 'r-');
-					threshVal = Transforms.logicle2lin(-fit(2) / fit(1));
+					threshVal = Transforms.logicle2lin(-fit(2) / fit(1), false, self.logicleParams);
 				end
 				
 				% Find cells passing threshold and record gate
@@ -1328,6 +1515,67 @@ classdef FlowData < handle
 				disp(gatePcts)
 			end
 		end
+		
+		
+		function editSampleMap(self, newSampleMap)
+			% Allows the user to change the sample map by passing a new one to
+			% the object. This method ensures that the sample map is valid.
+			%
+			%	Inputs
+			%		newSampleMap		<Table> A new sample map for the data
+			
+			validateattributes(newSampleMap, {'table', 'cell', 'char'}, {}, mfilename, 'newSampleMap', 1);
+			
+			% Handle non-table inputs
+			if ischar(newSampleMap)
+				if ~strfind(newSampleMap, filesep)
+					newSampleMap = [self.folder, newSampleMap];
+				end
+				assert(logical(exist(newSampleMap, 'file')), 'New Sample Map file not found!');
+				newSampleMap = readtable(newSampleMap, 'delimiter', '\t');
+			elseif iscell(newSampleMap)
+				assert(self.sampleMap.width == size(newSampleMap, 2), ...
+					'New Sample Map has incorrect number of variables (%d) compared to the data (%d)', ...
+					size(newSampleMap, 2), self.sampleMap.width)
+				varNames = self.sampleMap.Properties.VariableNames;
+				newSampleMap = cell2table(newSampleMap);
+				newSampleMap.Properties.VariableNames = varNames;
+			end
+			
+			% Check table size
+			assert(height(newSampleMap) == self.numSamples, ...
+				'New Sample Map has incorrect number of samples (%d) compared to the data (%d)', ...
+				height(newSampleMap), self.numSamples);
+			
+			% Re-assign variable
+			self.sampleMap = newSampleMap;
+			
+			fprintf(1, 'Finished adding new sample map\n');
+		end
+		
+		
+		function editlogicleParams(self, newParams)
+			% Allows the user to change the logicle conversion parameters used
+			% by the object by passing a new set of parameters. This method
+			% ensures that the new parameters are valid.
+			
+			validateattributs(newParams, {'struct'}, {}, mfilename, 'newParams', 1);
+			
+			% Look for any missing fields - keep existing parameters for those
+			% that are not given
+			if ~isfield(newParams, 'T'), newParams.T = self.logicleParams.T; end
+			if ~isfield(newParams, 'M'), newParams.M = self.logicleParams.M; end
+			if ~isfield(newParams, 'r'), newParams.r = self.logicleParams.r; end
+			if ~isfield(newParams, 'MEF'), newParams.MEF = self.logicleParams.MEF; end
+			
+			% Check the values are valid
+			validateattributes(newParam.T, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.T');
+			validateattributes(newParam.M, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.M');
+			validateattributes(newParam.r, {'numeric'}, {'scalar', 'negative'}, mfilename, 'newParams.r');
+			validateattributes(newParam.MEF, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.MEF');
+			
+			self.logicleParams = newParams;
+		end
 	end
 	
 	
@@ -1340,8 +1588,8 @@ classdef FlowData < handle
 % 			
 % 			fprintf(1, 'Property changed: %s\n', src.Name);
 % 			switch src.Name
-% 				case {'binInputs', 'binDataType', 'binGate'}
-% 					self.bin(self.binInputs, self.binDataType, self.binGate)
+% 				case {'binInputs', 'binDataType'}
+% 					self.bin(self.binInputs, self.binDataType)
 % 				
 % 				case {'test'}
 % 					fprintf(1, 'Test set to: %s\n', event.AffectedObject.test);
@@ -1386,6 +1634,27 @@ classdef FlowData < handle
 			end
 			
 			if ~isempty(added), fprintf(1, 'Added gate: %s\n', added{:}); end
+		end
+		
+		
+		function filenames = convertToFullFile(~, filenames, folder)
+			% Checks if a file is a full path and adds the path using the given
+			% folder if not.
+			%
+			%	filenames: string or cell array of strings, folder: string
+			
+			% Convert to cell array for simplicity
+			wasStr = false;
+			if ~iscell(filenames), filenames = {filenames}; wasStr = true; end
+			
+			for fn = 1:numel(filenames)
+				if ~strfind(filenames{fn}, filesep)
+					filenames{fn} = [folder, filenames{fn}];
+				end
+			end
+			
+			% Convert back to string if that was provided
+			if wasStr, filenames = filenames{1}; end
 		end
 	end
 end
