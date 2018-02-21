@@ -160,7 +160,7 @@ classdef Compensation < handle
             %   2015-11-17
             
             % Check the inputs
-            checkInputs_compensateBatchSC();
+            zCheckInputs_compensateBatchSC();
                         
             % Allocate output structure
             fields = fieldnames(inputData);
@@ -199,7 +199,7 @@ classdef Compensation < handle
             % --- Helper functions --- %
             
             
-            function checkInputs_compensateBatchSC()
+            function zCheckInputs_compensateBatchSC()
                 
                 % Check types
                 validateattributes(jcData, {'struct'}, {}, mfilename, 'jcData', 1);
@@ -401,7 +401,7 @@ classdef Compensation < handle
 			% AF Sub effect:	  - [12,  6, 0,   3] = -3 * AF
             
             % Check the inputs - makes no changes to data structures
-            checkInputs_compensateMatrixBatch();
+            zCheckInputs_compensateMatrixBatch();
 			fitFigs = struct();
 			
             % Find medians for each channel in jcData
@@ -448,7 +448,7 @@ classdef Compensation < handle
             % --- Helper functions --- %
             
             
-            function checkInputs_compensateMatrixBatch()
+            function zCheckInputs_compensateMatrixBatch()
                 
                 % Check types
                 validateattributes(sampleData, {'struct'}, {}, mfilename, 'inputData', 1);
@@ -852,7 +852,7 @@ classdef Compensation < handle
             % ...
             
             % Check inputs are valid
-            checkInputs_compensateMatrix();
+            zCheckInputs_compensateMatrix();
             
             % Compensate data
 			coefficients = coefficients .* (1 * ones(size(coefficients)) - 0 * eye(size(coefficients)));
@@ -862,7 +862,7 @@ classdef Compensation < handle
             % --- Helper functions --- %
             
             
-            function checkInputs_compensateMatrix()
+            function zCheckInputs_compensateMatrix()
                 
                 % Check types
                 validateattributes(inputData, {'numeric'}, {}, mfilename, 'inputData', 1);

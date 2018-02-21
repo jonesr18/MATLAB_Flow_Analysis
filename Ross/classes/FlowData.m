@@ -166,7 +166,7 @@ classdef FlowData < handle
 			% When loading, we need to make a blank version of the object
 			if strcmpi(dataFnames, 'load'), return, end
 			
-			[dataStruct, sampleMapFname] = checkInputs(self);
+			[dataStruct, sampleMapFname] = zCheckInputs(self);
 			
 			% Extract experiment details
 			self.date = exptDetails.date;
@@ -239,7 +239,7 @@ classdef FlowData < handle
 			% -- Helper functions -- %
 			
 			
-			function [dataStruct, sampleMapFname] = checkInputs(self)
+			function [dataStruct, sampleMapFname] = zCheckInputs(self)
 				validateattributes(dataFnames, {'cell', 'char'}, {}, mfilename, 'dataFilenames', 1);
 				validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 2);
 				validateattributes(exptDetails, {'struct'}, {}, mfilename, 'exptDetails', 3);
@@ -300,7 +300,7 @@ classdef FlowData < handle
 			%							file (since all other colors are converted to MEFL 
 			%							units using the FITC channel).
 			
-			[wildTypeData, singleColorData, twoColorData] = checkInputs_addControls(self);
+			[wildTypeData, singleColorData, twoColorData] = zCheckInputs_addControls(self);
 			FITC_IDX = find(strcmpi('FITC_A', self.channels));
 			self.controlsFolder = controlsFolder;
 			
@@ -319,7 +319,7 @@ classdef FlowData < handle
 			% --- Helper Functions --- %
 			
 			
-			function [wildTypeData, singleColorData, twoColorData] = checkInputs_addControls(self)
+			function [wildTypeData, singleColorData, twoColorData] = zCheckInputs_addControls(self)
 				
 				validateattributes(controlsFolder, {'char'}, {}, mfilename, 'controlsFolder', 1);
 				assert(logical(exist(controlsFolder, 'file')), 'Controls folder does not exist!');
@@ -512,7 +512,7 @@ classdef FlowData < handle
 			assert(self.controlsAdded, 'Controls must be added before converting to MEF units!\n');
 			
 			% Check inputs
-			checkInputs_convertToMEF();
+			zCheckInputs_convertToMEF();
 			
 			% Setup new directory for fitting files/figs
 			beadDirControls = [self.controlsFolder, 'Calibration', filesep];
@@ -600,7 +600,7 @@ classdef FlowData < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_convertToMEF()
+			function zCheckInputs_convertToMEF()
 				
 				validateattributes(beadsControls, {'struct'}, {}, mfilename, 'beadsFilename', 1);
 				validateattributes(beadsSamples, {'struct'}, {}, mfilename, 'beadsFilename', 2);
@@ -810,7 +810,7 @@ classdef FlowData < handle
 			%		inside of it, making all operations _after_ binning much 
 			%		faster, overall improving the speed of analysis. 
 			
-			[binChannels, binEdges] = checkInputs_bin(self);
+			[binChannels, binEdges] = zCheckInputs_bin(self);
 			
 			for i = 1:self.numSamples
 								
@@ -846,7 +846,7 @@ classdef FlowData < handle
 			% --- Helper Functions --- %
 			
 			
-			function [binChannels, binEdges] = checkInputs_bin(self)
+			function [binChannels, binEdges] = zCheckInputs_bin(self)
 				% Validates that the given bin properties are ok, then sets the
 				% object's properties themselves if all are ok.
 
@@ -912,7 +912,7 @@ classdef FlowData < handle
 			%					matrix of the metric values in B bins across C
 			%					channels (channels given in sliceParams). 
 			
-			checkInputs_computeBinStats(self);
+			zCheckInputs_computeBinStats(self);
 			
 			% Set up binStats struct
 			sliceBins = sliceParams.bins;
@@ -955,7 +955,7 @@ classdef FlowData < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_computeBinStats(self)
+			function zCheckInputs_computeBinStats(self)
 				
 				validateattributes(sampleIDs, {'numeric'}, {'positive'}, mfilename, 'sampleIDs', 1);
 				sampleIDs = unique(ceil(sampleIDs));
@@ -1143,7 +1143,7 @@ classdef FlowData < handle
 			%						channels requested. 
 			
 			% Check and extract inputs
-			[sliceChannels, sliceDataType, sliceGates] = checkInputs_slice(self);
+			[sliceChannels, sliceDataType, sliceGates] = zCheckInputs_slice(self);
 			
 			% Slice out data
 			dataMatrix = [];
@@ -1162,7 +1162,7 @@ classdef FlowData < handle
 			 % --- Helper Functions --- %
 			
 			
-			function [sliceChannels, sliceDataType, sliceGates] = checkInputs_slice(self)
+			function [sliceChannels, sliceDataType, sliceGates] = zCheckInputs_slice(self)
 				% Validates slice properteis and that the sampleID is valid
 				
 				% Ensure sampleID is a valid integer
@@ -1303,7 +1303,7 @@ classdef FlowData < handle
 			%					channel, or individual numbers for each channel 
 			%					can be given. 
 			
-			checkInputs_threshGate(self);
+			zCheckInputs_threshGate(self);
 			
 			% Setup new directory for gates
 			gateDir = [self.folder, 'Gating', filesep];
@@ -1378,7 +1378,7 @@ classdef FlowData < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_threshGate(self)
+			function zCheckInputs_threshGate(self)
 				validateattributes(channels, {'char', 'cell'}, {}, mfilename, 'gates', 1);
 				if ischar(channels), channels = {channels}; end % For simplicity
 				badChannels = setdiff(channels, self.channels);

@@ -61,7 +61,7 @@ classdef Plotting < handle
 			% Weiss Lab, MIT
 			
 			% Check inputs
-			dataValid = checkInputs_computeDensity();
+			dataValid = zCheckInputs_computeDensity();
             numDims = size(dataMatrix, 2);
 			
 			% Check mode of point coloration
@@ -177,7 +177,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function dataValid = checkInputs_computeDensity()
+			function dataValid = zCheckInputs_computeDensity()
 				
 				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'data', 1);
 				validatestring(mode, {'neighbors', 'fastn', 'kernel', 'hist'}, mfilename, 'mode', 2);
@@ -291,7 +291,7 @@ classdef Plotting < handle
 			% Weiss Lab, MIT
 			
 			% Check inputs
-			[inputSize, MIN, MAX, nanInfo, imagInfo] = checkInputs_getColors();
+			[inputSize, MIN, MAX, nanInfo, imagInfo] = zCheckInputs_getColors();
 			numColors = size(cmap, 1);
 			
 			% Convert values to color
@@ -336,7 +336,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function [inputSize, MIN, MAX, nanInfo, imagInfo] = checkInputs_getColors()
+			function [inputSize, MIN, MAX, nanInfo, imagInfo] = zCheckInputs_getColors()
 				
 				validateattributes(inputData, {'numeric'}, {}, mfilename, 'inputData', 1);
 				inputSize = size(inputData);
@@ -484,7 +484,7 @@ classdef Plotting < handle
             %                          calculation function
             
             % Check inputs
-            checkInputs_densityplot();
+            zCheckInputs_densityplot();
 			
 			% Determine if density-based or directly-supplied coloration
 			if ischar(mode)
@@ -500,7 +500,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_densityplot()
+			function zCheckInputs_densityplot()
 				assert(all(size(xdata) == size(ydata)), 'xdata and ydata are different sizes!')
 				validateattributes(xdata, {'numeric'}, {'vector'}, mfilename, 'xdata', 2);
 				validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'ydata', 3);
@@ -573,7 +573,7 @@ classdef Plotting < handle
 			%	2018-01-28 Switched to using separate density computing function
 
 			% Check inputs
-			checkInputs_violinplot(); 
+			zCheckInputs_violinplot(); 
 			xcenter = round(xcenter(1)); % Ensure integer and only one point
 
 			% Fix negative infinite values by setting the resulting values to the 
@@ -602,7 +602,7 @@ classdef Plotting < handle
 			% --- Helper Function --- %
 
 
-			function checkInputs_violinplot()
+			function zCheckInputs_violinplot()
 
 				validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'data', 2);
 				ydata = reshape(ydata, [], 1); % Force column vector
@@ -715,7 +715,7 @@ classdef Plotting < handle
 			% Weiss Lab, MIT
             			
             % Check inputs
-			checkInputs_biexpAxes();
+			zCheckInputs_biexpAxes();
 			
             % Set axes limits
 			if doMEF
@@ -799,7 +799,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_biexpAxes()
+			function zCheckInputs_biexpAxes()
 
 				% Ensure boolean inputs
 				if exist('biexpX', 'var')
@@ -859,7 +859,7 @@ classdef Plotting < handle
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
 			
-			checkInputs_biexpColorbar()
+			zCheckInputs_biexpColorbar()
 			
 			cbar = colorbar('peer', ax, 'EastOutside');
 			
@@ -907,7 +907,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_biexpColorbar()
+			function zCheckInputs_biexpColorbar()
 				
 				if exist('doMEF', 'var')
 					doMEF = all(logical(doMEF));
@@ -1008,7 +1008,7 @@ classdef Plotting < handle
             end
             
             % Check inputs
-            checkInputs_histFit(data, channel, dataType);
+            zCheckInputs_histFit(data, channel, dataType);
             
             % Find data sizes
             [H, W, D] = size(data);
@@ -1063,7 +1063,7 @@ classdef Plotting < handle
             % --- Helper Function --- %
             
             
-            function checkInputs_histFit(data, channel, dataType)
+            function zCheckInputs_histFit(data, channel, dataType)
                 % Checks the inputs to make sure they are valid
                 validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
                 validatestring(channel, fieldnames(data(1)), mfilename, 'channel', 2);
@@ -1099,7 +1099,7 @@ classdef Plotting < handle
             % Update log:
             
             % Check inputs
-            checkInputs_scatterBarPlot(data, channel, dataType);
+            zCheckInputs_scatterBarPlot(data, channel, dataType);
             
             % Ensure axis is held on
             hold(ax, 'on');
@@ -1149,7 +1149,7 @@ classdef Plotting < handle
             % --- Helper Function --- %
             
             
-            function checkInputs_scatterBarPlot(data, channel, dataType)
+            function zCheckInputs_scatterBarPlot(data, channel, dataType)
                 % Checks the inputs to make sure they are valid
                 validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
                 validatestring(channel, fieldnames(data(1)), mfilename, 'channel', 2);
@@ -1184,7 +1184,7 @@ classdef Plotting < handle
             % Update log:
             
             % Check inputs
-            checkInputs_batchBoxPlot(data, channel, dataType);
+            zCheckInputs_batchBoxPlot(data, channel, dataType);
             
             % Check number of points to use for plotting, default to 6,000 if no number given
             if exist('numPoints', 'var')
@@ -1252,7 +1252,7 @@ classdef Plotting < handle
             % --- Helper Function --- %
             
             
-            function checkInputs_batchBoxPlot(data, channel, dataType)
+            function zCheckInputs_batchBoxPlot(data, channel, dataType)
                 % Checks the inputs to make sure they are valid
                 validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
                 validatestring(channel, fieldnames(data(1)), mfilename, 'channel', 2);
@@ -1285,7 +1285,7 @@ classdef Plotting < handle
             % Update log:
             
             % Check inputs
-            checkInputs_batchViolinPlot(data, channel, dataType);
+            zCheckInputs_batchViolinPlot(data, channel, dataType);
             
             % Ensure axis is held on
             hold(ax, 'on');
@@ -1325,7 +1325,7 @@ classdef Plotting < handle
             % --- Helper Function --- %
             
             
-            function checkInputs_batchViolinPlot(data, channel, dataType)
+            function zCheckInputs_batchViolinPlot(data, channel, dataType)
                 % Checks the inputs to make sure they are valid
                 validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
                 validatestring(channel, fieldnames(data(1)), mfilename, 'channel', 2);
@@ -1369,7 +1369,7 @@ classdef Plotting < handle
             % Update log:
             
             % Check inputs
-            [data, channel, dataType] = checkInputs_lineDensityPlot(inputs);
+            [data, channel, dataType] = zCheckInputs_lineDensityPlot(inputs);
             
             % Ensure axis is held on
             if isfield(inputs, 'ax')
@@ -1458,7 +1458,7 @@ classdef Plotting < handle
             % --- Helper Function --- %
             
             
-            function [data, channel, dataType] = checkInputs_lineDensityPlot(inputs)
+            function [data, channel, dataType] = zCheckInputs_lineDensityPlot(inputs)
                 
                 % Ensure necessary inputs are present
                 reqFields = {'data', 'channel', 'dataType'};
@@ -1501,7 +1501,7 @@ classdef Plotting < handle
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
 			
-			checkInputs_singleLineDensity();
+			zCheckInputs_singleLineDensity();
 			
 			% Fix negative infinite values by setting the resulting values to the 
 			% otherwise minimum value.
@@ -1548,7 +1548,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_singleLineDensity()
+			function zCheckInputs_singleLineDensity()
 				
 				validateattributes(ax, {'matlab.graphics.axis.Axes'}, {}, mfilename, 'ax', 1);
 				validateattributes(xdata, {'numeric'}, {'vector'}, mfilename, 'xdata', 2);
@@ -1784,7 +1784,7 @@ classdef Plotting < handle
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
 			
-			checkInputs_binHeatmap();
+			zCheckInputs_binHeatmap();
 			
 			figBinHmap = figure();
 			
@@ -1911,7 +1911,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_binHeatmap()
+			function zCheckInputs_binHeatmap()
 				
 				% Check data + dimensions
 				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'data', 1);

@@ -212,7 +212,7 @@ classdef FlowAnalysis < handle
 			%
             
             % Check inputs
-            inputChannels = checkInputs_bin();
+            inputChannels = zCheckInputs_bin();
 			channels = [inputChannels, outputs];
 			
 			% Find binning dimensions
@@ -280,7 +280,7 @@ classdef FlowAnalysis < handle
             % --- Helper Functions --- %
             
 			
-            function [inputChannels] = checkInputs_bin()
+            function [inputChannels] = zCheckInputs_bin()
                 
 				validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
 				validateattributes(inputs, {'struct'}, {}, mfilename, 'inputs', 2);
@@ -826,7 +826,7 @@ classdef FlowAnalysis < handle
             %   2016-12-06: Added thresholding by average percentage above threshold (threshPct)
             
             % Check inputs
-            [data, channels, dataType] = checkInputs_calcStats(inputs);
+            [data, channels, dataType] = zCheckInputs_calcStats(inputs);
             dataType = dataType{:}; % Not implemented multiple yet
             
             [H, W, D] = size(data);
@@ -978,7 +978,7 @@ classdef FlowAnalysis < handle
             % --- Helper Function --- %
             
             
-            function [data, channels, dataType] = checkInputs_calcStats(inputs)
+            function [data, channels, dataType] = zCheckInputs_calcStats(inputs)
                 
                 % Ensure necessary inputs are present
                 reqFields = {'data', 'channels', 'dataType'};
@@ -1092,7 +1092,7 @@ classdef FlowAnalysis < handle
             end
             
             % Check inputs
-            checkInputs_mixtureModel(data, channels, dataType, numPop, par);
+            zCheckInputs_mixtureModel(data, channels, dataType, numPop, par);
             numPop = round(numPop);
             
             % Find data sizes
@@ -1180,7 +1180,7 @@ classdef FlowAnalysis < handle
             % --- Helper Function --- %
             
             
-            function checkInputs_mixtureModel(data, channels, dataType, numPop, par)
+            function zCheckInputs_mixtureModel(data, channels, dataType, numPop, par)
                 % Checks the inputs to make sure they are valid
                 
                 validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);

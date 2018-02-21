@@ -45,7 +45,7 @@ classdef Gating < handle
 
             % Check inputs
             plotScale = lower(plotScale);
-            checkInputs_gate(data, indices, channelX, channelY, plotScale);
+            zCheckInputs_gate(data, indices, channelX, channelY, plotScale);
 
             % For standardization and ease of use, convert to logical indexing
             if (~islogical(indices))
@@ -164,7 +164,7 @@ classdef Gating < handle
             end
 
 
-            function checkInputs_gate(data, indices, channelX, channelY, plotScale)
+            function zCheckInputs_gate(data, indices, channelX, channelY, plotScale)
                 % Checks the inputs to the main function
 
                 % data

@@ -139,7 +139,7 @@ classdef Transforms < handle
 			%						logicle parameters input
 			
 			% Check inputs
-			checkInputs_lin2logicle();
+			zCheckInputs_lin2logicle();
 			
 			% Converting logicle to linear is solveable, but the reverse is not, 
 			% so we fit a spline to generic logicle-lin data and then project
@@ -155,7 +155,7 @@ classdef Transforms < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_lin2logicle()
+			function zCheckInputs_lin2logicle()
 				
 				% Check input arguments
 				validateattributes(S, {'numeric'}, {}, mfilename, 'S', 1);
@@ -249,7 +249,7 @@ classdef Transforms < handle
 			%						of r, which increases the relative size of the
             %						area between 10^-2 and 10^2
 			
-			checkInputs_logicle2lin()
+			zCheckInputs_logicle2lin()
 			
 			% This gives a range for linearization around zero (W).
 			W = (params.M - log10(params.T / abs(params.r))) / 2;
@@ -280,7 +280,7 @@ classdef Transforms < handle
 			end
 						
 			
-			function checkInputs_logicle2lin()
+			function zCheckInputs_logicle2lin()
 				
 				% Check input arguments
 				validateattributes(X, {'numeric'}, {}, mfilename, 'X', 1);
@@ -419,7 +419,7 @@ classdef Transforms < handle
             %       loading the saveFile
 			
             % Process inputs
-			channels = checkInputs_fcs2MEF();
+			channels = zCheckInputs_fcs2MEF();
                         
 			for i = 1:numel(data) %#ok<ALIGN>
                 
@@ -455,7 +455,7 @@ classdef Transforms < handle
 			% --- Helper Functions --- %
 			
             
-			function channels = checkInputs_fcs2MEF()
+			function channels = zCheckInputs_fcs2MEF()
 				
 				validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
                 validateattributes(channelFits, {'table'}, {}, mfilename, 'channelFits', 2);
@@ -520,7 +520,7 @@ classdef Transforms < handle
             %   Last Updated: 2017-09-16 by Ross Jones
 			
             % Check inputs, initialize data struct
-            [beadData, beadVals] = checkInputs_calMEF();
+            [beadData, beadVals] = zCheckInputs_calMEF();
 			MEF_units = fieldnames(beadVals)'; % Start in same order as channels
 			
 			% Find max number of peaks to look for
@@ -678,7 +678,7 @@ classdef Transforms < handle
 			% --- Helper Functions --- %
 			
 			
-			function [beadData, beadVals] = checkInputs_calMEF()
+			function [beadData, beadVals] = zCheckInputs_calMEF()
 				
 				validateattributes(beads, {'struct'}, {}, mfilename, 'beadsFilename', 1);
 				validFields = {'filename', 'type', 'lot', 'date', 'cytometer'};
@@ -869,7 +869,7 @@ classdef Transforms < handle
 			%						as empty.
 
 			
-			checkInputs_calibrateMEFL();
+			zCheckInputs_calibrateMEFL();
 			
 			% Compute conversions
 			meflFits = struct();
@@ -928,7 +928,7 @@ classdef Transforms < handle
 			% --- Helper Functions --- %
 			
 			
-			function checkInputs_calibrateMEFL()
+			function zCheckInputs_calibrateMEFL()
 				validateattributes(controlData, {'struct'}, {}, mfilename, 'controlData', 1);
 				validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 2);
 				if ischar(channels), channels = {channels}; end % Convert to cell for simplicity
@@ -974,7 +974,7 @@ classdef Transforms < handle
 			% 2016-04-23
             
             % Process inputs
-			channels = checkInputs_fcs2ABC(data, channelFits, dataType);
+			channels = zCheckInputs_fcs2ABC(data, channelFits, dataType);
                         
 			for i = 1:numel(data) %#ok<ALIGN>
                 
@@ -999,7 +999,7 @@ classdef Transforms < handle
 			% --- Helper Functions --- %
 			
             
-			function channels = checkInputs_fcs2ABC(data, channelFits, dataType)
+			function channels = zCheckInputs_fcs2ABC(data, channelFits, dataType)
 				
 				validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
                 validateattributes(channelFits, {'table'}, {}, mfilename, 'channelFits', 2);
