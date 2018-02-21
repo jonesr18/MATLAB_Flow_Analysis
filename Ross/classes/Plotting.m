@@ -237,14 +237,14 @@ classdef Plotting < handle
 		
 		function [colors, sortIdx] = getColors(inputData, cmap, options)
 			% Generates a color representing the value of each element of a
-			% given input vector using a given ColorMap object
+			% given input vector/matrix using a given color scheme
 			%
-			%	[colors, sortIdx] = getColors(input, colorMap, options)
+			%	[colors, sortIdx] = getColors(inputData, cmap, options)
 			%
 			%	Inputs
-			%		inputData	<numeric> A vector for which to generate colors.
-			%					NaN values are set to the lowest possible value.
-			%		
+			%		inputData	<numeric> A vector/matrix of data values for 
+			%					which to generate colors.
+			%
 			%		cmap		<numeric, char, ColorMap> (Optional) 
 			%					The colormap to represent data values. 
 			%					 - Can input an Nx3 matrix of RGB values, a
@@ -271,8 +271,10 @@ classdef Plotting < handle
 			%
 			%	Outputs
 			%
-			%		colors		An Nx3 matrix of color values corresponding
-			%					with each N elements in inputData
+			%		colors		An NxMx...x3 matrix of color values corresponding
+			%					with the input data values, where the appended
+			%					dimension is in the order RGB. Row-vector inputs
+			%					will return RGB values in independent rows. 
 			%					*** Returned unsorted unless 'sortIdx' is
 			%						requested as an output!
 			%					*** NaN and complex inputData values are
@@ -341,23 +343,7 @@ classdef Plotting < handle
 				inputData = reshape(inputData, [], 1); % For simplicity
 				
 				if exist('cmap', 'var')
-					validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, ...
-							{}, mfilename, 'cmap', 2);
-					
-					if ischar(cmap)
-						cmap = ColorMap(cmap).getColormap(100);
-					elseif strcmpi(class(cmap), 'ColorMap')
-						cmap = cmap.getColormap(100);
-					end
-					
-					if (min(cmap(:)) < 0)
-						warning('Colormap min value less than 0! Shifting up...')
-						cmap = cmap + min(cmap(:));
-					end
-					if (max(cmap(:)) > 1)
-						warning('Colormap max value greater than 1! Scaling down...')
-						cmap = cmap ./ max(cmap(:));
-					end
+					cmap = Plotting.checkCmap(cmap);
 				else
 					cmap = parula(100);
 				end
@@ -527,7 +513,7 @@ classdef Plotting < handle
 					assert(all(size(mode) == size(xdata)), 'If numeric, mode must be the same size as the data!')
 				end
 				
-				% Check colormap
+				% Check colormap (bulk of checking happends in getColors())
 				if exist('cmap', 'var')
 					validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, {}, mfilename, 'cmap', 6);
 				else
@@ -1589,22 +1575,30 @@ classdef Plotting < handle
 		end
 		
         
-        function [ax, h, cbar] = standardHeatmap(data, cmap, rowLabels, colLabels, options)
+        function [ax, h, cbar] = standardHeatmap(dataMatrix, rowLabels, colLabels, cmap, options)
             % Generates a standard heatmap with fontsize 14 and data arranged nicely
             %
             %   Inputs:
             %
-            %       data            The data to be plotted (matrix). Normally, heatmaps flip
+            %       dataMatrix      The data to be plotted (matrix). Normally, heatmaps flip
             %                       the rows for some reason (like an image) - this is 
             %                       corrected such that the heatmap "starts" in the top left
-            %       
-            %       cmap            The colormap to use for the heatmap (Nx3 matrix of RGB colors)
             %
             %       rowLabels       Cell list of strings with row labels
 			%						(the function accounts for flipping as mentioned above). 
             %
-            %       colLabels       Cell list of strings with col labels 
-            %		
+            %       colLabels       Cell list of strings with col labels 		
+			%
+			%		cmap			<numeric, char, ColorMap> (Optional) 
+			%						The colormap to represent data values. 
+			%						- Can input an Nx3 matrix of RGB values, a
+			%						   ColorMap object pre-initialized with a
+			%						   color, or a string indicating which
+			%						   ColorMap to initialize. 
+			%						 - ColorMap and char inputs will yield 100
+			%						   unique color values on the given scale
+			%						 - Defualt = parula(100);
+			%
 			%		options			(optional) Struct of additional optional inputs
 			%			norm            The dimension to normalize on
             %								1 or 'column' = within columns
@@ -1641,38 +1635,46 @@ classdef Plotting < handle
 			%
 			
             % Invert data rows because stupid heatmap
-            flippedData = flipud(data);
+            flippedData = flipud(dataMatrix);
             
             % Create heatmap/clustergram
-            if (ismember('doCluster', fieldnames(options)) && options.doCluster)
+			if (isfield(options, 'doCluster') && options.doCluster)
 				doCluster = true;
-                h = clustergram(flippedData);
-                if ismember('rowpdist', fieldnames(options))
-                    h.RowPDist = options.rowpdist;
-                else
-                    h.RowPDist = 'correlation';
-                end
-                if ismember('colpdist', fieldnames(options))
-                    h.ColumnPDist = options.colpdist;
-                else
-                    h.ColumnPDist = 'correlation';
-                end
-            else
-                doCluster = false;
-                h = HeatMap(flippedData);
-            end
-            if ismember('norm', fieldnames(options))
-                h.Standardize = upper(options.norm);
-                if ismember('range', fieldnames(options))
-                    h.DisplayRange = options.range; 
-                end
-            end
-            if ismember('symmetric', fieldnames(options))
-                h.Symmetric = options.symmetric;
-            else
-                h.Symmetric = false;
-            end
-            h.Colormap = cmap;
+				h = clustergram(flippedData);
+				if isfield(options, 'rowpdist')
+					h.RowPDist = options.rowpdist;
+				else
+					h.RowPDist = 'correlation';
+				end
+				if isfield(options, 'colpdist')
+					h.ColumnPDist = options.colpdist;
+				else
+					h.ColumnPDist = 'correlation';
+				end
+			else
+				doCluster = false;
+				h = HeatMap(flippedData);
+			end
+			
+			if isfield(options, 'norm')
+				h.Standardize = upper(options.norm);
+				if isfield(options, 'range')
+					h.DisplayRange = options.range; 
+				end
+			end
+			
+			if isfield(options, 'symmetric')
+				h.Symmetric = options.symmetric;
+			else
+				h.Symmetric = false;
+			end
+			
+			if exist('cmap', 'var')
+				h.Colormap = Plotting.checkCmap(cmap);
+			else
+				h.Colormap = parula(100);
+			end
+			
             h.RowLabels = fliplr(rowLabels);
             h.ColumnLabels = colLabels;
             
@@ -1705,7 +1707,7 @@ classdef Plotting < handle
 		end
 		
 		
-		function figBinHmap = binHeatmap(data, edges, labels, cmap, axProperties, options)
+		function figBinHmap = binHeatmap(dataMatrix, edges, labels, cmap, axProperties, options)
 			% Creates a heatmap representing the given bin data. The presentation 
 			% depends on the dimensionality of the data.
 			%
@@ -1787,23 +1789,23 @@ classdef Plotting < handle
 			figBinHmap = figure();
 			
 			spIdx = 0;
-			for d5 = 1:size(data, 5)
-				for d4 = 1:size(data, 4)
+			for d5 = 1:size(dataMatrix, 5)
+				for d4 = 1:size(dataMatrix, 4)
 					
 					spIdx = spIdx + 1;
-					ax = subplot(size(data, 5), size(data, 4), spIdx);
+					ax = subplot(size(dataMatrix, 5), size(dataMatrix, 4), spIdx);
 					
-					for d3 = 1:size(data, 3)
+					for d3 = 1:size(dataMatrix, 3)
 						
 						% Setup patch coordinates
-						patchesX = zeros(4, size(data, 1) * size(data, 2));
+						patchesX = zeros(4, size(dataMatrix, 1) * size(dataMatrix, 2));
 						patchesY = zeros(size(patchesX));
 						patchesZ = ones(size(patchesX)) * (d3 - 1);
 						patIdx = 0;
 						
 						% Extract patch coordinates
-						for d2 = 1:size(data, 2)
-							for d1 = 1:size(data, 1)
+						for d2 = 1:size(dataMatrix, 2)
+							for d1 = 1:size(dataMatrix, 1)
 								
 								patIdx = patIdx + 1;
 								
@@ -1823,7 +1825,7 @@ classdef Plotting < handle
 						end
 						
 						% Get colors for each patch
-						colors = Plotting.getColors(data(:, :, d3, d4, d5), cmap, options);
+						colors = Plotting.getColors(dataMatrix(:, :, d3, d4, d5), cmap, options);
 						
 						% Plot all patches
 						patch(ax, patchesX, patchesY, patchesZ, ...
@@ -1842,10 +1844,10 @@ classdef Plotting < handle
 					end
 					
 					% Plot Z (3D) labels if applicable
-					if (size(data, 3) > 1)
-						centers3 = cell(1, size(data, 3));
+					if (size(dataMatrix, 3) > 1)
+						centers3 = cell(1, size(dataMatrix, 3));
 						for c3i = 1:numel(centers3)
-							if (size(data, 3) < numel(edges{3}))
+							if (size(dataMatrix, 3) < numel(edges{3}))
 								centers3{c3i} = num2str(mean([edges{3}(c3i), edges{3}(c3i + 1)]));
 							else
 								if iscell(edges{3}(c3i))
@@ -1860,8 +1862,8 @@ classdef Plotting < handle
 					end
 					
 					% Plot titles w/ 4/5D labels if applicable
-					if (size(data, 4) > 1)
-						if (size(data, 4) < numel(edges{4}))
+					if (size(dataMatrix, 4) > 1)
+						if (size(dataMatrix, 4) < numel(edges{4}))
 							center4 = num2str(mean([edges{4}(d4), edges{4}(d4 + 1)]));
 						else
 							if iscell(edges{4}(d4))
@@ -1874,8 +1876,8 @@ classdef Plotting < handle
 					else
 						titleLine1 = '';
 					end
-					if (size(data, 5) > 1)
-						if (size(data, 5) < numel(edges{5}))
+					if (size(dataMatrix, 5) > 1)
+						if (size(dataMatrix, 5) < numel(edges{5}))
 							center5 = num2str(mean([edges{5}(d5), edges{5}(d5 + 1)]));
 						else
 							if iscell(edges{5}(d5))
@@ -1898,7 +1900,7 @@ classdef Plotting < handle
 						   options.logicle);
 			else
 				cbar = colorbar(ax);
-				cbar.Limits = [min(data(:)), max(data(:))];
+				cbar.Limits = [min(dataMatrix(:)), max(dataMatrix(:))];
 			end
 			cbar.Label.String = labels{end};
 			if isfield(axProperties, 'FontSize')
@@ -1912,31 +1914,31 @@ classdef Plotting < handle
 			function checkInputs_binHeatmap()
 				
 				% Check data + dimensions
-				validateattributes(data, {'numeric'}, {}, mfilename, 'data', 1);
-				assert(ndims(data) > 1, 'Data must have at least two dimensions!')
-				assert(ndims(data) < 6, 'Data must have no more than 5 dimensions!')
+				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'data', 1);
+				assert(ndims(dataMatrix) > 1, 'Data must have at least two dimensions!')
+				assert(ndims(dataMatrix) < 6, 'Data must have no more than 5 dimensions!')
 				
 				% Check edges
 				validateattributes(edges, {'cell'}, {}, mfilename, 'edges', 2);
-				assert(numel(edges) == ndims(data), ...
+				assert(numel(edges) == ndims(dataMatrix), ...
 					'Number of edges (%d) does not match data dimensionality! (%d)', ...
-					numel(edges), ndims(data));
+					numel(edges), ndims(dataMatrix));
 				for ei = 1:numel(edges)
 					if ei <= 2
-						assert(numel(edges{ei}) == (size(data, ei) + 1), ...
+						assert(numel(edges{ei}) == (size(dataMatrix, ei) + 1), ...
 							   'Number of edges supplied for dim %d is incorrect!', ei)
 					else % Allow specifying exact positions for dims 3+
-						assert(numel(edges{ei}) == size(data, ei) || ...
-							   numel(edges{ei}) == (size(data, ei) + 1), ...
+						assert(numel(edges{ei}) == size(dataMatrix, ei) || ...
+							   numel(edges{ei}) == (size(dataMatrix, ei) + 1), ...
 							   'Number of edges supplied for dim %d is incorrect!', ei)
 					end
 				end
 				
 				% Check labels
 				validateattributes(labels, {'cell'}, {}, mfilename, 'labels', 3);
-				assert(numel(labels) == (ndims(data) + 1), ...
+				assert(numel(labels) == (ndims(dataMatrix) + 1), ...
 					'Number of labels (%d) does not match data dimensionality + 1! (%d)', ...
-					numel(labels), ndims(data));
+					numel(labels), ndims(dataMatrix));
 				
 				% Check colormap
 				if exist('cmap', 'var')
@@ -1967,6 +1969,27 @@ classdef Plotting < handle
 				
 			end
 			
+		end
+		
+		
+		function cmap = checkCmap(cmap)
+			validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, ...
+					{}, mfilename, 'cmap', 2);
+			
+			if ischar(cmap)
+				cmap = ColorMap(cmap).getColormap(100);
+			elseif strcmpi(class(cmap), 'ColorMap')
+				cmap = cmap.getColormap(100);
+			end
+			
+			if (min(cmap(:)) < 0)
+				warning('Colormap min value less than 0! Shifting up...')
+				cmap = cmap + min(cmap(:));
+			end
+			if (max(cmap(:)) > 1)
+				warning('Colormap max value greater than 1! Scaling down...')
+				cmap = cmap ./ max(cmap(:));
+			end
 		end
 		
 	end
