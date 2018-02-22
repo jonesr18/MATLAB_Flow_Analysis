@@ -625,34 +625,31 @@ classdef FlowData < handle
 		
 		
 		function compensate(self, method, dataType, gate, plotsOn)
-			% Applies compensation to the data
+			% Applies autofluorescence subtraction and compensation to the data
 			%
-			%	self.compensate(method, plotsOn)
+			%	self.compensate(method, dataType, gate, plotsOn)
 			%
-			%	method = 'scComp' adds new dataTypes: {'scComp'}
-			%	method = 'mComp' adds new dataTypes: {'mComp', 'afs'}
+			%	This function adds new dataTypes: {'comp', 'afs'}
 			%
 			%	Inputs
 			%		method			<char> Indicates which compensation routine to use. 
-			%							'scComp'	piecewise linear
-			%							'mComp'		matrix-based (incl autorfluor subtract)
+			%							'mComp'		matrix-based (recommended)
+			%										(least-squares minimized)
+			%							'pComp'		piecewise linear
 			%
 			%		dataType		<char> Indicates which data type to use.
-			%						Can be any dataType in self.dataTypes, but
-			%						preferrably 'mef'.
+			%						Can be any dataType in self.dataTypes
 			%
-			%		gate			<char> Indicates which gate to use for.
+			%		gate			<char> Indicates which gate to use.
 			%						Can be any gate in self.gateNames, but
 			%						preferrably 'P1', or 'P3' if onlyP1 = false
 			%
 			%		plotsOn			(optional) <logical> Set to TRUE to show the 
-			%						compensation function's generated plots. 
+			%						compensation function's generated plots, which 
+			%						are then saved in the Compensation folder.
 			
 			% Check inputs
-			validatestring(method, {'scComp', 'mComp'}, mfilename, 'method', 1);
-			validatestring(dataType, self.dataTypes, mfilename, 'dataType', 2);
-			validatestring(gate, self.gateNames, mfilename, 'gate', 3);
-			plotsOn = (exist('plotsOn', 'var') && all(logical(plotsOn)));
+			zCheckInputs_compensate(self);
 			
 			% Setup new directory for compensation fits/figs
 			compDir = [self.controlsFolder, 'Compensation', filesep];
@@ -665,25 +662,50 @@ classdef FlowData < handle
 			compFname = [compDir, 'CompFits.mat'];
 			if exist(compFname, 'file') 
 				% Load existing sample gates
-% 				load(compFname);
-% 				method = 'preload';
+				load(compFname);
+			else
+				switch method
+					case 'mComp'
+						
+						% Compute slopes/intercepts for each pair of scData
+						scData = cell(1, numel(channels));
+						for ch = 1:numel(channels)
+							scData{ch} = 
+						end
+						
+						% Subtract autofluorescence 
+						
+			
+						% Apply compensation
+						
+						[self.sampleData, self.controlData, compFits, compFigs] = ...
+							Compensation.compensateMatrixBatch( ...
+								self.sampleData, self.controlData, self.channels, ...
+								dataType, gate, plotsOn); %#ok<PROPLC>
+						
+					
+					case 'pComp'
+						
+						% Compute piece-wise linear fit for each pair of scData
+						
+						
+						% Subtract autofluorescence 
+						
+			
+						% Apply compensation
+						
+						self.sampleData = Compensation.compensateBatchSC( ...
+							self.controlData(end), self.controlData(1:numel(self.channels)), ...
+							self.channels, self.sampleData, self.channels, ...
+							dataType, gate, plotsOn);
+						self.addDataTypes('scComp');
+				end
 			end
 			
-			switch method
-				case 'scComp'
-					self.sampleData = Compensation.compensateBatchSC( ...
-						self.controlData(end), self.controlData(1:numel(self.channels)), ...
-						self.channels, self.sampleData, self.channels, ...
-						dataType, gate, plotsOn);
-					self.addDataTypes('scComp');
-				
-				case 'mComp'
-					[self.sampleData, self.controlData, compFits, compFigs] = ...
-						Compensation.compensateMatrixBatch( ...
-							self.sampleData, self.controlData, self.channels, ...
-							dataType, gate, plotsOn); %#ok<PROPLC>
-					self.addDataTypes({'afs', 'mComp'});
-			end
+			
+			% Check compensation
+			
+			
 			
 			% Save data/figures
 			save(compFname, 'compFits')
@@ -692,11 +714,23 @@ classdef FlowData < handle
 				saveas(compFigs.post, [compDir, 'post-comp.fig'])
 			end
 			
+			self.addDataTypes({'afs', 'comp'});
 			self.compFits = compFits; %#ok<PROPLC>
 			self.compensated = true;
 			self.compDataType = dataType;
 			fprintf(1, 'Finished compensation\n')
-						
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_compensate(self)
+				validatestring(method, {'pComp', 'mComp'}, mfilename, 'method', 1);
+				validatestring(dataType, self.dataTypes, mfilename, 'dataType', 2);
+				validatestring(gate, self.gateNames, mfilename, 'gate', 3);
+				plotsOn = (exist('plotsOn', 'var') && all(logical(plotsOn)));
+			end
+			
 		end
 		
 		
@@ -889,7 +923,11 @@ classdef FlowData < handle
 			%									number of points from each sample
 			%									(default = FALSE), operation
 			%									performed before applying bins
-			%						'bins':		<numeric> defaults to all cells
+			%						'numPoints': The number of cells to extract
+			%									 per sample (if the minimum number 
+			%									 of cells per sample is lower, the 
+			%									 method will use that value). 
+			%						'bins':		<numeric> defaults to all bins
 			%									An Nx1 set of numerical bin IDs or an 
 			%									NxD set of bin coordinates where D = #
 			%									of bin channels. 
@@ -900,8 +938,8 @@ classdef FlowData < handle
 			%
 			%		metrics			<char, cell> (Optional) A list of metrics to compute
 			%						Valid metrics:
-			%							numCells, 10th, 50th (median), 90th %iles, 
-			%							mean, geomean, stdev, geostdev, sem, semb*
+			%							'numCells', pctiles: 'p10', 'p50'/'median', 'p90',
+			%							'mean', 'geomean', 'stdev', 'geostdev', 'sem', semb*
 			%							 * semb = bootstrapped SEM
 			%							 -> If no metrics input given, then all
 			%								metrics except 'semb' are computed
@@ -911,6 +949,13 @@ classdef FlowData < handle
 			%					a statistical metric and the value is a BxC
 			%					matrix of the metric values in B bins across C
 			%					channels (channels given in sliceParams). 
+			%					--> We do not structure the bin stats into their "true" 
+			%						shape since this would require always requesting
+			%						bins from an entire row/column to avoid errors
+			%						in the matrix reshaping process. Additionally,
+			%						it would require quite a bit of deconvoluting
+			%						the requested bins and ultimately it is easier
+			%						to just have the user reshape their own data
 			
 			zCheckInputs_computeBinStats(self);
 			
@@ -939,7 +984,7 @@ classdef FlowData < handle
 					% Calculate requested metrics
 					prctiles = prctile(dataInBin, [10, 50, 90]);
 					if ismember('p10', metrics), binStats.p10(b, ch) = prctiles(1); end
-					if ismember('p50', metrics), binStats.p50(b, ch) = prctiles(2); end
+					if any(ismember({'p50', 'median'}, metrics)), binStats.p50(b, ch) = prctiles(2); end
 					if ismember('p90', metrics), binStats.p90(b, ch) = prctiles(3); end
 					if ismember('mean', metrics), binStats.mean(b, ch) = mean(dataInBin); end
 					if ismember('geomean', metrics), binStats.geomean(b, ch) = geomean(dataInBin(posData)); end
@@ -965,9 +1010,15 @@ classdef FlowData < handle
 				% this function, so we let slice() itself check the rest.
 				validateattributes(sliceParams, {'struct'}, {}, mfilename, 'sliceParams', 2);
 				if (isfield(sliceParams, 'channels') && ischar(sliceParams.channels))
-					sliceParams.channels = {sliceParams.channels}; % For simplicity
+					sliceParams.channels = {sliceParams.channels}; % Needed in main function
 				end
-				if (isfield(sliceParams, 'bins') && ischar(sliceParams.bins))
+				
+				% The default behavior is slightly different than slice - we
+				% take all bins instead of all cells when no input is given
+				if (~isfield(sliceParams, 'bins') || isempty(sliceParams.bins))
+					sliceParams.bins = 'all';
+				end
+				if ischar(sliceParams.bins)
 					if strcmpi(sliceParams.bins, 'all')
 						sliceParams.bins = (1:self.numBins)';
 					else
@@ -975,7 +1026,7 @@ classdef FlowData < handle
 					end
 				end
 				
-				validMetrics = {'p10', 'p50', 'p90', 'mean', 'geomean', 'stdev', 'geostdev', 'sem', 'semb'};
+				validMetrics = {'p10', 'p50', 'p90', 'median', 'mean', 'geomean', 'stdev', 'geostdev', 'sem', 'semb'};
 				if exist('metrics', 'var')
 					validateattributes(metrics, {'cell', 'char'}, {}, mfilename, 'metrics', 3);
 					if ischar(metrics), metrics = {metrics}; end % For simplicity
@@ -1120,21 +1171,28 @@ classdef FlowData < handle
 			%		sampleIDs		<integer> The sample(s) to slice as given by
 			%						the numerical sample ID(s).
 			%		sliceParams		<struct> Optional, struct with optional fields:
-			%						'channels': <cell, char>, defaults to self.channels
-			%						'dataType': <char>, defaults to 'raw'
-			%						'gate':		<char>, defaults to no gate
-			%						'equalize': <logical>, TRUE returns an equal
-			%									number of points from each sample
-			%									(default = FALSE), operation
-			%									performed before applying bins
-			%						'bins':		<numeric> defaults to all cells
-			%									An Nx1 set of numerical bin IDs or an 
-			%									NxD set of bin coordinates where D = #
-			%									of bin channels. 
-			%									Automatically forces 'dataType' to be 
-			%									'self.binDataType' regardless of whether 
-			%									they are given or not
-			%									<Can input 'all' to select all bins>
+			%						'channels':  <cell, char>, defaults to self.channels
+			%						'dataType':  <char>, defaults to 'raw'
+			%						'gate':		 <char>, defaults to no gate
+			%						'equalize':  <logical>, TRUE returns an equal
+			%									 number of points from each sample
+			%									 (default = FALSE), operation
+			%									 performed before applying bins
+			%						'numPoints': The number of cells to extract
+			%									 per sample (if the minimum number 
+			%									 of cells per sample is lower, the 
+			%									 method will use that value). 
+			%						'controls':  <logical> TRUE slices from
+			%									 controlData rather than sampleData
+			%									 (default = FALSE)
+			%						'bins':		 <numeric> defaults to all cells
+			%									 An Nx1 set of numerical bin IDs or an 
+			%									 NxD set of bin coordinates where D = #
+			%									 of bin channels. 
+			%									 Automatically forces 'dataType' to be 
+			%									 'self.binDataType' regardless of whether 
+			%									 they are given or not
+			%									 <Can input 'all' to select all bins>
 			%
 			%	Ouputs
 			%		dataMatrix		<double> N x M matrix of data from the given
@@ -1143,7 +1201,7 @@ classdef FlowData < handle
 			%						channels requested. 
 			
 			% Check and extract inputs
-			[sliceChannels, sliceDataType, sliceGates] = zCheckInputs_slice(self);
+			[sliceData, sliceChannels, sliceDataType, sliceGates] = zCheckInputs_slice(self);
 			
 			% Slice out data
 			dataMatrix = [];
@@ -1153,7 +1211,7 @@ classdef FlowData < handle
 				sID = sampleIDs(s);
 				dataS = zeros(numel(sliceGates{s}), numel(sliceChannels));
 				for ch = 1:numel(sliceChannels)
-					dataS(:, ch) = self.sampleData(sID).(sliceChannels{ch}).(sliceDataType)(sliceGates{s});
+					dataS(:, ch) = sliceData(sID).(sliceChannels{ch}).(sliceDataType)(sliceGates{s});
 				end
 				dataMatrix = [dataMatrix; dataS];
 			end
@@ -1162,22 +1220,31 @@ classdef FlowData < handle
 			 % --- Helper Functions --- %
 			
 			
-			function [sliceChannels, sliceDataType, sliceGates] = zCheckInputs_slice(self)
+			function [sliceData, sliceChannels, sliceDataType, sliceGates] = zCheckInputs_slice(self)
 				% Validates slice properteis and that the sampleID is valid
 				
-				% Ensure sampleID is a valid integer
-				validateattributes(sampleIDs, {'numeric'}, {'positive'}, ...
-					mfilename, 'sampleIDs', 1);
-				sampleIDs = unique(round(sampleIDs)); 
-				assert(all(sampleIDs <= numel(self.sampleData)), ...
-					'At least one sampleID is too large!')
-								
 				% Check and update slice parameters as needed
 				if exist('sliceParams', 'var')
 					validateattributes(sliceParams, {'struct'}, {}, mfilename, 'sliceParams', 2);
 				else
 					sliceParams = struct();
 				end
+				
+				% Slices data from the given dataset
+				if (isfield(sliceParams, 'controls') && sliceParams.controls)
+					sliceData = self.controlData;
+					sliceControls = true;
+				else
+					sliceData = self.sampleData;
+					sliceControls = false;
+				end
+				
+				% Ensure sampleID is a valid integer
+				validateattributes(sampleIDs, {'numeric'}, {'positive'}, ...
+					mfilename, 'sampleIDs', 1);
+				sampleIDs = unique(round(sampleIDs)); 
+				assert(all(sampleIDs <= numel(sliceData)), ...
+					'At least one sampleID is too large!')
 				
 				% Slices data from the given channels
 				if isfield(sliceParams, 'channels')
@@ -1205,20 +1272,28 @@ classdef FlowData < handle
 					sliceGates = cell(1, numel(sampleIDs));
 					for id = 1:numel(sampleIDs)
 						sampleID = sampleIDs(id);
-% 						sliceGates{id} = self.sampleData(sampleID).gates.(sliceParams.gate);
-						sliceGates{id} = find(self.sampleData(sampleID).gates.(sliceParams.gate));
+% 						sliceGates{id} = sliceData(sampleID).gates.(sliceParams.gate);
+						sliceGates{id} = find(sliceData(sampleID).gates.(sliceParams.gate));
 					end
 				else
 					for id = 1:numel(sampleIDs)
 						sampleID = sampleIDs(id);
-% 						sliceGates{id} = true(self, numCells(sampleID), 1);
-						sliceGates{id} = (1:self.numCells(sampleID))'; % Default is all cells
+						numSliceCells = numel(sliceData(sampleID).(sliceChannels{1}).raw);
+% 						sliceGates{id} = true(numSliceCells, 1);
+						sliceGates{id} = (1:numSliceCells)'; % Default is all cells
 					end
 				end
 				
 				% Slice the same number of points from each sample
-				if isfield(sliceParams, 'equalize')
-					numPoints = min(cellfun(@numel, sliceGates));
+				numPoints = min(cellfun(@numel, sliceGates));
+				if (isfield(sliceParams, 'numPoints') && ~isempty(sliceParams.numPoints))
+					numPoints = min(numPoints, sliceParams.numPoints);
+					subSample = true;
+				end
+				if ((isfield(sliceParams, 'equalize') && sliceParams.equalize) || subSample)
+					% If sP.equalize TRUE and sP.numPoints not given, then use minPoints
+					% If both or just sP.numPoints given, use min of numPoints sP.numPoints
+					% If neither are given, then subsampling is completely skipped
 					for id = 1:numel(sampleIDs)
 						ss = FlowAnalysis.subSample(numel(sliceGates{id}), numPoints);
 						sliceGates{id} = sliceGates{id}(ss);
@@ -1227,6 +1302,13 @@ classdef FlowData < handle
 				
 				% Slices from the given bins
 				if (isfield(sliceParams, 'bins') && ~isempty(self.bins))
+					% Controls are not binned, so if they are the sliceData, we
+					% just skip the rest of the inputs checking
+					if sliceControls
+						warning('Controls are not binned! Skipping')
+						return
+					end
+					
 					validateattributes(sliceParams.bins, {'numeric', 'char'}, {}, mfilename, 'sliceParams.bins');
 					if ischar(sliceParams.bins)
 						if strcmpi(sliceParams.bins, 'all')
@@ -1240,7 +1322,7 @@ classdef FlowData < handle
 						   'Bin IDs formatted incorrectly!')
 					assert(size(sliceParams.bins, 1) <= self.numBins, ...
 						   'Too many bins requested!')
-					
+
 					% Convert bin indexes to linear 
 					if (size(sliceParams.bins, 2) == 1)
 						binIdxs = sliceParams.bins';
@@ -1251,12 +1333,12 @@ classdef FlowData < handle
 							binIdxs(bi) = sub2ind(size(self.bins{sampleIDs(1)}), spBins{bi, :});
 						end
 					end
-					
+
 					% Override sliceDataType with bin varieties so that the bin 
 					% subsampling works right. No need to with gate since the
 					% binning doesn't *depend* on the gate. 
 					sliceDataType = self.binDataType;
-					
+
 					% Extract cells in the requested bins
 					for id = 1:numel(sampleIDs)
 						sampleID = sampleIDs(id);
@@ -1264,10 +1346,10 @@ classdef FlowData < handle
 						for b = binIdxs % Sequentially looks at each bin ID
 							cellsInBins = [cellsInBins, self.bins{sampleID}{b}];
 						end
-						
-% 						inBin = false(size(sliceGates{id}));  % Make 'gate' for cells in bins
-% 						inBin(cellsInBins) = true;		 % Fill out logical index array
-% 						sliceGates{id} = (sliceGates{id} & inBin); % Combine w/ sliceGate for simplicity
+
+	% 						inBin = false(size(sliceGates{id}));  % Make 'gate' for cells in bins
+	% 						inBin(cellsInBins) = true;		 % Fill out logical index array
+	% 						sliceGates{id} = (sliceGates{id} & inBin); % Combine w/ sliceGate for simplicity
 						sliceGates{id} = intersect(sliceGates{id}, cellsInBins);
 					end
 				end
