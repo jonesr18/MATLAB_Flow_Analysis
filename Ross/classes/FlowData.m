@@ -14,16 +14,15 @@ classdef FlowData < handle
 	%		sampleData		 <struct>	Sample fluorescence and gate data in standard struct
 	%		sampleMap		 <table>	Experimental information for samples
 	%		dataTypes		 <cell>		Cell array of data types 
-	%									('raw', 'comp', 'mefl', etc)
+	%									('raw', 'mComp', 'mefl', etc)
 	%		gateNames		 <cell>		Cell array of gate names (strings)
 	%		gatePolygons	 <struct>	Mapping between gate names and polygons for sampleData
 	%		channels		 <cell>		Cell array of channel names
 	%		controlData		 <struct>	Similar to sampleData but for controls.
 	%									The order of controls should be the same
 	%									as their corresponding channels. 
-	%		controlFolder	 <char>		The full path name for the controls
-	%		coefficients	 <numeric>	Compensation coefficients
-	%		autfluor		 <numeric>  Autofluorescence per channel
+	%		controlsFolder	 <char>		The full path name for the controls
+	%		compFits		 <struct>	Struct containing matrix compensation fitting results.
 	%		compDataType	 <char>		Data type used for compensation
 	%		beadFitsControls <table>	Table containing MEF unit fits for controls
 	%		meflConversions  <struct>	Mapping between channel names to MEF-MEFL conversion factors 
@@ -39,7 +38,6 @@ classdef FlowData < handle
 	%									on the order of channels in binInputs).
 	%		binInputs		 <struct>	Struct w/ bin channels as fields and edges as values
 	%		binDataType		 <char>		Binned dataType ('raw', 'mComp', 'mefl', etc)
-	%		unnamedOps		 <numeric>	% # Of operate() calls with no newDataType input
 	%
 	%	Public Methods
 	%
@@ -81,9 +79,8 @@ classdef FlowData < handle
 		channels = {};				% Cell array of channel names
 		
 		controlData = struct();		% Similar to sampleData but for controls
-		controlFolder = '';			% Controls full path name
-		coefficients = [];			% Compensation coefficients
-		autofluor = [];				% Autofluorescence per channel
+		controlsFolder = '';		% Controls full path name
+		compFits = struct();		% Struct containing matrix compensation fitting results
 		compDataType = '';			% Data type used for compensation
 		
 		beadFitsControls = table();	% Table containing MEF unit fits for controls
@@ -95,8 +92,6 @@ classdef FlowData < handle
 		binSizes = [];				% Number of bins in each dimension
 		binInputs = struct();		% Struct w/ bin channels as fields and edges as values
 		binDataType = '';			% Binned dataType ('raw', 'mComp', 'mefl', etc)
-		
-		unnamedOps = 0;				% # Of operate() calls with no newDataType input
 		
 		logicleParams = struct( ... % Logicle transformation parameters to use
 			'T', 2^18, ...
@@ -279,7 +274,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function addControls(self, controlFolder, wildTypeFname, singleColorFnames, twoColorFnames)
+		function addControls(self, controlsFolder, wildTypeFname, singleColorFnames, twoColorFnames)
 			% Adds wild-type, single-color, and two-color (optional) data to the dataset
 			% so that we can do compensation (single-colors) and MEFL conversion (two-colors).
 			%
@@ -288,10 +283,10 @@ classdef FlowData < handle
 			% in position 2*X (if applicable), and wild-type data is in the last
 			% position (regardless of the presence of two-color data). 
 			% 
-			%	self.addControls(controlFolder, wildTypeFname, singleColorFnames, twoColorFnames)
+			%	self.addControls(controlsFolder, wildTypeFname, singleColorFnames, twoColorFnames)
 			%
 			%	Inputs
-			%		controlFolder		<char> The full-path folder name for controls
+			%		controlsFolder		<char> The full-path folder name for controls
 			%
 			%		wildTypeFnames		<cell, char> Wild-type cell data
 			%		
@@ -307,7 +302,7 @@ classdef FlowData < handle
 			
 			[wildTypeData, singleColorData, twoColorData] = zCheckInputs_addControls(self);
 			FITC_IDX = find(strcmpi('FITC_A', self.channels));
-			self.controlFolder = controlFolder;
+			self.controlsFolder = controlsFolder;
 			
 			% Extract data
 			self.controlData = extractData([self.channels, {'nObs'}], ...
@@ -326,9 +321,9 @@ classdef FlowData < handle
 			
 			function [wildTypeData, singleColorData, twoColorData] = zCheckInputs_addControls(self)
 				
-				validateattributes(controlFolder, {'char'}, {}, mfilename, 'controlFolder', 1);
-				assert(logical(exist(controlFolder, 'file')), 'Controls folder does not exist!');
-				if ~(controlFolder(end) == filesep), controlFolder = [controlFolder, filesep]; end
+				validateattributes(controlsFolder, {'char'}, {}, mfilename, 'controlsFolder', 1);
+				assert(logical(exist(controlsFolder, 'file')), 'Controls folder does not exist!');
+				if ~(controlsFolder(end) == filesep), controlsFolder = [controlsFolder, filesep]; end
 				
 				validateattributes(wildTypeFname, {'cell', 'char'}, {}, mfilename, 'wildTypeFname', 2);
 				validateattributes(singleColorFnames, {'cell', 'char'}, {}, mfilename, 'singleColorFnames', 3);
@@ -342,8 +337,8 @@ classdef FlowData < handle
 					'Incorrect number of single color controls');
 				
 				% Add full-path to filenames
-				wildTypeFname = self.convertToFullFile(wildTypeFname, controlFolder);
-				singleColorFnames = self.convertToFullFile(singleColorFnames, controlFolder);
+				wildTypeFname = self.convertToFullFile(wildTypeFname, controlsFolder);
+				singleColorFnames = self.convertToFullFile(singleColorFnames, controlsFolder);
 				
 				% Open files
 				wildTypeData = FlowAnalysis.openFiles(wildTypeFname{:});
@@ -355,7 +350,7 @@ classdef FlowData < handle
 					if ischar(twoColorFnames), twoColorFnames = {twoColorFnames}; end
 					assert(numel(twoColorFnames) == sum(~strcmpi('FITC_A', self.channels)), ...
 						'Incorrect number of two color controls');
-					twoColorFnames = self.convertToFullFile(twoColorFnames, controlFolder);
+					twoColorFnames = self.convertToFullFile(twoColorFnames, controlsFolder);
 					twoColorData = FlowAnalysis.openFiles(twoColorFnames{:});
 				else
 					twoColorData = [];
@@ -421,7 +416,7 @@ classdef FlowData < handle
 			if ~exist(gateDirSamples, 'file')
 				mkdir(gateDirSamples)
 			end
-			gateDirControls = [self.controlFolder, 'Gating', filesep];
+			gateDirControls = [self.controlsFolder, 'Gating', filesep];
 			if ~exist(gateDirControls, 'file')
 				mkdir(gateDirControls)
 			end
@@ -520,7 +515,7 @@ classdef FlowData < handle
 			zCheckInputs_convertToMEF();
 			
 			% Setup new directory for fitting files/figs
-			beadDirControls = [self.controlFolder, 'Calibration', filesep];
+			beadDirControls = [self.controlsFolder, 'Calibration', filesep];
 			if ~exist(beadDirControls, 'file')
 				mkdir(beadDirControls)
 			end
@@ -629,6 +624,116 @@ classdef FlowData < handle
 		end
 		
 		
+		function compensate(self, method, dataType, gate, plotsOn)
+			% Applies autofluorescence subtraction and compensation to the data
+			%
+			%	self.compensate(method, dataType, gate, plotsOn)
+			%
+			%	This function adds new dataTypes: {'comp', 'afs'}
+			%
+			%	Inputs
+			%		method			<char> Indicates which compensation routine to use. 
+			%							'mComp'		matrix-based (recommended)
+			%										(least-squares minimized)
+			%							'pComp'		piecewise linear
+			%
+			%		dataType		<char> Indicates which data type to use.
+			%						Can be any dataType in self.dataTypes
+			%
+			%		gate			<char> Indicates which gate to use.
+			%						Can be any gate in self.gateNames, but
+			%						preferrably 'P1', or 'P3' if onlyP1 = false
+			%
+			%		plotsOn			(optional) <logical> Set to TRUE to show the 
+			%						compensation function's generated plots, which 
+			%						are then saved in the Compensation folder.
+			
+			% Check inputs
+			zCheckInputs_compensate(self);
+			
+			% Setup new directory for compensation fits/figs
+			compDir = [self.controlsFolder, 'Compensation', filesep];
+			if ~exist(compDir, 'file')
+				mkdir(compDir)
+			end
+			
+			% Check if compensation has already been done for this data
+			% --> If so, load and apply to data!
+			compFname = [compDir, 'CompFits.mat'];
+			if exist(compFname, 'file') 
+				% Load existing sample gates
+				load(compFname);
+			else
+				switch method
+					case 'mComp'
+						
+						% Compute slopes/intercepts for each pair of scData
+						scData = cell(1, numel(channels));
+						for ch = 1:numel(channels)
+							scData{ch} = 
+						end
+						
+						% Subtract autofluorescence 
+						
+			
+						% Apply compensation
+						
+						[self.sampleData, self.controlData, compFits, compFigs] = ...
+							Compensation.compensateMatrixBatch( ...
+								self.sampleData, self.controlData, self.channels, ...
+								dataType, gate, plotsOn); %#ok<PROPLC>
+						
+					
+					case 'pComp'
+						
+						% Compute piece-wise linear fit for each pair of scData
+						
+						
+						% Subtract autofluorescence 
+						
+			
+						% Apply compensation
+						
+						self.sampleData = Compensation.compensateBatchSC( ...
+							self.controlData(end), self.controlData(1:numel(self.channels)), ...
+							self.channels, self.sampleData, self.channels, ...
+							dataType, gate, plotsOn);
+						self.addDataTypes('scComp');
+				end
+			end
+			
+			
+			% Check compensation
+			
+			
+			
+			% Save data/figures
+			save(compFname, 'compFits')
+			if ~isempty(compFigs.pre)
+				saveas(compFigs.pre, [compDir, 'pre-comp.fig'])
+				saveas(compFigs.post, [compDir, 'post-comp.fig'])
+			end
+			
+			self.addDataTypes({'afs', 'comp'});
+			self.compFits = compFits; %#ok<PROPLC>
+			self.compensated = true;
+			self.compDataType = dataType;
+			fprintf(1, 'Finished compensation\n')
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_compensate(self)
+				validatestring(method, {'pComp', 'mComp'}, mfilename, 'method', 1);
+				validatestring(dataType, self.dataTypes, mfilename, 'dataType', 2);
+				validatestring(gate, self.gateNames, mfilename, 'gate', 3);
+				plotsOn = (exist('plotsOn', 'var') && all(logical(plotsOn)));
+			end
+			
+		end
+		
+		
 		function convertToMEFL(self, showPlots)
 			% Converts each channel to MEFL units using the compensated MEF units. 
 			% The two-color controls are utilized to get ratios between each MEF
@@ -644,12 +749,23 @@ classdef FlowData < handle
 			% Check pre-requisites for running
 			assert(self.controlsAdded, 'Controls must be added before converting to MEFL units!\n');
 			assert(self.mefConverted, 'MEF conversion must be run before converting to MEFL units!\n');
+			assert(self.compensated, 'Compensation must be run before converting to MEFL units!\n');
+			assert(strcmpi(self.compDataType, 'mef'), 'Compensation must be run on MEF-converted data!\n')
+			
+			% Choose dataType to convert
+			if ismember('mComp', self.dataTypes)
+				dataType = 'mComp';
+			elseif ismember('scComp', self.dataTypes)
+				dataType = 'scComp';
+			else
+				error('Compensated data not found!')
+			end
 			
 			% Extract MEF units from Transforms class for naming
 			MEF_units = Transforms.getBeadUnits(self.channels);
 			
 			% Check if conversions already exist
-			beadDir = [self.controlFolder, 'Calibration', filesep];
+			beadDir = [self.controlsFolder, 'Calibration', filesep];
 			if ~exist(beadDir, 'file')
 				error('Controls bead directory not found! It should be set up during MEF calibration')
 			end
@@ -661,7 +777,7 @@ classdef FlowData < handle
 			else
 				% Compute mefl conversions
 				tcData = self.controlData(numel(self.channels) + 1 : 2 * numel(self.channels));
-				[meflFits, figFits] = Transforms.calibrateMEFL(tcData, self.channels, 'mef', showPlots);
+				[meflFits, figFits] = Transforms.calibrateMEFL(tcData, self.channels, dataType, showPlots);
 			
 				save(meflFname, 'meflFits');
 				
@@ -680,12 +796,12 @@ classdef FlowData < handle
 				% Add MEFLs for controls
 				for i = 1:numel(self.controlData)
 					if isempty(self.controlData(i).(ch{:})), continue, end % Some tcData will be empty 
-					self.controlData(i).(ch{:}).mefl = self.controlData(i).(ch{:}).mef * meflFits.(ch{:});
+					self.controlData(i).(ch{:}).mefl = self.controlData(i).(ch{:}).(dataType) * meflFits.(ch{:});
 				end
 				
 				% Add MEFLs for sample
 				for i = 1:self.numSamples
-					self.sampleData(i).(ch{:}).mefl = self.sampleData(i).(ch{:}).mef * meflFits.(ch{:});
+					self.sampleData(i).(ch{:}).mefl = self.sampleData(i).(ch{:}).(dataType) * meflFits.(ch{:});
 				end
 			end
 			
@@ -693,142 +809,6 @@ classdef FlowData < handle
 			self.addDataTypes('mefl');
 			self.meflConverted = true;
 			fprintf(1, 'Finished converting to MEFL\n');
-		end
-		
-		
-		function compensate(self, dataType, gate, options)
-			% Applies autofluorescence subtraction and matrix-based compensation
-			%
-			%	self.compensate(dataType, gate, plotsOn)
-			%
-			%	This function adds new dataTypes: {'comp', 'afs'}
-			%
-			%	Inputs
-			%
-			%		dataType	<char> Indicates which data type to use.
-			%					Can be any dataType in self.dataTypes
-			%
-			%		gate		<char> Indicates which gate to use.
-			%					Can be any gate in self.gateNames, but
-			%					preferrably 'P1', or 'P3' if onlyP1 = false
-			%
-			%		options		<struct> (optional) Optional property-value pairs:
-			%						'plotsOn':	If TRUE, shows the compensation
-			%									plots, which are then saved in 
-			%									the Compensation folder.
-			%						'minFunc':	A user-defined function for
-			%									residual minimzation during
-			%									fitting. Default = @(x) x.^2
-			%									(least-squares approximation)
-			
-			% Check inputs
-			zCheckInputs_compensate(self);
-			
-			% Setup new directory for compensation fits/figs
-			compDir = [self.controlFolder, 'Compensation', filesep];
-			if ~exist(compDir, 'file')
-				mkdir(compDir)
-			end
-			
-			% Pre-emptively add dataTypes so we can use them within the method
-			self.addDataTypes({'afs', 'comp'});
-			fitFigs = struct();
-			
-			% Check if compensation has already been done for this data
-			% --> If so, load and apply to data!
-			compFname = [compDir, 'CompFits.mat'];
-			if exist(compFname, 'file') 
-				% Load existing sample gates
-				fprintf(1, 'Loading pre-computed coefficients and autofluorescence!\n');
-				load(compFname);
-			else
-				% Compute slopes/intercepts for each pair of scData
-				scData = cell(1, numel(self.channels));
-				for sc = 1:numel(scData)
-					% This slice works because controlData 1-C are the
-					% single-color controls for channels 1-C
-					scData{sc} = self.slice(sc, struct( ...
-						'controls', true, ...
-						'dataType', dataType, ...
-						'gate', gate));
-				end
-				[coeffs, ints, fitFigs.pre] = Compensation.computeCoeffs( ...
-						scData, self.channels, options); 
-			end
-			
-			% Subtract autofluorescence
-			self.operate('add', -ints, dataType, 'afs')
-			
-			% Compensate
-			for cd = 1:numel(self.controlData)
-				if isempty(self.controlData(cd).(self.channels{1})), continue, end
-
-				dataMatrix = self.slice(cd, struct( ...
-					'controls', true, ...
-					'dataType', 'afs'));
-				fixedMatrix = Compensation.matrixComp(dataMatrix', coeffs)';
-				for ch = 1:numel(self.channels)
-					self.controlData(cd).(self.channels{ch}).comp = fixedMatrix(:, ch);
-				end
-			end
-			for sd = 1:self.numSamples
-				dataMatrix = self.slice(sd, struct( ...
-					'dataType', 'afs'));
-				fixedMatrix = Compensation.matrixComp(dataMatrix', coeffs)';
-				for ch = 1:numel(self.channels)
-					self.sampleData(sd).(self.channels{ch}).comp = fixedMatrix(:, ch);
-				end
-			end
-			
-			% Check compensation
-			if options.plotsOn
-				scData = cell(1, numel(self.channels));
-				for sc = 1:numel(scData)
-					% This slice works because controlData 1-C are the
-					% single-color controls for channels 1-C
-					scData{sc} = self.slice(sc, struct( ...
-						'controls', true, ...
-						'dataType', 'comp', ...
-						'gate', gate));
-				end
-				[~, ~, fitFigs.post] = Compensation.computeCoeffs( ...
-						scData, self.channels, options);
-			end
-			
-			% Save data/figures
-			save(compFname, 'coeffs', 'ints')
-			if (isfield(fitFigs, 'pre') && ~isempty(fitFigs.pre)) 
-				% Doesn't run if data was re-loaded or plots were not requested
-				saveas(fitFigs.pre, [compDir, 'pre-comp.fig'])
-				saveas(fitFigs.post, [compDir, 'post-comp.fig'])
-			end
-			
-			self.coefficients = coeffs; 
-			self.autofluor = ints;
-% 			self.compensated = true;
-			self.compDataType = dataType;
-			fprintf(1, 'Finished compensation\n')
-			
-			
-			% --- Helper Functions --- %
-			
-			
-			function zCheckInputs_compensate(self)
-				validatestring(dataType, self.dataTypes, mfilename, 'dataType', 1);
-				validatestring(gate, self.gateNames, mfilename, 'gate', 2);
-				
-				if ~exist('options', 'var'), options = struct(); end
-				if ~isfield(options, 'plotsOn'), options.plotsOn = false; end
-				options.plotsOn = all(logical(options.plotsOn));
-				if isfield(options, 'minFunc')
-					validateattributes(options.minFunc, {'function_handle'}, {}, mfilename, 'options.minFunc', 3)
-				else
-					options.minFunc = @(x) sum(x.^2);
-				end
-				options.logicle = self.logicleParams;
-				options.doMEF = ismember(dataType, {'mef', 'mefl'}); 
-			end
-			
 		end
 		
 		
@@ -845,7 +825,7 @@ classdef FlowData < handle
 			%						The struct tells the function which channels to bin 
 			%						on and where to draw the bins in each dimension. 
 			%		
-			%		binDataType		<char> The cell dataType to use (eg 'mefl', 'comp')
+			%		binDataType		<char> The cell dataType to use (eg 'mefl', 'mComp')
 			%
 			%
 			%	Implementation notes:
@@ -875,7 +855,7 @@ classdef FlowData < handle
 				
 				% Transform to logicle space based on the dataType
 				if (strcmpi(binDataType, 'raw') ...
-						|| (ismember(binDataType, {'afs', 'comp'}) ...
+						|| (ismember(binDataType, {'afs', 'scComp', 'mComp'}) ...
 							&& strcmpi(self.compDataType, 'raw')))
 					% Raw data (comp or not)
 					doMEF = false;
@@ -1306,7 +1286,6 @@ classdef FlowData < handle
 				
 				% Slice the same number of points from each sample
 				numPoints = min(cellfun(@numel, sliceGates));
-				subSample = false;
 				if (isfield(sliceParams, 'numPoints') && ~isempty(sliceParams.numPoints))
 					numPoints = min(numPoints, sliceParams.numPoints);
 					subSample = true;
@@ -1377,98 +1356,6 @@ classdef FlowData < handle
 			end
 		end
 		
-		
-		function operate(self, operation, values, initDataType, newDataType)
-			% Applies the given operation to the given dataType, creating a new
-			% dataType which is a mathematically transformed with the operation
-			%
-			%	FlowData.operate(operation, values, initDataType, newDataType)
-			%
-			%	Inputs
-			%
-			%		operation		<char> The mathematical operation to perform.
-			%						  'add':	Adds the values to the data 
-			%						  'scale':	Scales the data by the values
-			%						  'exp':	Takes the data the value exponents
-			%						  'power':	Takes the values to the data exponent
-			%
-			%		values			<numeric> A 1xC vector of values used for
-			%						the operations, where C := # channels 
-			%						* Can alternatively pass a single
-			%						  value to apply to all channels
-			%
-			%		initDataType	<char> (Optional) The dataType to use for
-			%						the operation (default = 'raw').
-			%
-			%		newDataType		<char> (Optional) The name of the new dataType 
-			%						created by the operation (default = 'op#')
-			%						where # indicates how many times operate has
-			%						been called with no newDataType given. 
-			
-			zCheckInputs_operate(self)
-			
-			for iii = 1:max(numel(self.controlData), self.numSamples)
-				for ch = 1:numel(self.channels)
-					
-					chan = self.channels{ch};
-					
-					if (iii <= numel(self.controlData) && ~isempty(self.controlData(iii).(chan)))
-						data = self.controlData(iii).(chan).(initDataType);
-						self.controlData(iii).(chan).(newDataType) = applyOps(data, ch);
-					end
-					
-					if iii <= self.numSamples
-						data = self.sampleData(iii).(chan).(initDataType);
-						self.sampleData(iii).(chan).(newDataType) = applyOps(data, ch);
-					end
-				end
-			end
-			
-			% --- Helper Functions --- %
-			
-			
-			function zCheckInputs_operate(self)
-				
-				validOps = {'add', 'scale', 'exp', 'power'};
-				validatestring(operation, validOps, mfilename, 'operation', 1);
-				validateattributes(values, {'numeric'}, {}, mfilename, 'scalar', 2);
-				if (length(values) == 1)
-					values = repmat(values, 1, size(self.channels));
-				end
-				assert(length(values) == numel(self.channels), ...
-					'Incorrect scalar length passed!');
-				
-				if exist('initDataType', 'var')
-					validatestring(initDataType, self.dataTypes, mfilename, 'initDataType', 3);
-				else
-					initDataType = 'raw';
-				end
-				
-				if exist('newDataType', 'var')
-					validateattributes(newDataType, {'char'}, {}, mfilename, 'initDataType', 3);
-				else
-					self.unnamedOps = self.unnamedOps + 1;
-					newDataType = ['op', num2str(self.unnamedOps)];
-				end
-				
-			end
-			
-			
-			function opData = applyOps(data, ch)
-				switch operation
-					case 'add'
-						opData = data + values(ch);
-					case 'scale'
-						opData = data .* values(ch);
-					case 'exp'
-						opData = data .^ values(ch);
-					case 'power'
-						opData = values(ch) .^ data;
-				end
-			end
-			
-		end
-				
 		
 		function threshGate(self, channels, mode, thresh)
 			% Thresholds cells in the given channel(s) using the given mode to
