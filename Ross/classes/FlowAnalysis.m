@@ -330,7 +330,7 @@ classdef FlowAnalysis < handle
 			%	TIMING RESULTS: 1.3 seconds. (Fastest)
 			%
             %   Inputs
-            %       'dataMatrix'    A N x M double matrix of N elements with M
+            %       'dataMatrix'    A N x D double matrix of N elements with D
             %						dimensions to be binned. 
             %       'binEdges'		An array of edges defining each bin in logicle space.
 			%						The edges are applied to all dimensions. To make unique 
@@ -340,7 +340,7 @@ classdef FlowAnalysis < handle
 			%						*Note: Bin edges are sorted prior to binning.
             %
             %   Output
-            %       'bins'          A N-dimensional cell matrix where each cell 
+            %       'bins'          A D-dimensional cell matrix where each cell 
             %                       holds a double array of numerical indexes 
             %                       for each element in a given bin. The size of
             %                       each dimension is given by the number of
@@ -366,8 +366,8 @@ classdef FlowAnalysis < handle
 			end
             
             % Setup bins as a cell array with dimensions equal to number of cell channels. 
-            nDims = length(binDims);
-            if nDims == 1
+            numDims = length(binDims);
+            if numDims == 1
                 binDims = [binDims, 1];
             end
             bins = cell(binDims);
@@ -379,7 +379,7 @@ classdef FlowAnalysis < handle
 			for i = 1:numel(bins)
 				
 				% Find bin coordinates in ND-space
-				for j = 1:nDims
+				for j = 1:numDims
 					binCoords(j) = binCoords(j) + 1;
 					if binCoords(j) > binDims(j)
 						binCoords(j) = 1;
@@ -390,165 +390,12 @@ classdef FlowAnalysis < handle
 				
 				% Identify all cells within bin by checking bin edges in each dimension
 				cellsInBin = true(size(dataMatrix(:, 1)));
-				for j = 1:nDims
+				for j = 1:numDims
 					cellsInBin = (cellsInBin & ...
 								 (dataMatrix(:, j) <= binEdges{j}(binCoords(j) + 1)) & ...
 								 (dataMatrix(:, j) > binEdges{j}(binCoords(j))));
 				end
 				bins{i} = cellsIdx(cellsInBin);
-			end
-		end
-		
-		
-		function [bins, binDims] = simpleBin2(cells, binEdges)
-            % Takes a double array of cells and bins them in biexp space, 
-            % returning a double array of bin IDs for each cell
-			%
-			%	TIMING RESULTS: 7.87 seconds.
-            %
-            %   Inputs
-            %       'cells'         A N x M double matrix of N cell fluorescence  
-            %                       values in M pre-selected channels. 
-            %       'binEdges'		An array of edges defining each bin in logicle space.
-			%						The edges are applied to all dimensions. To make unique 
-			%						edges for each dimension, pass a cell array of bin edges, 
-			%						where each cell element corresponds with a channel in the
-			%						same order as the columns of 'cells'. 
-			%						*Note: Bin edges are sorted prior to binning.
-            %
-            %   Output
-            %       'bins'          A N-dimensional cell matrix where each cell 
-            %                       holds a double array of numerical indexes 
-            %                       for each cell in a given bin. The size of
-            %                       each dimension is given by the number of
-            %                       edges given in each dimensison. 
-            
-            % Define bins in biexponential space at a wide range
-			
-			if iscell(binEdges)
-				% Unique bin edges for all
-				binDims = zeros(1, numel(binEdges));
-				for be = 1:numel(binEdges)
-					binDims(be) = numel(binEdges{be}) - 1;
-					binEdges{be} = sort(binEdges{be});
-				end
-			else
-				% Bin edges same and apply to all channels
-				binDims = (numel(binEdges) - 1) .* ones(1, size(cells, 2));
-				be = binEdges; % Store for name override
-				binEdges = cell(1, size(cells, 2));
-				binEdges(:) = {be};
-			end
-            
-            % Setup bins as a cell array with dimensions equal to number of cell channels. 
-            nDims = length(binDims);
-            if nDims == 1
-                binDims = [binDims, 1];
-            end
-            bins = cell(binDims);
-            
-            % Place each cell into a bin
-			% --> Using a CellList for easy concatenation of cell IDs on the go
-			bins(:) = {CellList()};
-			for c = 1:size(cells, 1)
-				
-				% Determine cell bin coordinates
-				cellBinCoords = zeros(1, nDims);
-				for j = 1:nDims
-					
-					% Figure out which bin in dimension j the cell is in
-					for k = 1:binDims(j) % Number of bins, not edges
-						if (cells(c, j) >  binEdges{j}(k)) && (cells(c, j) <= binEdges{j}(k + 1))
-							cellBinCoords(j) = k;
-							break
-						end
-					end
-				end
-				% Sort out non-binned cells by the fact that they will be in bin "0"
-				% in at least one dimension, and thus the product will evaluate to 0
-				% and the logical index for that position will be false. 
-				if logical(prod(cellBinCoords))
-					cellBinCoords = num2cell(cellBinCoords);
-					bins{cellBinCoords{:}}.add(c);
-				end
-			end
-			
-			% Extract data from CellList objects used to collect data
-			for b = 1:numel(bins)
-				bins{b} = bins{b}.toVec();
-			end
-		end
-		
-		
-		function [bins, binDims] = simpleBin3(cells, binEdges)
-            % Takes a double array of cells and bins them in biexp space, 
-            % returning a double array of bin IDs for each cell
-            %
-			%	TIMING RESULTS: 3.17 seconds.
-			%
-            %   Inputs
-            %       'cells'         A N x M double matrix of N cell fluorescence  
-            %                       values in M pre-selected channels. 
-            %       'binEdges'		An array of edges defining each bin in logicle space.
-			%						The edges are applied to all dimensions. To make unique 
-			%						edges for each dimension, pass a cell array of bin edges, 
-			%						where each cell element corresponds with a channel in the
-			%						same order as the columns of 'cells'. 
-			%						*Note: Bin edges are sorted prior to binning.
-            %
-            %   Output
-            %       'bins'          A N-dimensional cell matrix where each cell 
-            %                       holds a double array of numerical indexes 
-            %                       for each cell in a given bin. The size of
-            %                       each dimension is given by the number of
-            %                       edges given in each dimensison. 
-            
-            % Define bins in biexponential space at a wide range
-			
-			if iscell(binEdges)
-				% Unique bin edges for all
-				binDims = zeros(1, numel(binEdges));
-				for be = 1:numel(binEdges)
-					binDims(be) = numel(binEdges{be}) - 1;
-					binEdges{be} = sort(binEdges{be});
-				end
-			else
-				% Bin edges same and apply to all channels
-				binDims = (numel(binEdges) - 1) .* ones(1, size(cells, 2));
-				be = binEdges; % Store for name override
-				binEdges = cell(1, size(cells, 2));
-				binEdges(:) = {be};
-			end
-            
-            % Setup bins as a cell array with dimensions equal to number of cell channels. 
-            nDims = length(binDims);
-            if nDims == 1
-                binDims = [binDims, 1];
-            end
-            bins = cell(binDims);
-            
-			% Determine cell bin coordinates
-			cellBinCoords = zeros(size(cells, 1), nDims);
-			for j = 1:nDims
-
-				% Figure out which bin in dimension j the cell is in
-				for k = 1:binDims(j) % Number of bins, not edges
-					cellBinCoords(:, j) = cellBinCoords(:, j) + (cells(:, j) > binEdges{j}(k));
-				end
-				outOfRange = cells(:, j) > binEdges{j}(k + 1);
-				cellBinCoords(outOfRange, j) = 0;
-			end
-			
-			% Sort out non-binned cells by the fact that they will be in bin "0"
-			% in at least one dimension, and thus the product will evaluate to 0
-			% and the logical index for that position will be false. 
-			cellsInBins = logical(prod(cellBinCoords, 2));
-			
-			% Extract cells into bins
-			cellBinCoords = num2cell(cellBinCoords);
-			cellsIdx = 1:size(cells, 1);
-			for c = cellsIdx(cellsInBins) % cellsIdx is a row vector
-				bins{cellBinCoords{c, :}} = [bins{cellBinCoords{c, :}}, c];
 			end
 		end
 		
