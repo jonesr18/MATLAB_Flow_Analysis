@@ -317,531 +317,216 @@ classdef Compensation < handle
                 end
 
             end
-        end
-        
-        
-        function [sampleData, controlData, fitParams, fitFigs] = ...
-                        compensateMatrixBatch(sampleData, controlData, channels, dataType, gate, plotsOn)
-            % compensateMatrixBatch compensates an entire standard data struct by generating 
-            % coefficients with linear fitting on single-color control data and processing the
-            % data to be sent piecewise to Compensation.compensateMatrix(). 
+		end
+		
+		
+		function [coeffs, ints, figFits] = computeCoeffs(scData, channels, options)
+			% Finds the coefficients for linear fits between each channel
+			% when observing bleed-through.
+			%
+			%	[coeffs, ints, figFits] = computeCoeffs(dataMatrix, channels, plotsOn, minFunc)
+			%
+			%	Inputs
+			%
+			%		scData		<cell> A cell list of C NxC data matrices containing 
+			%					N cell fluroescenct values in C channels from C 
+			%					single-color controls. The ordering of the columns 
+			%					(channels) should match the ordering of the 
+			%					corresponding controls in the cell list. 
+			%
+			%		channels	<cell> A cell list of C channel names
+			%					corresponding with the cell list and
+			%					matrix data in scData.
+			%
+			%		options		<struct> (optional) Optional property-value pairs:
+			%						'minFunc':	A user-defined function for
+			%									residual minimzation during
+			%									fitting. Default = @(x) x.^2
+			%									(least-squares approximation)
+			%						'plotsOn':	If TRUE, shows the compensation
+			%									plots, which are passed back to
+			%									the caller (otherwise returns empty).
+			%						'doMEF':	If TRUE, does logicle conversion
+			%									with MEF-unit scaling
+			%						'params':	<params> enables setting the
+			%									logicle function parameters
+			%									(see Transforms.lin2logicle())
+			%
+			%	Outputs
+			%
+			%		coeffs		<numeric> A CxC matrix of linear coefficients
+			%					representing the bleed-through between channels
+			%
+			%		ints		<numeric> A Cx1 vector of linear intercepts
+			%					representing autofluorescence in each channel
+			%
+			%		figFits		<struct> If options.plotsOn = TRUE, this returns 
+			%					a handle to the generated figure with overlaid
+			%					fit lines on the fitted data. If options.plotsOn
+			%					is not passed or is FALSE, this returns empty.
+			%
+			%	Implementation notes
+			%
+			%		The function simultaneously fits coeffs and ints to all the
+			%		data from each control and channel. ints is fixed for each
+			%		channel, so some fits will appear off before compensation is
+			%		applied, after which they are corrected. 
+			%
+			%		We also discard any value in a bleed channel that is > 10x
+			%		the average value, as these often are spillover between
+			%		tubes during data collection and can mess up compensation. 
+			%
+			% Update log:
+			% TODO : Add back the outlier exclusion
+			
+			% Check inputs
+			zCheckInputs_computeCoeffs();
+			
+			% Exclude outliers by ignoring any point that is >10x greater 
+			% on the fix axis as the bleed axis. 
+			for chB = 1:numel(channels)
+				nonChB = setdiff(1:numel(channels), chB);
+				outliers = any(scData{chB}(:, nonChB) > (10 * abs(scData{chB}(:, chB))), 2);
+				scData{chB} = scData{chB}(~outliers, :);
+			end
+			
+			% Equalize the number of points between each control
+			numPoints = min(cellfun(@(x) size(x, 1), scData));
+			scData = cellfun(@(x) x(FlowAnalysis.subSample(size(x, 1), numPoints), :), ...
+				scData, 'uniformoutput', false);
+			
+			% Fitting initial conditions
+			A0 = 10 * ones(numel(channels), 1);					% Intercepts (Autofluorescence)
+			K0 = zeros(numel(channels)^2 - numel(channels), 1);	% Coefficients (Bleed-through)
+			
+			% Iterate over each pair of channels and compute fits
+			optimOptions = optimset('Display', 'off');
+			[minResult, fval] = fminsearch(@(x) fitFunc(x, options.minFunc), [A0; K0], optimOptions);
+			fprintf('Linear fits obtained with obj func val %.2f\n', fval);
+			ints = minResult(1:numel(channels));
+			coeffs = eye(numel(channels));
+			coeffs(~logical(eye(numel(channels)))) = minResult(numel(channels) + 1 : end);
+			
+			% Set up figure to view fitting (if applicable)
+			if ~options.plotsOn
+				figFits = [];
+				return % No need to process the rest of the code
+			end
+			
+			% Prep figure
+			figFits = figure();
+			spIdx = 0;
+			xrange = logspace(0, ceil(log10(max(cellfun(@(x) max(x(:)), scData)))), 100);
+			
+			for chF = 1:numel(channels)
+				for chB = 1:numel(channels) 
+					
+					fitVals = xrange * coeffs(chF, chB) + ints(chF);
+					
+					spIdx = spIdx + 1;
+					ax = subplot(numel(channels), numel(channels), spIdx);
+					hold(ax, 'on')
+					
+					plot(ax, Transforms.lin2logicle(scData{chB}(:, chB), ...
+								 options.doMEF, options.logicle), ...
+							 Transforms.lin2logicle(scData{chB}(:, chF), ...
+								 options.doMEF, options.logicle), ...
+							 '.', 'MarkerSize', 4)
+					plot(ax, Transforms.lin2logicle(xrange, ...
+								 options.doMEF, options.logicle), ...
+							 Transforms.lin2logicle(fitVals, ...
+								 options.doMEF, options.logicle), ...
+							 '-', 'linewidth', 4)
+					Plotting.biexpAxes(ax, true, true, false, ...
+							 options.doMEF, options.logicle);
+					
+					% Axis labeling
+					title(sprintf('Slope: %.2f | Intercept: %.2f', ...
+						coeffs(chF, chB), ints(chF)), 'fontsize', 14)
+					if (chF == numel(channels))
+						xlabel(strrep(channels{chB}, '_', '-'))
+					end
+					if (chB == 1)
+						ylabel(strrep(channels{chF}, '_', '-'))
+					end
+				end
+			end
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_computeCoeffs()
+				
+				validateattributes(scData, {'cell'}, {}, mfilename, 'scData', 1);
+				for sc = 1:numel(scData) 
+					validateattributes(scData{sc}, {'numeric'}, {}, mfilename, sprintf('scData{%d}', sc), 1);
+				end
+				validateattributes(channels, {'cell'}, {}, mfilename, 'channels', 2);
+				assert(numel(channels) == numel(scData), 'Incorrect number of channel controls or labels!')
+				assert(numel(channels) == size(scData{1}, 2), 'Incorrect number of channel data or labels!');
+				assert(numel(channels) > 1, 'Compensation with just one channel is useless!');
+				
+				if ~exist('options', 'var'), options = struct(); end
+				if ~isfield(options, 'plotsOn'), options.plotsOn = false; end
+				options.plotsOn = all(logical(options.plotsOn));
+				if isfield(options, 'minFunc')
+					validateattributes(options.minFunc, {'function_handle'}, {}, mfilename, 'options.minFunc', 4)
+				else
+					options.minFunc = @(x) sum(x.^2);
+				end
+				if ~isfield(options, 'logicle'), options.logicle = struct(); end
+				if ~isfield(options, 'doMEF'), options.doMEF = false; end
+				
+			end
+			
+			
+			function out = fitFunc(p, minFunc)
+				% Fit function for computing linear fits between bleed 
+				% and fix channels in each scData control
+				
+				% Think about trying to fit everything at once?
+				
+				% Setup fit matrix
+				A = p(1:numel(channels));
+				K = eye(numel(channels));
+				K(~logical(eye(numel(channels)))) = p(numel(channels) + 1 : end);
+				
+				% Find regression with each channel
+				residuals = zeros(1, numel(channels));
+				for ch = 1:numel(channels)
+					fixedData = K \ (scData{ch}' - A);
+					chans = setdiff(1:numel(channels), ch); % Skip ch since is not min to 0
+					residuals(ch) = minFunc(reshape(fixedData(chans, :), 1, []));
+				end
+				
+				out = sum(residuals);
+			end
+		end
+		
+		
+        function compData = matrixComp(uncompData, coeffs)
+            % Compensates data using linear coefficients for bleed-through between channels.
             % 
-            % The method first subtracts autofluorescence based on the untransfected cell
-            % sample provided (see below)
-            %
-            %   compData = compensateMatrixBatch(sampleData, controlData, channels, dataType, gate, plotsOn)
+            %   compData = matrixComp(uncompData, coeffs)
             %   
-            %       Inputs: 
-            %           sampleData      A stardard struct with channel data to be compensated. 
-            %            (struct)       'channels' should all exist in this struct.
-            %           
-			%			controlData     A standard struct with control data to help with
-			%			 (struct) 		compensation and to be compensated. 
-            %							
-            %                       *** The order of controls is very particular:
-			%							The first N elements in the struct array 
-			%							are single-color controls used for calculating
-			%							bleed-through, and must be in the same order as 
-			%							their corresponding colors in 'channels'
-			%							-- This will not be auto-checked!
-			%							
-			%							The very last element must correspond with the 
-			%							wild-type cell data (untransfected).
-			%							
-			%							Between the WT data and SC data, there
-			%							can be two-color or other controls which
-			%							are not used for compensation. 
-			%
-            %           channels        A cell array of strings indicating the channels to be fixed
-            %            (cell)         by the compensation procedure.
+            %   Inputs: 
+            %       uncompData		A CxN matrix of data points corresponding with
+			%						N cells in C channels to be compensated. 
             %
-            %                           Entries should be strings with the names given by Fortessa
-            %                           but with spaces and dashes replaced by underscores
-            %                               eg: {'PE_Texas_Red_A', 'FITC_A'}
-            %                               Note: this is case-sensitive
-			%
-			%			dataType (opt)	A string indicating which data type to compensate with. 
-			%			 (string)		
-            %
-            %           gate (opt)      A string indicating which gated population to compensate
-            %            (string)       with, for example, 'P3'. Must match entries in 'gates'
-            %                           field of all data structs.
-            %
-            %           plotsOn (opt)   A boolean indicating whether to plot or not
-            %            (logical)
+            %       coeffs			A CxC matrix of coefficients corresponding with
+            %						the slope of lines of best fit between C channels 
+            %						bleeding into each other. 
             %
             %       Outputs:
-            %           sampleData      A copy of the data struct with added 'afs' and 'mComp' 
-            %            (struct)       fields for each compensated channel.
-            %                               afs = autofluorescence subtracted
-            %                               mComp = matrix compensated
-            %
-            %           controlData     A copy of the controlData struct with added 'afs' and 
-            %            (struct)       'mComp' fields for each compensated channel.
-			%
-			%			fitParams		(Optional) The parameters fit during compensation
-            %
-            %
-            % Ross Jones, Weiss Lab
-            % jonesr18@mit.edu
-            % Created 2017-06-06
-            % 
-            % Update Log: 
-            %
-            %	2017-07-16		Added dataType input
-			%	2017-08-22		Added full compensation parameter output,
-			%					changed autofluorescence calculation
-			%	2017-10-03		Changed interface to accept single-struct controlData
-			%
-			%	...
-			%
-			% Autofluorescence:		[ 4,  2, 0,   1]
-			% Summed Intercepts:	[13, 11, 0, -15]
-			% Ints after AF sub:	[ 1,  5, 0, -18]
-			% AF Sub effect:	  - [12,  6, 0,   3] = -3 * AF
-            
-            % Check the inputs - makes no changes to data structures
-            zCheckInputs_compensateMatrixBatch();
-			fitFigs = struct();
-			
-            % Find medians for each channel in jcData
-% 			autofluor = getAutofluor();
-            
-            % Find coefficients using least-squares linear fits - uses afs data
-            [coeffs, ints, fitFigs.pre] = getCoefficients();
-			
-			% Calculate autofluorescence from scData fit Y-intercepts
-			autofluor = sum(ints, 2) / (numel(channels) - 1); 
-% 			autofluor = zeros(numel(channels), 1);
-			
-			% Subtract autofluorescence - adds autofluorescence subtracted (afs) 
-            % field to existing data structures
-			for i = 1:numel(sampleData)
-				sampleData(i) = subtractAutofluorescence(sampleData(i), autofluor);
-			end
-			for i = 1:numel(controlData)
-				if isempty(controlData(i).(channels{1})), continue, end % % Some FlowData tcData will be empty 
-				controlData(i) = subtractAutofluorescence(controlData(i), autofluor);
-			end
-            
-            % Process the compensation - adds matrix compensated (mComp) field
-            % to existing data structures
-            for i = 1:numel(sampleData)
-                sampleData(i) = processCompensation(sampleData(i), coeffs);
-            end
-            for i = 1:numel(controlData)
-				if isempty(controlData(i).(channels{1})), continue, end % % Some FlowData tcData will be empty 
-                controlData(i) = processCompensation(controlData(i), coeffs);
-            end
-            
-            % Check compensation results
-            [coeffs_comp, ints_comp, fitFigs.post] = getCoefficients(true);
-            
-			fitParams = struct( ...
-				'intercepts', ints, ...
-				'autofluor', autofluor, ...
-				'coefficients', coeffs, ...
-				'comp_ints', ints_comp, ...
-				'comp_coeffs', coeffs_comp);
-			
-            
-            % --- Helper functions --- %
-            
-            
-            function zCheckInputs_compensateMatrixBatch()
-                
-                % Check types
-                validateattributes(sampleData, {'struct'}, {}, mfilename, 'inputData', 1);
-                validateattributes(controlData, {'struct'}, {}, mfilename, 'controlData', 2);
-				validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 3);
-				if exist('dataType', 'var')
-					validatestring(dataType, fieldnames(controlData(1).(channels{1})), mfilename, 'dataType', 4);
-				end
-                if exist('gate', 'var')
-                    validatestring(gate, fieldnames(controlData(1).gates), mfilename, 'gate', 5);
-                end
-                if exist('plotsOn', 'var')
-                    validateattributes(plotsOn, {'logical'}, {}, mfilename, 'plotsOn', 6);
-                else
-                    plotsOn = false;
-                end
-                
-                % Check if number of channels is equal to length of single-color struct
-                %   (should be 1:1 matching, or fewer if not all are needed)
-                if ischar(channels), channels = {channels}; end
-                assert((length(channels) + 1) <= length(controlData), ...
-                    'Too many channels (%d) for given number of controls (%d)', ...
-                    length(channels), length(controlData));
-                
-                % Check if each given single color channel is in the measured channels
-                for ch = 1:numel(channels)
-                    if isempty(intersect(channels{ch}, fieldnames(controlData(ch))))
-                        error('Given scChannel: %s is not valid', channels{ch});
-                    end
-                end
-            end
-            
-            
-            function autofluor = getAutofluor()
-                % Builds an Nx1 array of autofluorescent values in each channel
-				%
-				%	CURRENTLY NOT USED
-                
-                % Set up figure to view distribution (if applicable)
-                if plotsOn
-                    figure()
-                    spIdx = 0;
-                end
-                
-                autofluor = zeros(1, numel(channels));
-                if exist('gate', 'var')
-                    wtGate = controlData(end).gates.(gate);
-                else
-                    wtGate = true(1, numel(controlData(end).(channels{1}).(dataType)));
-                end
-                for ch = 1:numel(channels)
-                    autofluor(ch) = median(controlData(end).(channels{ch}).(dataType)(wtGate));
-                    
-                    if plotsOn
-                        spIdx = spIdx + 1;
-                        ax = subplot(1, numel(channels), spIdx);
-                        hold(ax, 'on')
-                        histogram(ax, real(controlData(end).(channels{ch}).(dataType)(wtGate)))
-                        histogram(ax, real(controlData(end).(channels{ch}).(dataType)(wtGate) - autofluor(ch)))
-                    end
-                end
-            end
-            
-            
-            function dataSubset = subtractAutofluorescence(dataSubset, autofluor)
-                % Subtracts autofluorescence from the given data subset
-                
-                % Iterate over data and subtract autofluorescence
-				% Don't gate the data to keep the .afs data full-size.
-                for ch = 1:numel(channels)
-                    dataSubset.(channels{ch}).afs = ...
-							dataSubset.(channels{ch}).(dataType) - autofluor(ch);
-                end
-            end
-            
-            
-            function [coefficients, intercepts, fitFig] = getCoefficients(isComp)
-                % Finds the coefficients for linear fits between each channel
-                % when observing bleed-through.
-                %
-                % Optional input: isComp (can use to check post-comp data)
-                
-                % Set up figure to view fitting (if applicable)
-				if plotsOn
-					fitFig = figure();
-					spIdx = 0;
-				else
-					fitFig = [];
-				end
-                
-                coefficients = zeros(numel(channels));
-				intercepts = zeros(numel(channels));
-                for chF = 1:numel(channels)
-                    
-                    % Find regression with each channel
-                    for chB = 1:numel(channels)
-                        
-						if exist('gate', 'var')
-							scGate = controlData(chB).gates.(gate);
-						else
-							scGate = true(size(controlData(chB).(channels{1}).(dataType)));
-						end
-						
-						% Throw out first 10% of cells in case of carry-through
-						% --> Cells are ordered by time aquired
-% 						timeCutoff = 0.9; % First fraction of samples to ignore
-% 						timeGate = true(size(controlData(chB).(channels{1}).(dataType)));
-% 						timeGate(1:round(numel(timeGate) * timeCutoff)) = false;
-% 						scGate = (scGate & timeGate); 
-						
-						if (exist('isComp', 'var') && isComp)
-							scBleedData = controlData(chB).(channels{chB}).mComp(scGate);
-							scFixData = controlData(chB).(channels{chF}).mComp(scGate);
-						else
-							scBleedData = controlData(chB).(channels{chB}).(dataType)(scGate);
-							scFixData = controlData(chB).(channels{chF}).(dataType)(scGate);
-						end
-						
-						% Only necessary for log-scale calculaitons, but linear
-						% is the correct way to do it.
-% 						valid = (scBleedData > 0 & scFixData > 0);
-% 						scBleedData = scBleedData(valid);
-% 						scFixData = scFixData(valid);
-						
-						% The time gating seemed to not get rid of all bad
-						% points, causing problems to persist in fitting.
-						% Instead, we will try to exclude outliers by egnoring
-						% any point that is >10x greater on the fix axis as the
-						% bleed axis. 
-						badPoints = scFixData > scBleedData .* 10;
-						scFixData = scFixData(~badPoints);
-						scBleedData = scBleedData(~badPoints);
-                        
-                        % This is the same as calculating the slope with a least
-                        % squares metric. Rows are channels being bled into and
-                        % columns are bleeding channels. 
-%                         coefficients(chF, chB) = scBleedData(:) \ scFixData(:);
-
-						% Best to also gather the intercept so we can estimate
-						% the autofluorescence better
-                        [~, coefficients(chF, chB), intercepts(chF, chB)] = regression(scBleedData', scFixData');
-                        
-                        if plotsOn
-							maxPoints = 6000;
-							numPoints = min(numel(scFixData), maxPoints);
-							points = randperm(numel(scFixData), numPoints);
-							switch dataType
-								case {'mef', 'mefl'}
-									xrange = logspace(-1, 9, 100);
-									doMEF = true;
-								otherwise
-									xrange = logspace(-1, 6, 100);
-									doMEF = false;
-							end
-							
-							spIdx = spIdx + 1;
-							ax = subplot(numel(channels), numel(channels), spIdx);
-							hold(ax, 'on')
-
-							plot(ax, Transforms.lin2logicle(scBleedData(points), doMEF), ...
-								 Transforms.lin2logicle(scFixData(points), doMEF), ...
-								 '.', 'MarkerSize', 4)
-							plot(ax, Transforms.lin2logicle(xrange, doMEF), ...
-								 Transforms.lin2logicle(xrange * coefficients(chF, chB) + intercepts(chF, chB), doMEF), ...
-								 '-', 'linewidth', 4)
-							Plotting.biexpAxes(ax, true, true, false, doMEF);
-							
-							% Axis labeling
-							title(sprintf('Slope: %.2f | Intercept: %.2f', ...
-								coefficients(chF, chB), intercepts(chF, chB)), 'fontsize', 14)
-							if (chF == numel(channels))
-								xlabel(strrep(channels{chB}, '_', '-'))
-							end
-							if (chB == 1)
-								ylabel(strrep(channels{chF}, '_', '-'))
-							end
-                        end
-                    end
-                end
-            end
-            
-            function [coefficients, intercepts, fitFig] = getCoefficientsBre(isComp)
-                % Finds the coefficients for linear fits between each channel
-                % when observing bleed-through.
-                %
-                % Optional input: isComp (can use to check post-comp data)
-                
-                % Set up figure to view fitting (if applicable)
-				if plotsOn
-					fitFig = figure();
-					spIdx = 0;
-				else
-					fitFig = [];
-				end
-                
-
-                coefficients = ones(numel(channels));
-%                 for ch=1:numel(channels)
-%                     coefficients(ch,ch) = 1;
-%                 end
-				intercepts = zeros(numel(channels),1);
-                     
-                
-                A0 = [10;10;10];
-                K0 =[1 0 0
-                    0 1 0
-                    0 0 1];
-                
-%                 A = zeros(3,1);
-%                 K =ones(3);
-                
-                inds = [1:numel(channels)];
-                    
-                for chF = 1:numel(channels)  
-                     f = @(x) compFunc(x,chF);
-                     [minresult, fval] = fminsearch(f,[A0(chF),K0(chF,inds(inds~=chF))]);
-                     
-                     intercepts(chF) = minresult(1);
-                     coefficients(chF,inds(inds~=chF)) = minresult(2:end);
-
-
-                     
-                     
-                     %%%%%   added so Ross's plot stuff will work  but chB looping is done in compFunc %%%%%
-                    if plotsOn
-                        for chB = 1:numel(channels) 
-                            if exist('gate', 'var')
-                                scGate = controlData(chB).gates.(gate);
-                            else
-                                scGate = true(size(controlData(chB).(channels{chB}).(dataType)));
-                            end
-
-                            if (exist('isComp', 'var') && isComp)
-                                scBleedData = controlData(chB).(channels{chB}).mComp(scGate);
-                                scFixData = controlData(chB).(channels{chF}).mComp(scGate);
-                            else
-                                scBleedData = controlData(chB).(channels{chB}).(dataType)(scGate);
-                                scFixData = controlData(chB).(channels{chF}).(dataType)(scGate);
-                            end
-                            
-                            maxPoints = 6000;
-							numPoints = min(numel(scFixData), maxPoints);
-							points = randperm(numel(scFixData), numPoints);
-							switch dataType
-								case {'mef', 'mefl'}
-									
-									xrange = logspace(-1, 9, 100);
-									
-									spIdx = spIdx + 1;
-									ax = subplot(numel(channels), numel(channels), spIdx);
-									hold(ax, 'on')
-									
-									plot(ax, Transforms.lin2logicleMEF(scBleedData(points)), ...
-										 Transforms.lin2logicleMEF(scFixData(points)), ...
-										 '.', 'MarkerSize', 4)
-									plot(ax, Transforms.lin2logicleMEF(xrange), ...
-										 Transforms.lin2logicleMEF(xrange * coefficients(chF, chB) + intercepts(chF)), ...
-										 '-', 'linewidth', 4)
-									Plotting.biexpAxesMEF(ax);
-																	
-								otherwise
-									
-									xrange = logspace(-1, 6, 100);
-									
-									spIdx = spIdx + 1;
-									ax = subplot(numel(channels), numel(channels), spIdx);
-									hold(ax, 'on')
-
-									plot(ax, Transforms.lin2logicle(scBleedData(points)), ...
-										 Transforms.lin2logicle(scFixData(points)), ...
-										 '.', 'MarkerSize', 4)
-									plot(ax, Transforms.lin2logicle(xrange), ...
-										 Transforms.lin2logicle(xrange * coefficients(chF, chB) + intercepts(chF)), ...
-										 '-', 'LineWidth', 4)
-									Plotting.biexpAxes(ax);
-                            end
-                            
-                            % Axis labeling
-							title(sprintf('Slope: %.2f | Intercept: %.2f', ...
-								coefficients(chF, chB), intercepts(chF)), 'fontsize', 14)
-							if (chF == numel(channels))
-								xlabel(strrep(channels{chB}, '_', '-'))
-							end
-							if (chB == 1)
-								ylabel(strrep(channels{chF}, '_', '-'))
-							end
-
-
-                        end
-                    end
-                    %%% 
-                end
-                
-          
-        end
-            
-        function out = compFunc(fit_vals,chF)
-            
-            A = zeros(numel(channels),1);
-            K =[1 0 0
-                0 1 0
-                0 0 1];
-            
-            inds=1:numel(channels);
-
-            A(chF) = fit_vals(1);
-            K(chF,inds(inds~=chF)) = fit_vals(2:end);
-
-            
-            R_vals = zeros(1,numel(channels));
-                    
-                    % Find regression with each channel
-                    for chB = 1:numel(channels)
-                        if chB~=chF
-                            if exist('gate', 'var')
-                                scGate = controlData(chB).gates.(gate);
-                            else
-                                scGate = true(size(controlData(chB).(channels{chB}).(dataType)));
-                            end
-
-                            % build data matrix
-                            scFixData = zeros(numel(channels), numel(controlData(chB).(channels{1}).(dataType)(scGate)));
-                            for ch = 1:numel(channels)
-                                scFixData(ch, :) = controlData(chB).(channels{ch}).(dataType)(scGate);
-                            end
-
-                            scFixedData = K\(scFixData-A);
-
-                            R_vals(chB) = mean(abs(scFixedData(chF,:)));
-                        end
-                    end
-                    
-            out = sum(R_vals);
-        end
-
-            
-            function dataSubset = processCompensation(dataSubset, coefficients)
-                % Processes the compensation for one data subset
-                
-                % Extract raw data into NxM matrix (N = num channels, M = num cells)
-				% Don't gate the data to keep the .mComp data full-size.
-				rawData = zeros(numel(channels), numel(dataSubset.(channels{1}).afs));
-                for ch = 1:numel(channels)
-					rawData(ch, :) = dataSubset.(channels{ch}).afs;
-                end
-                
-                % Apply matrix compensation
-                fixedData = Compensation.compensateMatrix(rawData, coefficients);
-                
-                % Implant compensated data
-                for ch = 1:numel(channels)
-                    dataSubset.(channels{ch}).mComp = fixedData(ch, :)';
-                end
-                
-%                 % Test plotting
-%                 if exist('plotsOn','var') && plotsOn
-%                     figure()
-%                     biexplot(scBleedChannel, scFixChannel, {'.', 'markersize', 5})
-%                     hold on
-%                     biexplot(inBleedChannel, inFixChannel, {'.', 'markersize', 5})
-%                     hold on
-%                     biexplot(inBleedChannel, compdInFixChannel, {'.', 'markersize', 5})
-%                     pause()
-%                 end
-
-            end
-        end
-            
-        
-        function compdData = compensateMatrix(inputData, coefficients)
-            % compensateMatrix compensates data using linear coefficients for
-            % bleed-trhough between channels.
-            % 
-            %   compData = compensateMatrix(matrixFile, inputData)
-            %   
-            %       Inputs: 
-            %           inputData       An NxM matrix of data points corresponding with
-            %                           M cells in N channels to be compensated. 
-            %
-            %           coefficients    An NxN matrix of coefficients corresponding with
-            %                           the slope of lines of best fit between N channels 
-            %                           bleeding into each other. 
-            %
-            %       Outputs:
-            %           compData        A copy of the inputData struct with added matComp field
-            %            (struct)       for each compensated channel.
+            %           compData	An NxM matrix with compensated data.
             %   
             %   This method solves the linear set of equations:
             %       X_observed = A * X_real
             %
-            %   'inputData' corresponds with 'X_observed' and 'coefficients'
-            %   corresponds with the matrix 'A'. We invert 'A' to solve for
-            %   X_real, which is returned as 'compdData'.
+            %   'uncompData' corresponds with 'X_observed' and 'coeffs'
+            %   corresponds with the matrix 'A'. We invert 'A' to solve
+            %   for X_real, which is returned as 'compdData'.
             %
             % Ross Jones
             % Weiss Lab
@@ -855,8 +540,7 @@ classdef Compensation < handle
             zCheckInputs_compensateMatrix();
             
             % Compensate data
-			coefficients = coefficients .* (1 * ones(size(coefficients)) - 0 * eye(size(coefficients)));
-            compdData = coefficients \ inputData;
+            compData = coeffs \ uncompData;
             
             
             % --- Helper functions --- %
@@ -865,16 +549,16 @@ classdef Compensation < handle
             function zCheckInputs_compensateMatrix()
                 
                 % Check types
-                validateattributes(inputData, {'numeric'}, {}, mfilename, 'inputData', 1);
-                validateattributes(coefficients, {'numeric'}, {}, mfilename, 'coefficients', 2);
+                validateattributes(uncompData, {'numeric'}, {}, mfilename, 'uncompData', 1);
+                validateattributes(coeffs, {'numeric'}, {}, mfilename, 'coeffs', 2);
                 
                 % Check sizes
-                assert(size(inputData, 1) == size(coefficients, 2), ...
-                    '# Channels in ''inputData'' (%d) and ''coefficients'' (%d) are not the same!', ...
-                    size(inputData, 1), size(coefficients, 2))
-                assert(size(coefficients, 1) == size(coefficients, 2), ...
-                    '''coefficients'' is not square! (H = %d, W = %d)', ...
-                    size(coefficients, 1), size(coefficients, 2))
+                assert(size(uncompData, 1) == size(coeffs, 2), ...
+                    '# Channels in ''uncompData'' (%d) and ''coeffs'' (%d) are not the same!', ...
+                    size(uncompData, 1), size(coeffs, 2))
+                assert(size(coeffs, 1) == size(coeffs, 2), ...
+                    '''coeffs'' is not square! (H = %d, W = %d)', ...
+                    size(coeffs, 1), size(coeffs, 2))
             end
         end
 		
