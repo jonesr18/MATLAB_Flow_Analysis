@@ -871,11 +871,11 @@ classdef Plotting < handle
 		    
 			if doMEF
 				% Tick values
-				tickVals = Transforms.lin2logicleMEF( sort( ...
+				tickVals = Transforms.lin2logicle( sort( ...
 					[-10^6, -(1:9).*10^5, -(1:9).*10^4, 0, ...
 					 (1:9).*10^4, (1:9).*10^5, (1:9).*10^6, ...
-					 (1:9).*10^7, (1:9).*10^8, 1e9]));
-
+					 (1:9).*10^7, (1:9).*10^8, 1e9]), doMEF, params);
+				
 				% Tick labels
 				text = {'-10^6', '', '', '', '', '', '', '', '', '', ...
 						 '', '', '', '', '', '', '', '', '', '  0^{ }', '', ...
@@ -889,7 +889,7 @@ classdef Plotting < handle
 				tickVals = Transforms.lin2logicle( sort( ...
 					[-10^2, -(1:9).*10^1, 0, ...
 					 (1:9).*10^1, (1:9).*10^2, ...
-					 (1:9).*10^3, (1:9).*10^4, 1e5]));
+					 (1:9).*10^3, (1:9).*10^4, 1e5]), doMEF, params);
             
 				% Tick labels
 				text = {'-10^2', '', '', '', '', '', '', '', '', '', '  0^{ }', '', ...
@@ -1765,9 +1765,12 @@ classdef Plotting < handle
 			%							  axes in the given dimensions 
 			%								({'C', 'X', 'Y', 'Z'} accepted, where 
 			%								'C' corresponds w/ the colorbar)
-			%							'logicle', <params> enables setting the
-			%						      logicle function parameters
-			%								(see Transforms.lin2logicle())
+			%							'doMEF' If TRUE, does logicle conversion
+			%							  with MEF-unit scaling
+			%								(default = FALSE)
+			%							'params': <params> enables setting the
+			%							  logicle function parameters
+			%							  (see Transforms.lin2logicle())
 			%							'min', <min val> enables setting the
 			%							  lower bound for color-data conversion
 			%								(default = 0)
@@ -1839,8 +1842,7 @@ classdef Plotting < handle
 						Plotting.biexpAxes(ax, ismember('X', options.biexp), ...
 										   ismember('Y', options.biexp), ...
 										   ismember('Z', options.biexp), ...
-										   options.logicle.MEF ~= 1, ...
-										   options.logicle)
+										   options.doMEF, options.logicle)
 					end
 					
 					% Plot Z (3D) labels if applicable
@@ -1895,9 +1897,7 @@ classdef Plotting < handle
 			end
 			
 			if ismember('C', options.biexp)
-				cbar = Plotting.biexpColorbar(ax, ...
-						   options.logicle.MEF ~= 1, ...
-						   options.logicle);
+				cbar = Plotting.biexpColorbar(ax, options.doMEF, options.logicle);
 			else
 				cbar = colorbar(ax);
 				cbar.Limits = [min(dataMatrix(:)), max(dataMatrix(:))];
@@ -1963,7 +1963,7 @@ classdef Plotting < handle
 				end
 				if ~isfield(options, 'biexp'), options.biexp = {}; end
 				if ~isfield(options, 'logicle'), options.logicle = struct(); end
-				if ~isfield(options.logicle, 'MEF'), options.logicle.MEF = 1; end % Pre-set to 1 for later checking
+				if ~isfield(options, 'doMEF'), options.doMEF = false; end
 				if ~isfield(options, 'min'), options.min = 0; end
 				if ~isfield(options, 'max'), options.max = 4.5; end
 				
