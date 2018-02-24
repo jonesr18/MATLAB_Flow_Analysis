@@ -858,7 +858,7 @@ classdef FlowData < handle
 			%		but doesn't use the optimized matrix methods and is thus
 			%		actually slower. 
 			%
-			%		The reason to do this maximally slow binning method is so
+			%		The reason to do this relatively slow binning method is so
 			%		that accessing which cells are in each bin operates in O(1)
 			%		time, as we can directly query a bin to see which cells are
 			%		inside of it, making all operations _after_ binning much 
@@ -873,18 +873,6 @@ classdef FlowData < handle
 						'dataType', binDataType, ...
 						'equalize', false));
 				
-				% Transform to logicle space based on the dataType
-				if (strcmpi(binDataType, 'raw') ...
-						|| (ismember(binDataType, {'afs', 'comp'}) ...
-							&& strcmpi(self.compDataType, 'raw')))
-					% Raw data (comp or not)
-					doMEF = false;
-				else
-					% MEF or MEFL transformed data (comp or not)
-					doMEF = true;
-				end
-				
-				slicedData = Transforms.lin2logicle(slicedData, doMEF, self.logicleParams);
 				self.bins{i} = FlowAnalysis.simpleBin(slicedData, binEdges);
 				
 			end
