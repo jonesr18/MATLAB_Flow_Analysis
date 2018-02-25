@@ -1,24 +1,25 @@
-%  Priority Queue class for Matlab
-%   
-%   Methods Implemented:
-%      
-%       peek        Look at the top-priority element w/o removing
-%
-%       dequeue     Remove the top-priority element
-%
-%       queue       Add a new element to the queue
-%
-%       remove      Remove an element (based on matching user data)
-%
-%   This class uses a binary heap implemented in a MATLAB array to prioritize data
-%
-%
-% Written by Richard T. Guy
-%
-% Edited by Ross Jones to include removal of non-top priority nodes
-% Also added more/better comments
+
 classdef PriorityQueue < handle
-   
+	%  Priority Queue class for Matlab
+	%   
+	%   Methods Implemented:
+	%      
+	%       peek        Look at the top-priority element w/o removing
+	%
+	%       dequeue     Remove the top-priority element
+	%
+	%       queue       Add a new element to the queue
+	%
+	%       remove      Remove an element (based on matching user data)
+	%
+	%   This class uses a binary heap implemented in a MATLAB array to prioritize data
+	%
+	%
+	% Written by Richard T. Guy
+	%
+	% Edited by Ross Jones to include removal of non-top priority nodes
+	% Also added more/better comments
+	
     properties (SetAccess = private, GetAccess = public)
         size; 
         heapData = [];
