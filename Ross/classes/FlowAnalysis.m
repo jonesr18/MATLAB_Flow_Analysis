@@ -21,9 +21,10 @@ classdef FlowAnalysis < handle
     %       [x1, x2, p1, p2, yfit1, yfit2, rsq_both] = LSB_fit(constitutive, reporter, doLog, skip)
     %       data			= ronBin(data, constitutive, outputs)
     %
-    % Written/Compiled by Ross Jones
+    % Written/Compiled by
+	% Ross Jones
+	% jonesr18@mit.edu
     % Weiss Lab, MIT
-    % Last updated 2016-05-27
     
     methods (Static)
         
@@ -38,6 +39,7 @@ classdef FlowAnalysis < handle
             %   data based on the 'raw' .fcs data.
             %
             % Inputs:
+			%	
             %   Subsequent arguments must be valid filenames given as strings.
             %   .fcs at the end of the filenames can be left off. 
             %   If files are on path, name can be given, otherwise full path + name
@@ -45,18 +47,23 @@ classdef FlowAnalysis < handle
             %
             % 
             % Output:
+			%
             %   A standard struct of data with the following characteristics:
             %       Fields:
             %           header          The header copied from the .fcs files
             %           nObs            The number of observations (events)
             %           chanNames       A list of channels, given as strings. 
-            %                               Channel names are optimized for use as fields, see below
-            %           <channelName>   Each channel name in chanNames is also a field, pointing 
-            %                           to a substructure. The substructure has the fields 'raw', 
-            %                           'scaled', and 'comp'. Comp is only useful if you did 
-            %                           compensation on the machine. Scaled is also by the machine.
-            %                           If comp and scaled are the same as raw, they are not
-            %                           included in the data strcuture. 
+            %                           Channel names are optimized for use as 
+			%							fields, see below
+            %           <channelName>   Each channel name in chanNames is also a 
+			%							field, pointing to a substructure. The 
+			%							substructure has the fields 'raw', 'scaled', 
+			%							and 'comp'. Comp is only useful if you did 
+            %                           compensation on the machine. Scaled is also 
+			%							by the machine. If comp and scaled are the 
+			%							same as raw, they are not included in the 
+			%							data strcuture and you will need to do 
+			%							compensation using the Compensation module. 
             %
             %   Relevant header fields:
             %       filename
@@ -66,10 +73,13 @@ classdef FlowAnalysis < handle
             %       par.name         (parameters -- channels)
             %
             %
-            % Written by:
-            %   Ross Jones
-            %   Weiss Lab, MIT
-            %   Updated 2015-11-18
+            % Written by
+            % Ross Jones
+			% jonesr18@mit.edu
+            % Weiss Lab, MIT
+			%
+            % Update Log: 
+			% 
             
             % Check inputs (should be the transfection marker channel name, then filenames)
             filenames = {};
@@ -205,7 +215,12 @@ classdef FlowAnalysis < handle
             %       'data.(...).stds'       Bin std deviation
             %       'data.(...).geostds'    Bin geometric standard deviation (pos vals only)
             %
-            % Update Log
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			%
+            % Update Log:
 			%	2017-05-15
             %	 - Changed data.bins to be a double array of bin IDs instead of a cell
             %	   array of logicle vectors
@@ -347,6 +362,14 @@ classdef FlowAnalysis < handle
             %                       edges given in each dimensison. 
 			%		'binDims'		A vector indicating the number of bins in
 			%						each dimension. 
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
             
             % Define bins in biexponential space at a wide range
 			
@@ -445,10 +468,13 @@ classdef FlowAnalysis < handle
             %                       pdf         (probability density function)
             %                                   - eval at linspace(-2, 5, 1e2) for each channel
             %    
-            % Written by Ross Jones
+            % Written By 
+			% Ross Jones
             % jonesr18@mit.edu
             % Weiss Lab, MIT
-            % Last updated 2016-04-05
+			% 
+            % Update Log:
+			%
             
             % Check existence of optional inputs, assign defaults
             if (~exist('dataType', 'var'))
@@ -665,11 +691,12 @@ classdef FlowAnalysis < handle
             %                           ratioMeans      (not implemented)
             %                           ratioSDs        (not implemented)
             %       
-            % Written by Ross Jones
-            %   Weiss Lab, MIT
-            %   2016-05-27
+            % Written By 
+			% Ross Jones
+			% jonesr18@mit.edu
+            % Weiss Lab, MIT
             %   
-            % Updates:
+            % Updates Log:
             %   2016-12-06: Added thresholding by average percentage above threshold (threshPct)
             
             % Check inputs
@@ -923,6 +950,11 @@ classdef FlowAnalysis < handle
             %   Ouputs:
             %       data        Updated data struct. Each fitted channel now has sample means 
             %                   (.mus) and probability denisty functions (.pdfs) as fields.
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
             
             % Check existence of optional inputs, assign defaults
             if (~exist('dataType', 'var'))
@@ -1059,8 +1091,10 @@ classdef FlowAnalysis < handle
 			%		indices		<logical> A logical [len x 1] vector with numPoints
 			%					true values spaced as evenly as possible
 			%
-			% Written by Ross Jones
+			% Written by 
+			% Ross Jones
 			% jonesr18@mit.edu
+			% Weiss Lab, MIT
 			% 
 			% Update Log:
 			%	
@@ -1104,6 +1138,11 @@ classdef FlowAnalysis < handle
             % lowest total SSresid and you then have the piecewise fit and can find
             % points like the intercept.
             %
+			% Written By
+			% Jeremy Gam
+			% jgam@mit.edu
+			% Weiss Lab, MIT
+			%
             %   Modified 2015-04-02 by Ross Jones
             %       - Constrained fits to only positive slopes
             %       - Added options for converting to log and passing skip as an arg
@@ -1305,6 +1344,11 @@ classdef FlowAnalysis < handle
             %   'edges'         Similarly, a substruct with fiels for the output reporters.
             %                   The bin edges are given as a double array, and correspond 
             %                   with the data in 'means'.
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
             
             % Check inputs
             validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);

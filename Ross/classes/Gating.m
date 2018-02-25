@@ -10,6 +10,11 @@ classdef Gating < handle
 	%		Ex2:
 	%		g = Transforms();
 	%		[cells, vert] = g.gatePolygon(x, y, axScales, pos)
+	%
+    % Written/Compiled by
+	% Ross Jones
+	% jonesr18@mit.edu
+    % Weiss Lab, MIT
 	
 	properties (Constant)
 		SCATTER_CHANNELS = {'SSC_A', 'SSC_H', 'SSC_W', 'FSC_A', 'FSC_H', 'FSC_W'};
@@ -38,10 +43,13 @@ classdef Gating < handle
             %           pctParent   The percentage of the parent
             %       gateIndices A list of indices of points passing the gate
             %
-            %   Written by
-            %   Ross Jones
-            %   jonesr18@mit.edu
-            %   Updated 2015-02-09
+            % Written By
+            % Ross Jones
+            % jonesr18@mit.edu
+            % Weiss Lab, MIT
+			% 
+			% Update Log:
+			% 
 
             % Check inputs
             plotScale = lower(plotScale);
@@ -224,8 +232,11 @@ classdef Gating < handle
 			%		gateFigs	Struct containing handles to gating figures
             %
             %
-            % Written by Ross Jones
+            % Written By
+			% Ross Jones
+			% jonesr18@mit.edu
             % Weiss Lab, MIT
+			% 
             % Update Log: 
 			%	2017-09-25
 			%		Added data combining so that all samples can be passed together
@@ -308,6 +319,14 @@ classdef Gating < handle
 			%	Outputs
 			%		data		Updated data struct w/ gate logicals added in 
 			%					'gates' field.
+			% 
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
             
 			swap = (exist('swap', 'var') && all(logical(swap)));
 			
@@ -373,6 +392,14 @@ classdef Gating < handle
 			% gates a given population.  Uses the polygon vertices specified by
 			% 'position' or if this is not given, the user is asked to specify the polygon
 			% through UI
+			% 
+			% Written By
+			% Bre DiAndreth
+			% bstillo@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
             
             % axes limits
             AXES_MIN = 1;
@@ -417,7 +444,15 @@ classdef Gating < handle
 		
 		function fcsdatGated = applyJCGate(sampleFile, gateFile, time_indicator) %modified by JG for time gating. (see applyJCGate for more comments)
 			% applies a certain JC gate to a specified sample
-
+			%
+			% Written By
+			% Bre DiAndreth
+			% bstillo@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
+			
 			if nargin >= 3 && ~isempty(strfind(time_indicator,'yes')) %modified by JG only use time gating if user inputs 'yes' as 3rd input
 				use_time = 1;
 			else
@@ -480,11 +515,18 @@ classdef Gating < handle
 			%       gate4: Time vs. Blue
 			%       gate5: Time vs Yellow
 			%       gate6: Time vs Red
-
-			%decide if you want to use time gating as well as FSC/SSC
-
-			%modified by JG to include time gating if user specifies
-			%and also to use logicals when gating rather than indeces
+			% 
+			% Written By
+			% Bre DiAndreth
+			% bstillo@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
+			%	Option to use time gating as well as FSC/SSC
+			%	
+			%	Modified by JG to include time gating if user specifies
+			%	and also to use logicals when gating rather than indeces
 
 			if nargin<2
 				use_time = 0;
