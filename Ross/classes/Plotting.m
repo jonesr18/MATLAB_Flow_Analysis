@@ -26,9 +26,10 @@ classdef Plotting < handle
     %       orthogonalityMatrix(A,labels)
     %       [ax, h] = standardHeatmap(data, cmap, rowLabels, colLabels, norm, doCluster, symmetric)
     %
-    % Written/Compiled by Ross Jones
+    % Written/Compiled by
+	% Ross Jones
+	% jonesr18@mit.edu
     % Weiss Lab, MIT
-    % Last updated 2016-05-27
     
 	methods (Static)
 		
@@ -55,10 +56,13 @@ classdef Plotting < handle
 			%		nonZero			(Optional) <logical> Flag to only estimate using
 			%						non-zero values
 			%
-			% Written by
+			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
 			
 			% Check inputs
 			dataValid = zCheckInputs_computeDensity();
@@ -285,10 +289,13 @@ classdef Plotting < handle
 			%					*** If this output is requested, then 'colors'
 			%						is returned in sorted order!
 			%
-			% Written by
+			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
 			
 			% Check inputs
 			[inputSize, MIN, MAX, nanInfo, imagInfo] = zCheckInputs_getColors();
@@ -475,12 +482,14 @@ classdef Plotting < handle
             %       ax = subplot(1, 5, 1);
 			%       densityplot(ax, greenData, redData, 5000, 'kernel', ColorMap('red'));
 			%
-			% Written by
-			% Breanna Stillo
+			% Written By
+			% Breanna DiAndreth
 			% bstillo@mit.edu
+			% Weiss Lab, MIT
 			%
-			% Edit 2015-02-06 (Ross) - Doubled speed by slightly changing how neighbours is calculated
-            % Edit 2016-03-28 (Ross) - Added kernel density estimation and merged with fastdensity
+			% Update Log:
+			%	2015-02-06 (Ross) - Doubled speed by slightly changing how neighbours is calculated
+            %	2016-03-28 (Ross) - Added kernel density estimation and merged with fastdensity
             %                          calculation function
             
             % Check inputs
@@ -494,7 +503,7 @@ classdef Plotting < handle
 				[colors, sortIdx] = Plotting.getColors(mode, cmap, struct('min', 0, 'max', 4.5, 'numColors', 100));
 			end
 			
-			scatter(ax, xdata(sortIdx), ydata(sortIdx), 8, colors(sortIdx, :), 'filled');
+			scatter(ax, xdata(sortIdx), ydata(sortIdx), 8, colors, 'filled');
 			
 			
 			% --- Helper Functions --- %
@@ -563,14 +572,14 @@ classdef Plotting < handle
 			%
 			%
 			%
-			% Written by
+			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
 			%
 			% Update Log:
 			%
-			%	2018-01-28 Switched to using separate density computing function
+			%	2018-01-28:		Switched to using separate density computing function
 
 			% Check inputs
 			zCheckInputs_violinplot(); 
@@ -648,12 +657,12 @@ classdef Plotting < handle
 			%       RedData = fcsdat(:,RedChannel);
 			%       biexplot(greenData,redData,'density')
 			%
-			% Written by
-			% Breanna Stillo
+			% Written By
+			% Breanna DiAndreth
 			% bstillo@mit.edu
-			% Last Updated: 2014-10-14;
 			%
-			% Edited 2-22-16 by Ross Jones: Cleaned up some code
+			% Update Log:
+			%	2016-02-22 (Ross):		Cleaned up some code
             
 			% Check inputs
 			validateattributes(x, {'numeric'}, {}, mfilename, 'x', 1);
@@ -709,10 +718,13 @@ classdef Plotting < handle
             %   If inputs are not given, default to normal biexponential for 
             %   both X and Y axes with axis labels on.
 			%
-			% Written by 
+			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
             			
             % Check inputs
 			zCheckInputs_biexpAxes();
@@ -854,10 +866,13 @@ classdef Plotting < handle
 			%		params  (struct)		Biexp axes parameters
 			%								(see Transforms.lin2logicle)
 			%
-			% Written by 
+			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
 			
 			zCheckInputs_biexpColorbar()
 			
@@ -952,13 +967,14 @@ classdef Plotting < handle
 			%       GreenData = fcsdat(:,GreenChannel);
 			%       biexhist(greenData)
 			%
-			% Written by
-			% Breanna Stillo
+			% Written By
+			% Breanna DiAndreth
 			% bstillo@mit.edu
+			% Weiss Lab, MIT
 			%
-			% UPDATES:
-			%   10/31 -- changed ylimits to reflect FlowJo.  Change default number of
-			%   bins
+			% Update Log:
+			%   2015-10-31:		Changed ylimits to reflect FlowJo.  
+			%					Changed default number of bins
 			
 			if (~exist('numBins', 'var')), numBins = 25; end
 			
@@ -996,10 +1012,13 @@ classdef Plotting < handle
             % - optional input axPosition sets spacing between histograms. Useful to increase size of
             % plots for best visuals.
 			%
-			% Written by 
+			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
             
             % Check existence of optional input dataType, assign default
             %   faceColor and axPosition are also optional, but they are looked for later
@@ -1091,12 +1110,13 @@ classdef Plotting < handle
             %                        - options: 'log10', 'logicle' (default)
             %
             %
-            % Written by 
+            % Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
-            % 
-            % Update log:
+			% 
+			% Update Log:
+			%
             
             % Check inputs
             zCheckInputs_scatterBarPlot(data, channel, dataType);
@@ -1176,12 +1196,13 @@ classdef Plotting < handle
             %                        - options: 'log10' (default), 'logicle'
             %
             %
-            % Written by 
+            % Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
-            %   
-            % Update log:
+			% 
+			% Update Log:
+			%
             
             % Check inputs
             zCheckInputs_batchBoxPlot(data, channel, dataType);
@@ -1277,12 +1298,13 @@ classdef Plotting < handle
             %                        - N must be numel(data)
             %                        - Defaults to standard MATLAB sequence if no input given
             %
-            % Written by 
+            % Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
-            %   
-            % Update log:
+			% 
+			% Update Log:
+			%
             
             % Check inputs
             zCheckInputs_batchViolinPlot(data, channel, dataType);
@@ -1361,12 +1383,13 @@ classdef Plotting < handle
 			%	Outputs
 			%		ax				The axes handle for the generated plot
             %
-            % Written by 
+            % Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
-            %   
-            % Update log:
+			% 
+			% Update Log:
+			%
             
             % Check inputs
             [data, channel, dataType] = zCheckInputs_lineDensityPlot(inputs);
@@ -1496,10 +1519,13 @@ classdef Plotting < handle
 			%						'counts'	Flag to plot bin counts rather than PDF
 			%						'smooth'	Flag to smooth the histogram data
 			%
-			% Written by 
+			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
 			
 			zCheckInputs_singleLineDensity();
 			
@@ -1624,14 +1650,14 @@ classdef Plotting < handle
             %       ax              A handle to the figure axes created
             %       h               A handle to the heatmap/clustergram object
             % 
-            % Written by 
+            % Written By 
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
             %
             % Update Log:
-            %   2016-05-02 Added symmetric argument
-			%	2018-01-15 Changed extra inputs to options, added colorbar editing
+            %   2016-05-02:		Added symmetric argument
+			%	2018-01-15:		Changed extra inputs to options, added colorbar editing
 			%
 			
             % Invert data rows because stupid heatmap
@@ -1782,10 +1808,13 @@ classdef Plotting < handle
 			%
 			%		figBinHmap		<handle> A handle to the generated figure 
 			%
-			% Written by 
+			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
 			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
 			
 			zCheckInputs_binHeatmap();
 			
@@ -1973,6 +2002,19 @@ classdef Plotting < handle
 		
 		
 		function cmap = checkCmap(cmap)
+			% Simple function to check if a given colormap is an Nx3 matrix of
+			% RGB colors, a colormap name, or a ColorMap object, returning an
+			% Nx3 matrix of RGB colors if the input is valid. For colormap name
+			% or ColorMap inputs, the generated colormap contains 100 colors.
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
+			
 			validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, ...
 					{}, mfilename, 'cmap', 2);
 			
