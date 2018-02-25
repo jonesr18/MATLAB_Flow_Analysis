@@ -131,7 +131,7 @@ classdef Compensation < handle
 			figFits = figure();
 			spIdx = 0;
 			xrange = logspace(0, ceil(log10(max(cellfun(@(x) max(x(:)), scData)))), 100);
-			if all(logical(options.plotLin))
+			if ~all(logical(options.plotLin))
 				xrange = Transforms.lin2logicle(xrange, options.doMEF, options.logicle);
 			end
 			
