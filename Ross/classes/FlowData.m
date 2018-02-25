@@ -56,6 +56,11 @@ classdef FlowData < handle
 	%		slice
 	%		threshGate
 	%		crossGates
+	%
+	% Written By
+	% Ross Jones
+	% jonesr18@mit.edu
+	% Weiss Lab, MIT
 	
 	%#ok<*AGROW>	
 	
@@ -186,50 +191,50 @@ classdef FlowData < handle
 				height(sampleMap), numel(dataStruct))
 			if ismember('Replicate', sampleMap.Properties.VariableNames)
 				numReplicates = max(sampleMap.Replicate);
-				ids = zeros(numReplicates, height(sampleMap) / numReplicates);
+				IDs = zeros(numReplicates, height(sampleMap) / numReplicates);
 				for r = 1:numReplicates
-					ids(r, :) = find(sampleMap.Replicate == r);
+					IDs(r, :) = find(sampleMap.Replicate == r);
 				end
 				% Wean sampleMap to only be have one replicate
 				sampleMap = sampleMap(sampleMap.Replicate == 1, :);
 			else
 				numReplicates = 1;
-				ids = 1:height(sampleMap);
+				IDs = 1:height(sampleMap);
 			end
 			self.sampleMap = sampleMap;
 			
 			% Extract data from the given channels
 			self.numSamples = height(sampleMap);
 			self.numCells = zeros(1, self.numSamples);
-			iii = 0;
-			for id = ids
+			for i = 1:numel(IDs)
 				
-				iii = iii + 1;
+				ID = IDs(i);
 				nObs = 0;
+				
 				for r = 1:numReplicates
-					nObs = nObs + dataStruct(id(r)).nObs;
+					nObs = nObs + dataStruct(ID(r)).nObs;
 				end
-				self.numCells(iii) = nObs;
+				self.numCells(i) = nObs;
 				
 				% Extract desired color channels
 				for ch = channels
 					sd = [];
 					for r = 1:numReplicates
-						sd = [sd; dataStruct(id(r)).(ch{:}).raw];
+						sd = [sd; dataStruct(ID(r)).(ch{:}).raw];
 					end
-					self.sampleData(iii).(ch{:}).raw = sd;
+					self.sampleData(i).(ch{:}).raw = sd;
 				end
-				self.sampleData(iii).nObs = nObs;
+				self.sampleData(i).nObs = nObs;
 				
 				% Extract scatter channels
 				for ch = Gating.SCATTER_CHANNELS
 					sds = [];
 					for r = 1:numReplicates
-						sds = [sds; dataStruct(id(r)).(ch{:}).raw];
+						sds = [sds; dataStruct(ID(r)).(ch{:}).raw];
 					end
-					self.sampleDataScatter(iii).(ch{:}).raw = sds;
+					self.sampleDataScatter(i).(ch{:}).raw = sds;
 				end
-				self.sampleDataScatter(iii).nObs = nObs;
+				self.sampleDataScatter(i).nObs = nObs;
 			end
 			self.channels = channels;
 			
@@ -267,14 +272,17 @@ classdef FlowData < handle
 				assert(logical(exist(sampleMapFname, 'file')), ...
 					'File not found: %s\n', sampleMapFname)
 				
-				% Import data
+				% Get data filenames
 				dataFnames = self.convertToFullFile(dataFnames, exptDetails.folder);
-				dataStruct = FlowAnalysis.openFiles(dataFnames{:});
+				ds = FlowAnalysis.openFiles(dataFnames{1});
 				
 				% Check channels are present in dataStruct
-				badChannels = setdiff(channels, fieldnames(dataStruct(1)));
+				badChannels = setdiff(channels, fieldnames(ds));
 				assert(isempty(badChannels), ...
 					'Channel not in dataStruct: %s\n', badChannels{:});
+				
+				% Import all data
+				dataStruct = FlowAnalysis.openFiles(dataFnames{:});
 			end
 		end
 		
@@ -491,16 +499,20 @@ classdef FlowData < handle
 			%	to MEF units. 
 			%
 			%	Adds new dataTypes: {'mef'}
-			%	Adds new gates: {'nneg', 'P3_nneg'}
+			%	Adds new gates: {'nneg', 'P3_nneg'} 
+			%				   ({'nneg', 'P1_nneg'} if self.onlyP1 = TRUE)
 			%
 			%	Inputs
+			%
 			%		beadsControls	<struct> A struct with the following fields:
 			%			filename		The .fcs file containing bead data
 			%							corresponding with this experiment
 			%			type			The name of the type of bead (eg 'RCP-30-5A')
 			%			lot				The bead production lot (eg 'AH01')
+			%
 			%		beadsSamples	<struct> A struct with the same fields as above,
 			%						but for the samples rather than controls
+			%
 			%		options			<cell> Contains optional string flags:
 			%			showPlots		Flag to show fitted plots
 			%			nonLinear		Flag to *not* force linear bead fits
@@ -512,7 +524,6 @@ classdef FlowData < handle
 			%							rather than having the function iterate
 			%							through all possible high peaks automaticallly
 			%			noFilter		Do not filter out peaks by height
-
 			
 			assert(self.controlsAdded, 'Controls must be added before converting to MEF units!\n');
 			
@@ -713,13 +724,17 @@ classdef FlowData < handle
 			%					preferrably 'P1', or 'P3' if onlyP1 = false
 			%
 			%		options		<struct> (optional) Optional property-value pairs:
-			%						'plotsOn':	If TRUE, shows the compensation
-			%									plots, which are then saved in 
-			%									the Compensation folder.
-			%						'minFunc':	A user-defined function for
-			%									residual minimzation during
-			%									fitting. Default = @(x) x.^2
-			%									(least-squares approximation)
+			%			'plotsOn':		If TRUE, shows the compensation plots, which
+			%							are then saved in the Compensation folder.
+			%			'plotLin':		If TRUE (and plotsOn = TRUE), then the
+			%							fits are plotted in linear space, rather
+			%							than biexponential
+			%			'minFunc':		A user-defined function for residual 
+			%							minimzation during fitting. 
+			%								Default = @(x) x.^2
+			%								(least-squares approximation)
+			%			'recalculate':	If TRUE, forces re-calculation of the 
+			%							compensation fits
 			
 			% Check inputs
 			zCheckInputs_compensate(self);
@@ -730,14 +745,12 @@ classdef FlowData < handle
 				mkdir(compDir)
 			end
 			
-			% Pre-emptively add dataTypes so we can use them within the method
-			self.addDataTypes({'afs', 'comp'});
 			fitFigs = struct();
 			
 			% Check if compensation has already been done for this data
 			% --> If so, load and apply to data!
 			compFname = [compDir, 'CompFits.mat'];
-			if exist(compFname, 'file') 
+			if (exist(compFname, 'file') && ~all(logical(options.recalculate)))
 				% Load existing sample gates
 				fprintf(1, 'Loading pre-computed coefficients and autofluorescence!\n');
 				load(compFname);
@@ -762,7 +775,7 @@ classdef FlowData < handle
 			% Compensate
 			for cd = 1:numel(self.controlData)
 				if isempty(self.controlData(cd).(self.channels{1})), continue, end
-
+				
 				dataMatrix = self.slice(cd, struct( ...
 					'controls', true, ...
 					'dataType', 'afs'));
@@ -779,6 +792,8 @@ classdef FlowData < handle
 					self.sampleData(sd).(self.channels{ch}).comp = fixedMatrix(:, ch);
 				end
 			end
+			
+			self.addDataTypes('comp');
 			
 			% Check compensation
 			if options.plotsOn
@@ -825,6 +840,7 @@ classdef FlowData < handle
 				else
 					options.minFunc = @(x) sum(x.^2);
 				end
+				if ~isfield(options, 'recompute'), options.recompute = false; end
 				options.logicle = self.logicleParams;
 				options.doMEF = ismember(dataType, {'mef', 'mefl'}); 
 			end
@@ -1411,6 +1427,8 @@ classdef FlowData < handle
 					end
 				end
 			end
+			
+			self.addDataTypes(newDataType);
 			
 			% --- Helper Functions --- %
 			
