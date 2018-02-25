@@ -1,27 +1,32 @@
 classdef ColorMap < handle
     % A class for building custom or MATLAB-designed colormaps
     %
-    % Novel colormaps (linearly interpolated):
+	%	Can be given any MATLAB colormap or one of several novel colormaps:
     %   
-    %   red
-    %   orange
-    %   yellow
-    %   chartreuse
-    %   green
-    %   teal
-    %   cyan
-    %   sky
-    %   blue
-    %   purple
-    %   magenta
-    %   hotpink
-    %   grey
-	%	redblue
-	%	greenpurp
+    %		red
+    %		orange
+    %		yellow
+    %		chartreuse
+    %		green
+    %		teal
+    %		cyan
+    %		sky
+    %		blue
+    %		purple
+    %		magenta
+    %		hotpink
+    %		grey
+	%		redblue
+	%		greenpurp
+	%
+	%	Methods
+	%
+	%		getColormap(N)		Returns an Nx3 matrix of RGB colors
     %
-    % Written by Ross Jones
+    % Written By 
+	% Ross Jones
     % jonesr18@mit.edu
-    % Updated 2016-05-09
+    % Weiss Lab, MIT
     
     properties (Constant)
         
