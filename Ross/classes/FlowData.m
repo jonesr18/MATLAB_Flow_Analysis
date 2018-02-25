@@ -731,7 +731,7 @@ classdef FlowData < handle
 			%							than biexponential
 			%			'minFunc':		A user-defined function for residual 
 			%							minimzation during fitting. 
-			%								Default = @(x) x.^2
+			%								Default = @(x) sum(x.^2)
 			%								(least-squares approximation)
 			%			'recompute':	If TRUE, forces re-calculation of the 
 			%							compensation fits

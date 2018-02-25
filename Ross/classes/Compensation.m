@@ -47,7 +47,7 @@ classdef Compensation < handle
 			%		options		<struct> (optional) Optional property-value pairs:
 			%			'minFunc':		A user-defined function for residual
 			%							minimzation during fitting. 
-			%								Default = @(x) x.^2
+			%								Default = @(x) sum(x.^2)
 			%								(least-squares approximation)
 			%			'plotsOn':		If TRUE, shows the compensation
 			%							plots, which are passed back to
