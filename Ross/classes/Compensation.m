@@ -19,9 +19,10 @@ classdef Compensation < handle
 	%       compdData		= compensateMatrix(inputData, coefficients)
     %       YI				= lsq_lut_piecewise(x, y, XI)
     %
-    % Written/Compiled by Ross Jones
+    % Written/Compiled by
+	% Ross Jones
+	% jonesr18@mit.edu
     % Weiss Lab, MIT
-    % Last updated 2017-09-26
 	
 	methods (Static)		
 		
@@ -44,18 +45,21 @@ classdef Compensation < handle
 			%					matrix data in scData.
 			%
 			%		options		<struct> (optional) Optional property-value pairs:
-			%						'minFunc':	A user-defined function for
-			%									residual minimzation during
-			%									fitting. Default = @(x) x.^2
-			%									(least-squares approximation)
-			%						'plotsOn':	If TRUE, shows the compensation
-			%									plots, which are passed back to
-			%									the caller (otherwise returns empty).
-			%						'doMEF':	If TRUE, does logicle conversion
-			%									with MEF-unit scaling
-			%						'params':	<params> enables setting the
-			%									logicle function parameters
-			%									(see Transforms.lin2logicle())
+			%			'minFunc':		A user-defined function for residual
+			%							minimzation during fitting. 
+			%								Default = @(x) x.^2
+			%								(least-squares approximation)
+			%			'plotsOn':		If TRUE, shows the compensation
+			%							plots, which are passed back to
+			%							the caller (otherwise returns empty).
+			%			'plotLin':		If TRUE (and plotsOn = TRUE), then the
+			%							fits are plotted in linear space, rather
+			%							than biexponential.
+			%			'doMEF':		If TRUE, does logicle conversion with
+			%							MEF-unit scaling
+			%			'params':		<params> enables setting the logical
+			%							function parameters
+			%								(see Transforms.lin2logicle())
 			%
 			%	Outputs
 			%
@@ -81,8 +85,13 @@ classdef Compensation < handle
 			%		the average value, as these often are spillover between
 			%		tubes during data collection and can mess up compensation. 
 			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			%
 			% Update log:
-			% TODO : Add back the outlier exclusion
+			% 
 			
 			% Check inputs
 			zCheckInputs_computeCoeffs();
@@ -113,7 +122,7 @@ classdef Compensation < handle
 			coeffs(~logical(eye(numel(channels)))) = minResult(numel(channels) + 1 : end);
 			
 			% Set up figure to view fitting (if applicable)
-			if ~options.plotsOn
+			if ~all(logical(options.plotsOn))
 				figFits = [];
 				return % No need to process the rest of the code
 			end
@@ -122,6 +131,9 @@ classdef Compensation < handle
 			figFits = figure();
 			spIdx = 0;
 			xrange = logspace(0, ceil(log10(max(cellfun(@(x) max(x(:)), scData)))), 100);
+			if all(logical(options.plotLin))
+				xrange = Transforms.lin2logicle(xrange, options.doMEF, options.logicle);
+			end
 			
 			for chF = 1:numel(channels)
 				for chB = 1:numel(channels) 
@@ -132,18 +144,25 @@ classdef Compensation < handle
 					ax = subplot(numel(channels), numel(channels), spIdx);
 					hold(ax, 'on')
 					
-					plot(ax, Transforms.lin2logicle(scData{chB}(:, chB), ...
-								 options.doMEF, options.logicle), ...
-							 Transforms.lin2logicle(scData{chB}(:, chF), ...
-								 options.doMEF, options.logicle), ...
-							 '.', 'MarkerSize', 4)
-					plot(ax, Transforms.lin2logicle(xrange, ...
-								 options.doMEF, options.logicle), ...
-							 Transforms.lin2logicle(fitVals, ...
-								 options.doMEF, options.logicle), ...
-							 '-', 'linewidth', 4)
-					Plotting.biexpAxes(ax, true, true, false, ...
-							 options.doMEF, options.logicle);
+					if all(logical(options.plotLin))
+						xdata = scData{chB}(:, chB);
+						ydata = scData{chB}(:, chF);
+					else
+						% Do conversions
+						xdata = Transforms.lin2logicle(scData{chB}(:, chB), ...
+								options.doMEF, options.logicle);
+						ydata = transforms.lin2logicle(scData{chB}(:, chF), ...
+								options.doMEF, options.logicle);
+						fitVals = Transforms.lin2logicle(fitVals, ...
+								options.doMEF, options.logicle);
+						
+						% Convert axes
+						Plotting.biexpAxes(ax, true, true, false, ...
+								 options.doMEF, options.logicle);
+					end
+					
+					plot(ax, xdata, ydata, '.', 'MarkerSize', 4)
+					plot(ax, xrange, fitVals, '-', 'linewidth', 4)
 					
 					% Axis labeling
 					title(sprintf('Slope: %.2f | Intercept: %.2f', ...
@@ -174,7 +193,7 @@ classdef Compensation < handle
 				
 				if ~exist('options', 'var'), options = struct(); end
 				if ~isfield(options, 'plotsOn'), options.plotsOn = false; end
-				options.plotsOn = all(logical(options.plotsOn));
+				if ~isfield(options, 'plotLin'), options.plotLin = false; end
 				if isfield(options, 'minFunc')
 					validateattributes(options.minFunc, {'function_handle'}, {}, mfilename, 'options.minFunc', 4)
 				else
@@ -182,7 +201,6 @@ classdef Compensation < handle
 				end
 				if ~isfield(options, 'logicle'), options.logicle = struct(); end
 				if ~isfield(options, 'doMEF'), options.doMEF = false; end
-				
 			end
 			
 			
@@ -233,7 +251,9 @@ classdef Compensation < handle
             %   corresponds with the matrix 'A'. We invert 'A' to solve
             %   for X_real, which is returned as 'compdData'.
             %
+			% Written By
             % Ross Jones
+			% jonesr18@mit.edu
             % Weiss Lab
             % 2017-06-06
             %
@@ -284,6 +304,13 @@ classdef Compensation < handle
 			%       YI interpolation points of 1-D table
 			%           y = interp1(XI,YI,x)
 			%
+			% Written By
+			% Jeremy Gam
+			% jgam@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			% 
             
             % Turn off this warning, which results from using very negative values in XI
             warning('off', 'MATLAB:rankDeficientMatrix')
