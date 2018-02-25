@@ -1,8 +1,29 @@
-%% Summary
-%   Description
-
 classdef CellList < handle
-    
+    % A class that implements some methods of the Java List interface using a
+    % MATLAB cell array backbone
+	%
+	%   Implemented methods:
+	%
+	%		add			Add one item
+	%		addAll		Add a list of items
+	%		get			Get the value of an item at a given index
+	%		remove		Remove an item from a given index
+	%		set			Set the value of an item at a given index
+	%
+	%	MATLAB-specific methods:
+	%		
+	%		numel		Returns the number of items in the list
+	%		length		Returns the length of the list
+	%		toCell		Returns the items in the list as a cell array
+	%		toVec		Returns the items in the list as a vector
+	%		print		Prints the contents of the list
+	%		randomize	Randomizes the location of the items in the list
+	%
+	% Written By
+	% Ross Jones
+	% jonesr18@mit.edu
+	% Weiss Lab, MIT
+	
     properties (SetAccess = private)
         data;
         size;
