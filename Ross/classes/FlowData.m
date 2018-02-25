@@ -733,7 +733,7 @@ classdef FlowData < handle
 			%							minimzation during fitting. 
 			%								Default = @(x) x.^2
 			%								(least-squares approximation)
-			%			'recalculate':	If TRUE, forces re-calculation of the 
+			%			'recompute':	If TRUE, forces re-calculation of the 
 			%							compensation fits
 			
 			% Check inputs
@@ -750,7 +750,7 @@ classdef FlowData < handle
 			% Check if compensation has already been done for this data
 			% --> If so, load and apply to data!
 			compFname = [compDir, 'CompFits.mat'];
-			if (exist(compFname, 'file') && ~all(logical(options.recalculate)))
+			if (exist(compFname, 'file') && ~all(logical(options.recompute)))
 				% Load existing sample gates
 				fprintf(1, 'Loading pre-computed coefficients and autofluorescence!\n');
 				load(compFname);
