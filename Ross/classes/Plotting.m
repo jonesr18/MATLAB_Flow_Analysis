@@ -704,7 +704,7 @@ classdef Plotting < handle
 		
         
         function biexpAxes(ax, biexpX, biexpY, biexpZ, doMEF, params)
-            % Tranforms the given axes to a scale used for biexponential veiws.
+            % Tranforms the given axes to a scale used for biexponential views.
             %   
             %   Inputs (all optional - defaults to X/Y both logicle)
             %       
@@ -734,8 +734,6 @@ classdef Plotting < handle
 				
 				AXES_MAX = 1.1e9;
 				AXES_MIN = -4e5;
-				axTransformed = Transforms.lin2logicle( ...
-					[AXES_MIN, AXES_MAX], doMEF, params);
 				
 				% Tick values
 				minorTickVals = Transforms.lin2logicle( sort( ...
@@ -757,8 +755,6 @@ classdef Plotting < handle
 				
 				AXES_MAX = 2^18;
 				AXES_MIN = -1.5e2;
-				axTransformed = Transforms.lin2logicle( ...
-					[AXES_MIN, AXES_MAX], doMEF, params);
 				
 				% Tick values
 				minorTickVals = Transforms.lin2logicle( sort( ...
@@ -775,6 +771,9 @@ classdef Plotting < handle
 						 '', '', '', '', '', '', '', '', '10^5'};
 			
 			end	
+			
+			axTransformed = Transforms.lin2logicle( ...
+					[AXES_MIN, AXES_MAX], doMEF, params);
 			
 			% Write on X-axis
 			if (biexpX)
@@ -814,26 +813,12 @@ classdef Plotting < handle
 			function zCheckInputs_biexpAxes()
 
 				% Ensure boolean inputs
-				if exist('biexpX', 'var')
-					biexpX = all(logical(biexpX));
-				else
-					biexpX = true;
-				end
-				if exist('biexpY', 'var')
-					biexpY = all(logical(biexpY));
-				else
-					biexpY = true;
-				end
-				if exist('biexpZ', 'var')
-					biexpZ = all(logical(biexpZ));
-				else
-					biexpZ = false;
-				end
-				if exist('doMEF', 'var')
-					doMEF = all(logical(doMEF));
-				else
-					doMEF = false;
-				end
+				biexpX = (exist('biexpX', 'var') && all(logical(biexpX)));
+				biexpY = (exist('biexpY', 'var') && all(logical(biexpY)));
+				biexpZ = (exist('biexpZ', 'var') && all(logical(biexpZ)));
+				
+				doMEF = (exist('doMEF', 'var') && all(logical(doMEF)));
+				
 				if exist('params', 'var')
 					validateattributes(params, {'struct'}, {}, mfilename, 'params', 5);
 				else
@@ -841,16 +826,7 @@ classdef Plotting < handle
 				end
 				
 				% Set parameters
-				if ~isfield(params, 'T'), params.T = 2^18;	end
-				if ~isfield(params, 'M'), params.M = 4.5;	end
-				if ~isfield(params, 'r'), params.r = -150;	end
-				if doMEF 
-					if ~isfield(params, 'MEF')
-						params.MEF = Transforms.MEF_CONVERSION_FACTOR;
-					end
-				else
-					params.MEF = 1;
-				end
+				params = Transforms.checkLogicleParams(doMEF, params);
 			end
 		end
 		
@@ -924,11 +900,8 @@ classdef Plotting < handle
 			
 			function zCheckInputs_biexpColorbar()
 				
-				if exist('doMEF', 'var')
-					doMEF = all(logical(doMEF));
-				else
-					doMEF = false;
-				end
+				doMEF = (exist('doMEF', 'var') && all(logical(doMEF)));
+				
 				if exist('params', 'var')
 					validateattributes(params, {'struct'}, {}, mfilename, 'params', 5);
 				else
@@ -936,16 +909,7 @@ classdef Plotting < handle
 				end
 				
 				% Set parameters
-				if ~isfield(params, 'T'), params.T = 2^18;	end
-				if ~isfield(params, 'M'), params.M = 4.5;	end
-				if ~isfield(params, 'r'), params.r = -150;	end
-				if doMEF 
-					if ~isfield(params, 'MEF')
-						params.MEF = Transforms.MEF_CONVERSION_FACTOR;
-					end
-				else
-					params.MEF = 1;
-				end
+				params = Transforms.checkLogicleParams(doMEF, params);
 				
 			end
 		end

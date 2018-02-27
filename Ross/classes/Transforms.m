@@ -162,29 +162,14 @@ classdef Transforms < handle
 				% Check input arguments
 				validateattributes(S, {'numeric'}, {}, mfilename, 'S', 1);
 				
-				if exist('doMEF', 'var')
-					doMEF = all(logical(doMEF));
-				else 
-					doMEF = false;
-				end
+				doMEF = (exist('doMEF', 'var') && all(logical(doMEF)));
 				
 				if exist('params', 'var')
 					validateattributes(params, {'struct'}, {}, mfilename, 'params', 3);
 				else
 					params = struct();
 				end
-				
-				% Set parameters
-				if ~isfield(params, 'T'), params.T = 2^18;	end
-				if ~isfield(params, 'M'), params.M = 4.5;	end
-				if ~isfield(params, 'r'), params.r = -150;	end
-				if doMEF 
-					if ~isfield(params, 'MEF')
-						params.MEF = Transforms.MEF_CONVERSION_FACTOR;
-					end
-				else
-					params.MEF = 1;
-				end
+				params = Transforms.checkLogicleParams(doMEF, params);
 			end
 		end
 		
@@ -288,29 +273,15 @@ classdef Transforms < handle
 				% Check input arguments
 				validateattributes(X, {'numeric'}, {}, mfilename, 'X', 1);
 				
-				if exist('doMEF', 'var')
-					doMEF = all(logical(doMEF));
-				else 
-					doMEF = false;
-				end
+				doMEF = (exist('doMEF', 'var') && all(logical(doMEF)));
 				
 				if exist('params', 'var')
 					validateattributes(params, {'struct'}, {}, mfilename, 'params', 3);
 				else
 					params = struct();
 				end
-				
-				% Set parameters
-				if ~isfield(params, 'T'), params.T = 2^18;	end
-				if ~isfield(params, 'M'), params.M = 4.5;	end
-				if ~isfield(params, 'r'), params.r = -150;	end
-				if doMEF 
-					if ~isfield(params, 'MEF')
-						params.MEF = Transforms.MEF_CONVERSION_FACTOR;
-					end
-				else
-					params.MEF = 1;
-				end
+				params = Transforms.checkLogicleParams(doMEF, params);
+
 			end
 		end
 		
@@ -1308,8 +1279,27 @@ classdef Transforms < handle
 
             % Save channelFits
             save([channel, '_ABC_Fit.mat'], 'channelFits')
-        end
+		end
         
+		
+		function params = checkLogicleParams(doMEF, params)
+			% Simple function for checking and setting default logicle parameters
+			
+			% Set parameters
+			if ~isfield(params, 'T'), params.T = 2^18;	end
+			if ~isfield(params, 'M'), params.M = 4.5;	end
+			if ~isfield(params, 'r'), params.r = -150;	end
+			if doMEF 
+				if ~isfield(params, 'MEF')
+					params.MEF = Transforms.MEF_CONVERSION_FACTOR;
+				end
+			else
+				% lin2logicle and logicle2lin use params.MEF for scaling, so if
+				% we are not doing a MEF conversion, set to 1. 
+				params.MEF = 1;
+			end
+		end
+		
     end
     
 end
