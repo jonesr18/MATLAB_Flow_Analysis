@@ -1767,6 +1767,9 @@ classdef Plotting < handle
 			%							'max', <max val> enables setting the
 			%							  upper bound for color-data conversion
 			%								(default = 4.5)
+			%							'fig', <fig handle> enables setting the
+			%							  figure to plot onto
+			%								(defualt = new fig)
 			%
 			%	Outputs
 			%
@@ -1779,10 +1782,9 @@ classdef Plotting < handle
 			% 
 			% Update Log:
 			%
+			%	2018-03-06		Added option for giving figure handle to plot on
 			
-			zCheckInputs_binHeatmap();
-			
-			figBinHmap = figure();
+			figBinHmap = zCheckInputs_binHeatmap();
 			
 			spIdx = 0;
 			for d5 = 1:size(dataMatrix, 5)
@@ -1904,7 +1906,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function zCheckInputs_binHeatmap()
+			function figBinHmap = zCheckInputs_binHeatmap()
 				
 				% Check data + dimensions
 				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'data', 1);
@@ -1959,7 +1961,11 @@ classdef Plotting < handle
 				if ~isfield(options, 'doMEF'), options.doMEF = false; end
 				if ~isfield(options, 'min'), options.min = 0; end
 				if ~isfield(options, 'max'), options.max = 4.5; end
-				
+				if isfield(options, 'fig')
+					figBinHmap = options.fig; 
+				else
+					figBinHmap = figure();
+				end
 			end
 			
 		end
