@@ -9,9 +9,9 @@ function y = log10npdf(x, mu, sigma, param)
 %	PARAM indicates how to interpret MU. Defualt is 'mu', but can accept
 %	'mean', 'median', and 'mode', which will automatically adjust the value 
 %	of MU to one of these values:
-%		mean	= exp(MU + SIGMA^2 / 2)
-%		median	= exp(MU)
-%		mode	= exp(MU - SIGMA^2)
+%		MU = median
+%		MU = mean - SIGMA^2 / 2
+%		MU = mode + SIGMA^2
 %	
 %	This function uses log10 transformations rather than log (as in LOGNPDF). 
 %	
@@ -54,9 +54,9 @@ switch param
 	case {'mu', 'median'}
 		% Do nothing: mu = mu
 	case 'mean'
-		mu = mu + sigma^2 / 2;
+		mu = mu - sigma^2 / 2;
 	case 'mode'
-		mu = mu - sigma^2;
+		mu = mu + sigma^2;
 end
 
 try
