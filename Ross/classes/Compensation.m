@@ -111,34 +111,49 @@ classdef Compensation < handle
 			
 			% Fitting initial conditions
 			A0 = 10 * ones(numel(channels), 1);					% Intercepts (Autofluorescence)
-			K0 = zeros(numel(channels)^2 - numel(channels), 1);	% Coefficients (Bleed-through)
+% 			K0 = zeros(numel(channels)^2 - numel(channels), 1);	% Coefficients (Bleed-through)
+			K0 = zeros(numel(channels));
 			
 			% Iterate over each pair of channels and compute fits
 			optimOptions = optimset('Display', 'off');
-			[minResult, fval] = fminsearch(@(x) fitFunc(x, options.minFunc), [A0; K0], optimOptions);
-			fprintf('Linear fits obtained with obj func val %.2f\n', fval);
-			ints = minResult(1:numel(channels));
-			coeffs = eye(numel(channels));
-			coeffs(~logical(eye(numel(channels)))) = minResult(numel(channels) + 1 : end);
+% 			[minResult, fval] = fminsearch(@(x) ...
+% 				fitFuncIndependent(x, options.minFunc), ...
+% 				[A0; K0], optimOptions);
+% 			fprintf('Linear fits obtained with obj func val %.2f\n', fval);
+% 			ints = minResult(1:numel(channels));
+% 			coeffs = eye(numel(channels));
+% 			coeffs(~logical(eye(numel(channels)))) = minResult(numel(channels) + 1 : end);
 			
 			% Set up figure to view fitting (if applicable)
-			if ~all(logical(options.plotsOn))
+			if ~options.plotsOn
 				figFits = [];
-				return % No need to process the rest of the code
+			else
+				figFits = figure();
 			end
 			
 			% Prep figure
-			figFits = figure();
 			spIdx = 0;
 			xrange = logspace(0, log10(max(cellfun(@(x) max(x(:)), scData))), 100);
 			if ~all(logical(options.plotLin))
 				xrange = Transforms.lin2logicle(xrange, options.doMEF, options.logicle);
 			end
 			
+			coeffs = zeros(numel(channels));
+			ints = zeros(numel(channels));
 			for chF = 1:numel(channels)
 				for chB = 1:numel(channels) 
 					
-					fitVals = xrange * coeffs(chF, chB) + ints(chF);
+					[~, coeffs(chF, chB), ints(chF, chB)] = regression(scData{chB}(:, chB)', scData{chB}(:, chF)');
+					
+% 					[minResultCH, fval] = fminsearch(@(x) ...
+% 						fitFuncIndependent(x, options.minFunc, chB, chF), ...
+% 						[A0(chF); K0(chF, chB)], optimOptions);
+% 					ints(chF, chB) = minResultCH(1);
+% 					coeffs(chF, chB) = minResultCH(2);
+
+					fitVals = xrange * coeffs(chF, chB) + ints(chF, chB);
+					
+					if ~options.plotsOn, continue, end
 					
 					spIdx = spIdx + 1;
 					ax = subplot(numel(channels), numel(channels), spIdx);
@@ -176,6 +191,14 @@ classdef Compensation < handle
 				end
 			end
 			
+			% Average non-diag ints to get one autofluor value to apply to data
+			%	Only necessary when ints are computed individually
+			%	This simple line works because the intercept of the 
+			%	diagonals are zero
+			if ~isvector(ints)
+				ints = sum(ints, 2) ./ (numel(channels) - 1); 
+			end
+			
 			
 			% --- Helper Functions --- %
 			
@@ -192,8 +215,8 @@ classdef Compensation < handle
 				assert(numel(channels) > 1, 'Compensation with just one channel is useless!');
 				
 				if ~exist('options', 'var'), options = struct(); end
-				if ~isfield(options, 'plotsOn'), options.plotsOn = false; end
-				if ~isfield(options, 'plotLin'), options.plotLin = false; end
+				options.plotsOn = (isfield(options, 'plotsOn') && all(logical(options.plotsOn)));
+				options.plotLin = (isfield(options, 'plotLin') && all(logical(options.plotLin)));
 				if isfield(options, 'minFunc')
 					validateattributes(options.minFunc, {'function_handle'}, {}, mfilename, 'options.minFunc', 4)
 				else
@@ -204,12 +227,10 @@ classdef Compensation < handle
 			end
 			
 			
-			function out = fitFunc(p, minFunc)
+			function out = fitFuncSimultaneous(p, minFunc)
 				% Fit function for computing linear fits between bleed 
 				% and fix channels in each scData control
-				
-				% Think about trying to fit everything at once?
-				
+								
 				% Setup fit matrix
 				A = p(1:numel(channels));
 				K = eye(numel(channels));
@@ -224,6 +245,21 @@ classdef Compensation < handle
 				end
 				
 				out = sum(residuals);
+			end
+			
+			
+			function out = fitFuncIndependent(p, minFunc, chB, chF)
+				% Fit function for computing linear fits between bleed
+				% and fix channel for one scData control and channel pair
+								
+				% Find regression with each channel
+				%	p(1) = intercept (autofluor)
+				%	p(2) = slope
+				A = [0; p(1)];
+				K = [0, 1; 1, p(2)];
+				
+				fixedData = K \ (scData{chB}(:, [chB, chF])' - A);
+				out = minFunc(fixedData(2, :));
 			end
 		end
 		
