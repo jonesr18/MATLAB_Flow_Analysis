@@ -1854,6 +1854,10 @@ classdef Plotting < handle
 								end
 							end
 						end
+						
+						% Need to fix ticks, otherwise they will be 
+						% added/removed as plot size changes
+						ax.ZTick = 0:(size(dataMatrix, 3) - 1); 
 						ax.ZTickLabel = centers3;
 						zlabel(ax, labels{3});
 					end
