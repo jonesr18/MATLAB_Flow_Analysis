@@ -758,14 +758,27 @@ classdef FlowData < handle
 				% Compute slopes/intercepts for each pair of scData
 				scData = cell(1, numel(self.channels));
 				for sc = 1:numel(scData)
+					
 					% This slice works because controlData 1-C are the
 					% single-color controls for channels 1-C
 					scData{sc} = self.slice(sc, struct( ...
 						'controls', true, ...
 						'dataType', dataType, ...
 						'gate', gate));
+					
+					% Code for binnind data first
+% 					maxVal = max(slicedData(:));
+% 					edges = cell(1, numel(scData));
+% 					edges{sc} = linspace(0, maxVal, 50);
+% 					edges(setdiff(1:numel(scData), sc)) = {linspace(0, maxVal, 2)};
+% 					binIdxs = reshape(FlowAnalysis.simpleBin(slicedData, edges), 1, []);
+% 					
+% 					binMedians = cell2mat( ...
+% 						cellfun(@(x) median(slicedData(x, :), 1), binIdxs, ...
+% 						'uniformoutput', false)');
+% 					scData{sc} = binMedians(~isnan(binMedians(:, 1)), :); % Remove NaNs
 				end
-				[coeffs, ints, fitFigs.pre] = Compensation.computeCoeffs( ...
+					[coeffs, ints, fitFigs.pre] = Compensation.computeCoeffs( ...
 						scData, self.channels, options); 
 			end
 			
@@ -805,6 +818,18 @@ classdef FlowData < handle
 						'controls', true, ...
 						'dataType', 'comp', ...
 						'gate', gate));
+					
+					% Code for binning data first
+% 					maxVal = max(slicedData(:));
+% 					edges = cell(1, numel(scData));
+% 					edges{sc} = linspace(0, maxVal, 50);
+% 					edges(setdiff(1:numel(scData), sc)) = {linspace(0, maxVal, 2)};
+% 					binIdxs = reshape(FlowAnalysis.simpleBin(slicedData, edges), 1, []);
+% 					
+% 					binMedians = cell2mat( ...
+% 						cellfun(@(x) median(slicedData(x, :), 1), binIdxs, ...
+% 						'uniformoutput', false)');
+% 					scData{sc} = binMedians(~isnan(binMedians(:, 1)), :); % Remove NaNs
 				end
 				[~, ~, fitFigs.post] = Compensation.computeCoeffs( ...
 						scData, self.channels, options);
@@ -1099,13 +1124,21 @@ classdef FlowData < handle
 			% for easier for-loop iteration
 			values = struct();
 			for param = parameters
-				values.(param{:}) = reshape(unique(self.sampleMap.(param{:}), 'stable'), 1, []);
+				rawVals = reshape(unique(self.sampleMap.(param{:}), 'stable'), 1, []);
+				if iscell(rawVals) && ischar(rawVals{1})
+					% Get rid of empty strings
+					values.(param{:}) = rawVals(~cellfun(@isempty, rawVals));
+				else
+					% Empty cells are not carried over for numeric values
+					values.(param{:}) = rawVals;
+				end
 			end
 		end
 		
 		
 		function sampleIDs = getSampleIDs(self, treatments)
-			% Returns an array of sample IDs corresponding with the given treatments in the order requested
+			% Returns an array of sample IDs corresponding with the given treatments 
+			% in the order requested
 			%
 			%	sampleIDs = self.getSampleIDs(treatments)
 			%
@@ -1178,7 +1211,7 @@ classdef FlowData < handle
 			[linearSampleIDs, ~] = find(IDs);
 % 			numel(linearSampleIDs)
 % 			max(linearSampleIDs)
-			if (numel(numParams) > 1)
+			if (numel(numParams) > 1) && false
 				sampleIDs = reshape(linearSampleIDs, numParams);
 			else
 				sampleIDs = linearSampleIDs;
@@ -1347,7 +1380,7 @@ classdef FlowData < handle
 						   'Bin IDs formatted incorrectly!')
 					assert(size(sliceParams.bins, 1) <= self.numBins, ...
 						   'Too many bins requested!')
-
+					
 					% Convert bin indexes to linear 
 					if (size(sliceParams.bins, 2) == 1)
 						binIdxs = sliceParams.bins';
@@ -1362,6 +1395,9 @@ classdef FlowData < handle
 					% Override sliceDataType with bin varieties so that the bin 
 					% subsampling works right. No need to with gate since the
 					% binning doesn't *depend* on the gate. 
+					if ~strcmpi(sliceDataType, self.binDataType)
+						warning('Setting ''dataType'' to %s to match binning data', self.binDataType)
+					end
 					sliceDataType = self.binDataType;
 
 					% Extract cells in the requested bins
