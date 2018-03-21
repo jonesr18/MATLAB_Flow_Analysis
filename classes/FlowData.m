@@ -405,7 +405,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function gate(self, onlyP1)
+		function self = gate(self, onlyP1)
 			% Creates gates for the data using standard gating (see Gating.m)
 			%
 			%	self.gate(onlyP1)
@@ -487,7 +487,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function convertToMEF(self, beadsControls, beadsSamples, options)
+		function self = convertToMEF(self, beadsControls, beadsSamples, options)
 			% Calibrate the data to standardized bead-based MEF units.
 			% The controls must already have been added (see addControls())
 			%
@@ -528,7 +528,7 @@ classdef FlowData < handle
 			assert(self.controlsAdded, 'Controls must be added before converting to MEF units!\n');
 			
 			% Check inputs
-			zCheckInputs_convertToMEF();
+			zCheckInputs_convertToMEF(self);
 			
 			% Setup new directory for fitting files/figs
 			beadDirControls = [self.controlFolder, 'Calibration', filesep];
@@ -616,7 +616,7 @@ classdef FlowData < handle
 			% --- Helper Functions --- %
 			
 			
-			function zCheckInputs_convertToMEF()
+			function zCheckInputs_convertToMEF(self)
 				
 				validateattributes(beadsControls, {'struct'}, {}, mfilename, 'beadsFilename', 1);
 				validateattributes(beadsSamples, {'struct'}, {}, mfilename, 'beadsFilename', 2);
@@ -640,7 +640,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function convertToMEFL(self, showPlots)
+		function self = convertToMEFL(self, showPlots)
 			% Converts each channel to MEFL units using the compensated MEF units. 
 			% The two-color controls are utilized to get ratios between each MEF
 			% unit and MEFLs. Conversion factors are stored in self.meflConversions.
@@ -707,7 +707,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function compensate(self, dataType, gate, options)
+		function self = compensate(self, dataType, gate, options)
 			% Applies autofluorescence subtraction and matrix-based compensation
 			%
 			%	self.compensate(dataType, gate, plotsOn)
@@ -873,7 +873,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function bin(self, binInputs, binDataType)
+		function self = bin(self, binInputs, binDataType)
 			% Sorts the sample data using the given set of channels/edges into a
 			% number of bins using the given dataType for assignments. 
 			%
@@ -1418,7 +1418,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function operate(self, operation, values, initDataType, newDataType)
+		function self = operate(self, operation, values, initDataType, newDataType)
 			% Applies the given operation to the given dataType, creating a new
 			% dataType which is a mathematically transformed with the operation
 			%
@@ -1512,7 +1512,7 @@ classdef FlowData < handle
 		end
 				
 		
-		function threshGate(self, channels, mode, thresh)
+		function self = threshGate(self, channels, mode, thresh)
 			% Thresholds cells in the given channel(s) using the given mode to
 			% select thresholded cells from multiple channels. 
 			%
@@ -1641,7 +1641,7 @@ classdef FlowData < handle
 		end
 				
 		
-		function crossGates(self, gates, mode)
+		function self = crossGates(self, gates, mode)
 			% Crosses the given gates using the given crossing mode
 			% A new gate is created with name in the following form: 
 			%		'gate1_gate2_gate3_[...]_gateN'
@@ -1754,7 +1754,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function editSampleMap(self, newSampleMap)
+		function self = editSampleMap(self, newSampleMap)
 			% Allows the user to change the sample map by passing a new one to
 			% the object. This method ensures that the sample map is valid.
 			%
@@ -1791,7 +1791,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function editlogicleParams(self, newParams)
+		function self = editlogicleParams(self, newParams)
 			% Allows the user to change the logicle conversion parameters used
 			% by the object by passing a new set of parameters. This method
 			% ensures that the new parameters are valid.
@@ -1834,7 +1834,7 @@ classdef FlowData < handle
 % 		end
 		
 		
-		function addDataTypes(self, dataTypes)
+		function self = addDataTypes(self, dataTypes)
 			% Adds the given dataTypes to the dataTypes property if they are new
 			
 			validateattributes(dataTypes, {'cell', 'char'}, {}, mfilename, 'dataTypes', 1);
@@ -1854,7 +1854,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function addGates(self, gates)
+		function self = addGates(self, gates)
 			% Adds the given gates to the gateNames property if they are new
 			
 			validateattributes(gates, {'cell', 'char'}, {}, mfilename, 'gates', 1);
