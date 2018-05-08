@@ -78,8 +78,11 @@ classdef ColorMap < handle
         end
         
         
-        function cm = getColormap(self, n)
+        function cm = getColormap(self, n, skew)
             % Returns a colormap with the specified length (n)
+			%
+			% 'skew' input allows for forcing the top/bottom values to
+			% white/black: 'white', 'black', {'white', 'black'}
             
             % Check input
             validateattributes(n, {'numeric'}, {}, mfilename, 'n', 1);
@@ -92,8 +95,13 @@ classdef ColorMap < handle
                 cm = eval(strcat(self.cm_text, '(', num2str(n), ')'));
             else
                 % If not a MATLAB colormap, then we use one of our own
-                top = self.COLORS.(self.cm_text).cm_top;
+				top = self.COLORS.(self.cm_text).cm_top;
                 bot = self.COLORS.(self.cm_text).cm_bot;
+				if exist('skew', 'var')
+					if ischar(skew), skew = {skew}; end
+					if ismember(skew, 'white'), top = [1, 1, 1]; end
+					if ismember(skew, 'black'), bot = [0, 0, 0]; end
+				end
                 
                 % Setup colormap output
                 cm = zeros(n, numel(top));
