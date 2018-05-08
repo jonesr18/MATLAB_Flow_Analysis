@@ -320,7 +320,10 @@ classdef Transforms < handle
 			for i = 1:numel(channels)
 				requestedUnits{i} = Transforms.CHANNEL_MAP.(channels{i}); 
 			end
-
+			
+			if numel(unique(requestedUnits)) < numel(channels)
+				warning('Non-unique bead units detected - be sure to check channel names')
+			end
 		end
 		
 		
@@ -518,6 +521,12 @@ classdef Transforms < handle
             % Check inputs, initialize data struct
             [beadData, beadVals] = zCheckInputs_calMEF();
 			MEF_units = fieldnames(beadVals)'; % Start in same order as channels
+			if (numel(MEF_units) == 1 && numel(channels) > 1)
+				warning('Adjusting %s units to match all channels', MEF_units{1});
+				MEF_units = repmat(MEF_units, 1, numel(channels));
+			elseif (numel(MEF_units) < numel(channels))
+				error('Number of bead units does not match number of channels!')
+			end
 			
 			% Find max number of peaks to look for
 			% --> Some channels only have beads above a certain fluorescence
