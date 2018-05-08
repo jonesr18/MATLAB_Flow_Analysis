@@ -543,22 +543,23 @@ classdef Transforms < handle
 			thresh = 8;
 			filteredMeans = filterMeans(means, counts, centers, thresh);
 			
-			numPeaks = size(filteredMeans, 1) - 1;			
+			numPeaks = size(filteredMeans, 1) - 1;	
 			res_min = inf;
 			opt = optimoptions('lsqcurvefit', 'Display', 'off');
-			for highestPeak = 1 : (MAX_PEAKS - numPeaks + 1)
+			for hpi = 1 : (MAX_PEAKS - numPeaks + 1)
 				% Its a bit simpler to index peaks from the highest down,
 				% since all beads have the largest populations, but some
 				% don't have smaller ones. By flipping so that low indexes 
 				% are high beads and vice-versa, we don't have to adjust 
-				% the index for each bead population up or down. 
+				% the index for each bead population up or down.
+				% --> hpi := highestPeakIndex
 				
-				highestPeak_true = BEAD_PEAKS - highestPeak + 1;
-				fprintf(1, 'Trying highest peak: %d\n', highestPeak_true);
+				highestPeak = BEAD_PEAKS - hpi + 1;
+				fprintf(1, 'Trying highest peak: %d\n', highestPeak);
 				
 				% Iterate over each channel and add up residuals
 				% Reset rolling parameters each time for cleanliness
-				ress = zeros(1, numel(channels));
+				res_all = zeros(1, numel(channels));
 				fits = zeros(2, numel(channels));
 				for chID = 1:numel(channels)
 
@@ -566,7 +567,7 @@ classdef Transforms < handle
 					MEF = flipud(beadVals.(MEF_units{chID})');
 
 					% Identify which bead pops to query
-					beadPops = highestPeak : (highestPeak + numPeaks - 1);
+					beadPops = hpi : (hpi + numPeaks - 1);
 					pointsMean = filteredMeans(2:end, chID); % Means already log10 transf
 					pointsMEF = flipud(log10(MEF(beadPops)));
 % 						pointsMEF = flipud((MEF(beadPops)));
@@ -585,22 +586,22 @@ classdef Transforms < handle
 					yResid = abs(pointsMEF - polyval(fitNL, pointsMean));
 					ssResid = sum(yResid.^2);
 					ssTotal = (length(pointsMEF) - 1) * var(pointsMEF);
-					ress(chID) = ssResid / ssTotal;
+					res_all(chID) = ssResid / ssTotal;
 				end
-				res = min(ress);
+				res = min(res_all);
 
 				fprintf(1, 'Residuals: %.3f\n', res);
 				
 				% Determine if this is the best fit
-				if ismember(sprintf('peak_%d', highestPeak_true), options)
+				if ismember(sprintf('peak_%d', highestPeak), options)
 					res = -inf;
-					fprintf(1, 'Forcing Peak %d to be highest\n', highestPeak_true);
+					fprintf(1, 'Forcing Peak %d to be highest\n', highestPeak);
 				end
 				if (res < res_min)
 					res_min = res;
-					ress_min = ress;
+					res_all_min = res_all;
 					numPeaks_min = numPeaks;
-					highestPeak_min = BEAD_PEAKS - highestPeak + 1;
+					highestPeak_min = BEAD_PEAKS - hpi + 1;
 					beadPops_min = BEAD_PEAKS - beadPops + 1;
 					fits_min = fits;
 					means_min = 10.^filteredMeans(2:end, :);
@@ -609,15 +610,15 @@ classdef Transforms < handle
 			end
 			
 			% Extract finalized value
-			rsq			= 1 - ress_min;
+			rsq			= 1 - res_all_min;
 			numPeaks	= numPeaks_min;
-			highestPeak = highestPeak_min;
+			hpi = highestPeak_min;
 			beadPops	= beadPops_min;
 			fits		= fits_min;
 			meansLin	= means_min;
 			meansBxp	= Transforms.lin2logicle(meansLin);
 			
-			fprintf(1, '\nFinished fitting! # Peaks = %d, Highest = Peak #%d\n', numPeaks, highestPeak);
+			fprintf(1, '\nFinished fitting! # Peaks = %d, Highest = Peak #%d\n', numPeaks, hpi);
 			
 			% Show final calibration plots if requested
 			if ismember('showPlots', options)
