@@ -1733,9 +1733,11 @@ classdef FlowData < handle
 						combData = [combData; self.sampleData(i).(chan).raw(1:self.numSamples:end)];
 					end
 					
+					ss = FlowAnalysis.subSample(numel(combData), 1e4);
+					
 					figThresh = figure();
 					ax = gca(); hold(ax, 'on')
-					histogram(ax, Transforms.lin2logicle(combData, false, self.logicleParams))
+					histogram(ax, Transforms.lin2logicle(combData(ss), false, self.logicleParams))
 					title('Draw a line to set an x-axis threshold', 'fontsize', 16)
 					ylabel('Count', 'fontsize', 14)
 					xlabel(strrep(chan, '_', '-'), 'fontsize', 14)
