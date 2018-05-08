@@ -341,13 +341,10 @@ classdef Gating < handle
                 falseIdx = false(data(d).nObs, 1);
 
                 % Apply gates
-                [subIdxP1, ~] = Gating.gatePolygon( ...
+                [idxP1, ~] = Gating.gatePolygon( ...
                     data(d).FSC_A.raw, ...
                     data(d).SSC_A.raw, ...
                     'semilogy', gateP1);
-                numIdxP1 = find(subIdxP1);
-                idxP1 = falseIdx;
-                idxP1(numIdxP1) = true;
 				
 				% Save Gate P1
 				data(d).gates.P1 = idxP1;
@@ -364,9 +361,8 @@ classdef Gating < handle
 						data(d).(chans{1}).raw(idxP1), ...
 						data(d).(chans{2}).raw(idxP1), ...
 						'linear', gateP2);
-					numIdxP2 = numIdxP1(subIdxP2);
-					idxP2 = falseIdx;
-					idxP2(numIdxP2) = true;
+					
+					idxP2 = Gating.fixGateIdxs(idxP1, subIdxP2);
 					
 					% Save Gate P2
 					data(d).gates.P2 = idxP2;
@@ -377,9 +373,8 @@ classdef Gating < handle
 						data(d).(chans{3}).raw(idxP2), ...
 						data(d).(chans{4}).raw(idxP2), ...
 						'semilogy', gateP3);
-					numIdxP3 = numIdxP2(subIdxP3);
-					idxP3 = falseIdx;
-					idxP3(numIdxP3) = true;
+					
+					idxP3 = Gating.fixGateIdxs(idxP2, subIdxP3);
 					
 					% Save Gate P3
 					data(d).gates.P3 = idxP3;
@@ -388,8 +383,8 @@ classdef Gating < handle
         end
         
         
-		function [cellsWithinGate, gateVertices, gateFig] = gatePolygon(xdata, ydata, axis_scales, position)
-			% gates a given population.  Uses the polygon vertices specified by
+		function [cellsInGate, gatePolygons, gateFig] = gatePolygon(xdata, ydata, axScale, position)
+			% Gates a given population.  Uses the polygon vertices specified by
 			% 'position' or if this is not given, the user is asked to specify the polygon
 			% through UI
 			% 
@@ -399,45 +394,54 @@ classdef Gating < handle
 			% Weiss Lab, MIT
 			% 
 			% Update Log:
-			%
+			%	2018-03-28	Slight rearrangment/cleanup, plus added empty figure
+			%				output for when 'position' is supplied as an input
             
             % axes limits
-            AXES_MIN = 1;
-            AXES_MAX = 2^18;
-                        
+%             AXES_MIN = 1;
+%             AXES_MAX = 2^18;
+            
+			% Check axis scaling
+			if exist('axScale', 'var')
+				validatestring(axScale, {'linear', 'loglog', 'semilogy', 'semilogx'}, mfilename, 'axis_scales', 3);
+			else
+				axScale = 'linear';
+			end
+			
             % position input is optional, and thus the method will only pull up a GUI to create a 
             % new gate if it is not included
-            
-			if ~exist('position', 'var')
-			    gateFig = figure();
-                ax = gca();
-				if strcmp(axis_scales,'loglog')
-					loglog(xdata,ydata,'.','MarkerSize',2)
-					ax.XScale = 'log';
-                    ax.YScale = 'log';
-				elseif strcmp(axis_scales,'semilogy')
-					%dscatter(xdata,ydata,'MARKER','.','MSIZE',2)
-					semilogy(xdata,ydata,'.','MarkerSize',2)
-					ax.YScale = 'log';
-				elseif strcmp(axis_scales,'semilogx')
-					semilogx(xdata,ydata,'.','MarkerSize',2)
-					ax.XScale = 'log';
-				else
-					plot(xdata,ydata,'.','MarkerSize',2)
+			if exist('position', 'var')
+				gateFig = []; % Empty figure for returning
+			else
+				gateFig = figure();
+                ax = gca(); hold(ax, 'on');
+				plot(ax, xdata, ydata, '.', 'MarkerSize', 2)
+				
+				% Exclude outliers that can throw off the graph
+				ax.XLim = prctile(xdata, [1, 99]); 
+				ax.YLim = prctile(ydata, [1, 99]);
+				
+				switch axScale
+					case {'loglog'}
+						ax.XScale = 'log';
+						ax.YScale = 'log';
+					case {'semilogy'}
+						ax.YScale = 'log';
+					case {'semilogx'}
+						ax.XScale = 'log';
 				end
-				hold(ax, 'on')
-                ax.XLim = [AXES_MIN, AXES_MAX];
-                ax.YLim = [AXES_MIN, AXES_MAX];
+				
+%                 ax.XLim = [AXES_MIN, AXES_MAX];
+%                 ax.YLim = [AXES_MIN, AXES_MAX];
                 
 				h = impoly(ax, 'Closed', true); % modified by JG to use impoly to determine if event is within gate - much easier this way.
 				position = wait(h);
 			end
 
-			gateVertices = position;
-
-
-			% determine if in or out of polygon
-			cellsWithinGate = inpolygon(xdata, ydata, position(:, 1), position(:, 2));
+			gatePolygons = position;
+			
+			% Determine if in or out of polygon
+			cellsInGate = inpolygon(xdata, ydata, position(:, 1), position(:, 2));
             
 		end
 		
@@ -453,7 +457,7 @@ classdef Gating < handle
 			% Update Log:
 			%
 			
-			if nargin >= 3 && ~isempty(strfind(time_indicator,'yes')) %modified by JG only use time gating if user inputs 'yes' as 3rd input
+			if nargin >= 3 && ~contains(time_indicator, 'yes') %modified by JG only use time gating if user inputs 'yes' as 3rd input
 				use_time = 1;
 			else
 				use_time = 0;
@@ -587,7 +591,7 @@ classdef Gating < handle
 				xlabel('SSC-W')
 				ylabel('SSC-H')
 				hold on
-				[P3_logicals gate3] = Gating.gatePolygon(datSSC_W,datSSC_H,'semilogy');
+				[P3_logicals, gate3] = Gating.gatePolygon(datSSC_W,datSSC_H,'semilogy');
 				
 				if use_time ~=0 %only apply time gating if user indicates so
 					
@@ -661,6 +665,33 @@ classdef Gating < handle
 
 			hold off
 
+		end
+		
+		
+		function fixedGateIdxs2 = fixGateIdxs(gateIdxs1, gateIdxs2)
+			% Transforms logical indexes from a child gate to match the parent
+			%
+			%	fixedGateIdxs2 = fixGateIdxs(gateIdxs1, gateIdxs2);
+			%
+			%	This is needed because when a gate with N passing points
+			%	is applied to M data points, then every child gate will 
+			%	operate on the N points, rather than the M points, and 
+			%	thus the indexes must be adjusted to match the original 
+			%	points that the parent gate derives from. 
+			%
+			%	Inputs
+			%
+			%		gateIdxs1		<logical> Logical gate 1 indices
+			%
+			%		gateIdxs2		<logical> Logical gate 2 indices
+			%
+			%	Outputs
+			%
+			%		fixedGateIdxs2	<logical> Fixed logical gate 2 indices
+			
+			preGate = find(gateIdxs1); 
+			fixedGateIdxs2 = false(numel(gateIdxs1), 1);
+			fixedGateIdxs2(preGate(gateIdxs2)) = true;
 		end
 		
 	end
