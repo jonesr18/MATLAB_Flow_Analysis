@@ -716,7 +716,7 @@ classdef FlowData < handle
 					if ~isempty(fieldnames(figFits))
 						for chID = 1:numel(self.channels)
 							saveas(figFits.(self.channels{chID}), ...
-									[beadDirs{b}, beadSaveName, '_', MEF_units{chID}, '_Fit.fig']); 
+									[beadDirs{b}, beadSaveName, '_', self.channels{chID}, '_', MEF_units{chID}, '_Fit.fig']); 
 						end
 						if isfield(figFits, 'manualPeaks')
 							saveas(figFits.manualPeaks, [beadDirs{b}, beadSaveName, '_manualPeaks.fig']);
@@ -796,10 +796,7 @@ classdef FlowData < handle
 			% Check pre-requisites for running
 			assert(self.controlsAdded, 'Controls must be added before converting to MEFL units!\n');
 			assert(self.mefConverted, 'MEF conversion must be run before converting to MEFL units!\n');
-			
-			% Extract MEF units from Transforms class for naming
-			MEF_units = Transforms.getBeadUnits(self.channels);
-			
+						
 			% Check if conversions already exist
 			beadDir = [self.controlFolder, 'Calibration', filesep];
 			if ~exist(beadDir, 'file')
@@ -821,7 +818,7 @@ classdef FlowData < handle
 					for chID = 1:numel(self.channels)
 						if ~strcmpi(self.channels{chID}, 'FITC_A')
 							saveas(figFits.(self.channels{chID}), ...
-									[beadDir, MEF_units{chID}, '_MEFL_Conversion.fig']); 
+									[beadDir, self.channels{chID}, '_MEFL_Conversion.fig']); 
 						end
 					end
 				end
