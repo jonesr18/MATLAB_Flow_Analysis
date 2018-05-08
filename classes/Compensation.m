@@ -145,6 +145,14 @@ classdef Compensation < handle
 					
 					[~, coeffs(chF, chB), ints(chF, chB)] = regression(scData{chB}(:, chB)', scData{chB}(:, chF)');
 					
+					% "Robust" fit is less affected by outliers. Similar to
+					% minimizing sum of absolute residuals, rather than
+					% least-squares as in the regression function. 
+					%	linFit(1) = intercept  |  linFit(2) = slope
+% 					linFit = robustfit(scData{chB}(:, chB)', scData{chB}(:, chF)');
+% 					ints(chF, chB) = linFit(1);		% Intercept
+% 					coeffs(chF, chB) = linFit(2);	% Slope
+					
 % 					[minResultCH, fval] = fminsearch(@(x) ...
 % 						fitFuncIndependent(x, options.minFunc, chB, chF), ...
 % 						[A0(chF); K0(chF, chB)], optimOptions);
