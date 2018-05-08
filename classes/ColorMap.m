@@ -46,7 +46,8 @@ classdef ColorMap < handle
             'grey',         struct('cm_top', [0.8, 0.8, 0.8], 'cm_bot', [0.2, 0.2, 0.2]), ...
             'redblue',      struct('cm_top', [1.0, 0.0, 0.0], 'cm_mid', [0.85, 0.85, 0.85], 'cm_bot', [0.0, 0.5, 1.0]), ...
 ...%             'greenpurp',    struct('cm_top', [0.0, 1.0, 0.5], 'cm_mid', [0.85, 0.85, 0.85], 'cm_bot', [0.5, 0.0, 1.0]));
-            'greenpurp',    struct('cm_top', [0.4, 1.0, 0.8], 'cm_mid', [0, 0, 0], 'cm_bot', [0.8, 0.4, 1.0]));
+            'greenpurp',    struct('cm_top', [0.4, 1.0, 0.8], 'cm_mid', [0, 0, 0], 'cm_bot', [0.8, 0.4, 1.0]), ...
+			'ocean',		struct('cm_top', [237 248 177] ./ 255, 'cm_mid', [65 182 196] ./ 255, 'cm_bot', [37 52 148] ./ 255));
      
     end
     
