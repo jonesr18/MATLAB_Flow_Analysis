@@ -1083,6 +1083,10 @@ classdef FlowAnalysis < handle
 			% Returns a logical indices vector for subsampling numPoints 
 			% values from a vector of length len.
 			%
+			%	indices = subSample(len, numPoints);
+			%
+			%	If numPoints >= len, then true(len, 1) is returned
+			%
 			%	Inputs 
 			%		len			<numeric> The length of the target vector/matrix
 			%		numPoints	<numeric> The number of points to subsample
@@ -1105,18 +1109,14 @@ classdef FlowAnalysis < handle
 			len = round(len);
 			numPoints = round(numPoints);
 			
-			% Handle illegal case where numPoints > length
-			assert(numPoints <= len, 'Number of points (%d) is greater than the length (%d)!', numPoints, len)
-			
 			% Handle special case where length = numPoints
-			if (len == numPoints)
-				indices = true(numPoints, 1);
-				return
+			if (numPoints >= len)
+				indices = true(len, 1);
+			else
+				indices = false(numPoints, 1);
+				numericIdxs = round(linspace(1, len, numPoints));
+				indices(numericIdxs) = true;
 			end
-			
-			indices = false(numPoints, 1);
-			numericIdxs = round(linspace(1, len, numPoints));
-			indices(numericIdxs) = true;
 		end
         
         
