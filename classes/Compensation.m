@@ -131,13 +131,8 @@ classdef Compensation < handle
 				figFits = figure();
 			end
 			
-			% Prep figure
+			% Plot compensation QC figure
 			spIdx = 0;
-			xrange = logspace(0, log10(max(cellfun(@(x) max(x(:)), scData))), 100);
-			if ~all(logical(options.plotLin))
-				xrange = Transforms.lin2logicle(xrange, options.doMEF, options.logicle);
-			end
-			
 			coeffs = zeros(numel(channels));
 			ints = zeros(numel(channels));
 			for chF = 1:numel(channels)
@@ -158,10 +153,15 @@ classdef Compensation < handle
 % 						[A0(chF); K0(chF, chB)], optimOptions);
 % 					ints(chF, chB) = minResultCH(1);
 % 					coeffs(chF, chB) = minResultCH(2);
-
-					fitVals = xrange * coeffs(chF, chB) + ints(chF, chB);
 					
 					if ~options.plotsOn, continue, end
+					
+					xrange = logspace(0, log10(max(scData{chB}(:, chB))), 100);
+					if ~all(logical(options.plotLin))
+						xrange = Transforms.lin2logicle(xrange, options.doMEF, options.logicle);
+					end
+					
+					fitVals = xrange * coeffs(chF, chB) + ints(chF, chB);
 					
 					spIdx = spIdx + 1;
 					ax = subplot(numel(channels), numel(channels), spIdx);
@@ -232,6 +232,7 @@ classdef Compensation < handle
 				end
 				if ~isfield(options, 'logicle'), options.logicle = struct(); end
 				if ~isfield(options, 'doMEF'), options.doMEF = false; end
+				if ~isfield(options, 'plotLin'), options.plotLin = false; end
 			end
 			
 			
