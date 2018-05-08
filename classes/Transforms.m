@@ -921,8 +921,8 @@ classdef Transforms < handle
 						ax.XScale = 'log';
 						title(sprintf('Scale Factor: %.2f | R^2: %.3f', ...
 								slope, rsq), 'fontsize', 14)
-						ylabel('MEFL')
-						xlabel(currChanMEF);
+						ylabel('FITC_A (MEFL)')
+						xlabel(sprintf('%s (%s)', strrep(channels{chID}, '_', '-'), currChanMEF));
 					end
 				end
 			end
