@@ -338,7 +338,7 @@ classdef FlowAnalysis < handle
         end
         
         
-        function [bins, binDims] = simpleBin(dataMatrix, binEdges)
+        function [bins, binSizes] = simpleBin(dataMatrix, binEdges)
             % Takes an array of data values and bins them using the given edges, 
             % returning a double array of bin IDs for each element
             %
@@ -370,33 +370,31 @@ classdef FlowAnalysis < handle
 			% 
 			% Update Log:
 			%
-            
-            % Define bins in biexponential space at a wide range
-			
+            			
 			if iscell(binEdges)
 				% Unique bin edges for all
-				binDims = zeros(1, numel(binEdges));
+				binSizes = zeros(1, numel(binEdges));
 				for be = 1:numel(binEdges)
-					binDims(be) = numel(binEdges{be}) - 1;
+					binSizes(be) = numel(binEdges{be}) - 1;
 					binEdges{be} = sort(binEdges{be});
 				end
 			else
 				% Bin edges same and apply to all channels
-				binDims = (numel(binEdges) - 1) .* ones(1, size(dataMatrix, 2));
+				binSizes = (numel(binEdges) - 1) .* ones(1, size(dataMatrix, 2));
 				be = binEdges; % Store for name override
 				binEdges = cell(1, size(dataMatrix, 2));
 				binEdges(:) = {be};
 			end
             
             % Setup bins as a cell array with dimensions equal to number of cell channels. 
-            numDims = length(binDims);
+            numDims = length(binSizes);
             if numDims == 1
-                binDims = [binDims, 1];
+                binSizes = [binSizes, 1];
             end
-            bins = cell(binDims);
+            bins = cell(binSizes);
             
             % Find cells in each bin
-			binCoords = ones(binDims);
+			binCoords = ones(binSizes);
 			binCoords(1) = 0; % For the first iteration
 			cellsIdx = 1:size(dataMatrix, 1);
 			for i = 1:numel(bins)
@@ -404,7 +402,7 @@ classdef FlowAnalysis < handle
 				% Find bin coordinates in ND-space
 				for j = 1:numDims
 					binCoords(j) = binCoords(j) + 1;
-					if binCoords(j) > binDims(j)
+					if binCoords(j) > binSizes(j)
 						binCoords(j) = 1;
 					else
 						break
