@@ -1028,7 +1028,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function self = bin(self, binInputs, binDataType)
+		function self = bin(self, binInputs, binDataType, doPar)
 			% Sorts the sample data using the given set of channels/edges into a
 			% number of bins using the given dataType for assignments. 
 			%
@@ -1043,6 +1043,9 @@ classdef FlowData < handle
 			%		
 			%		binDataType		<char> The cell dataType to use (eg 'mefl', 'comp')
 			%
+			%		doPar			<logical> (Optional) Flag to use parallel
+			%						computing for binning. Default = false. Runs
+			%						with default MATLAB pool generation. 
 			%
 			%	Implementation notes:
 			%		The binning method (FlowAnalysis.simpleBin()) operates in 
@@ -1062,19 +1065,30 @@ classdef FlowData < handle
 			
 			[binChannels, binEdges] = zCheckInputs_bin(self);
 			
+			slicedData = cell(1, self.numSamples);
 			for i = 1:self.numSamples
 								
-				slicedData = self.slice(i, struct( ...
+				slicedData{i} = self.slice(i, struct( ...
 						'channels', {binChannels}, ...
 						'dataType', binDataType, ...
 						'equalize', false));
 				
-				self.bins{i} = FlowAnalysis.simpleBin(slicedData, binEdges);
-				
 			end
 			
-			self.numBins = numel(self.bins{1});
-			self.binSizes = size(self.bins{1});
+			binnedData = cell(size(slicedData));
+			if doPar
+				parfor i = 1:numel(slicedData)
+					binnedData{i} = FlowAnalysis.simpleBin(slicedData{i}, binEdges);
+				end
+			else
+				for i = 1:numel(slicedData)
+					binnedData{i} = FlowAnalysis.simpleBin(slicedData{i}, binEdges);
+				end
+			end
+			
+			self.bins = binnedData;
+			self.numBins = numel(binnedData{1});
+			self.binSizes = size(binnedData{1});
 			self.binInputs = binInputs;
 			self.binDataType = binDataType;
 			self.binned = true;
@@ -1107,6 +1121,7 @@ classdef FlowData < handle
 				assert(any(strcmp(binDataType, self.dataTypes)), ...
 						'Bin data type does not match any existing data types: %s\n', binDataType);
 				
+				doPar = exist('doPar', 'var') && all(logical(doPar));
 			end
 		end
 		
