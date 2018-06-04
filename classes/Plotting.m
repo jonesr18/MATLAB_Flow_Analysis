@@ -1783,7 +1783,7 @@ classdef Plotting < handle
 			%
 			%	2018-03-06		Added option for giving figure handle to plot on
 			
-			figBinHmap = zCheckInputs_binHeatmap();
+			[figBinHmap, doTitle] = zCheckInputs_binHeatmap();
 			
 			spIdx = 0;
 			for d5 = 1:size(dataMatrix, 5)
@@ -1830,17 +1830,17 @@ classdef Plotting < handle
 							'EdgeColor', 'none', 'FaceColor', 'flat');
 						
 						% Set axes properties/labels
-						set(ax, axProperties);
-						xlabel(ax, labels{1});
-						ylabel(ax, labels{2});
 						Plotting.biexpAxes(ax, ismember('X', options.biexp), ...
 										   ismember('Y', options.biexp), ...
 										   ismember('Z', options.biexp), ...
 										   options.doMEF, options.logicle)
+						set(ax, axProperties);
+						xlabel(ax, labels{1});
+						ylabel(ax, labels{2});
 					end
 					
 					% Plot Z (3D) labels if applicable
-					if (size(dataMatrix, 3) > 1)
+					if (size(dataMatrix, 3) > 1 && doTitle(3))
 						centers3 = cell(1, size(dataMatrix, 3));
 						for c3i = 1:numel(centers3)
 							if (size(dataMatrix, 3) < numel(edges{3}))
@@ -1862,7 +1862,8 @@ classdef Plotting < handle
 					end
 					
 					% Plot titles w/ 4/5D labels if applicable
-					if (size(dataMatrix, 4) > 1)
+					titleTxt = {};
+					if (size(dataMatrix, 4) > 1 && doTitle(5))
 						if (size(dataMatrix, 4) < numel(edges{4}))
 							center4 = num2str(mean([edges{4}(d4), edges{4}(d4 + 1)]));
 						else
@@ -1872,11 +1873,9 @@ classdef Plotting < handle
 								center4 = num2str(edges{4}(d4));
 							end
 						end
-						titleLine1 = sprintf('%s = %s', labels{4}, center4);
-					else
-						titleLine1 = '';
+						titleTxt = [titleTxt; {sprintf('%s = %s', labels{4}, center4)}]; %#ok<AGROW>
 					end
-					if (size(dataMatrix, 5) > 1)
+					if (size(dataMatrix, 5) > 1 && doTitle(5))
 						if (size(dataMatrix, 5) < numel(edges{5}))
 							center5 = num2str(mean([edges{5}(d5), edges{5}(d5 + 1)]));
 						else
@@ -1886,11 +1885,9 @@ classdef Plotting < handle
 								center5 = num2str(edges{5}(d5));
 							end
 						end
-						titleLine2 = sprintf('%s = %s', labels{5}, center5);
-					else
-						titleLine2 = '';
+						titleTxt = [titleTxt; {sprintf('%s = %s', labels{5}, center5)}]; %#ok<AGROW>
 					end
-					title(ax, {titleLine1; titleLine2})
+					title(ax, titleTxt);
 				end
 			end
 			
@@ -1909,7 +1906,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function figBinHmap = zCheckInputs_binHeatmap()
+			function [figBinHmap, doTitle] = zCheckInputs_binHeatmap()
 				
 				% Check data + dimensions
 				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'data', 1);
@@ -1921,7 +1918,12 @@ classdef Plotting < handle
 				assert(numel(edges) == ndims(dataMatrix), ...
 					'Number of edges (%d) does not match data dimensionality! (%d)', ...
 					numel(edges), ndims(dataMatrix));
+				doTitle = false(size(edges));
 				for ei = 1:numel(edges)
+					if isempty(edges{ei})
+						doTitle(ei) = false;
+						continue
+					end
 					if ei <= 2
 						assert(numel(edges{ei}) == (size(dataMatrix, ei) + 1), ...
 							   'Number of edges supplied for dim %d is incorrect!', ei)
