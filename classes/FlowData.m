@@ -1776,7 +1776,7 @@ classdef FlowData < handle
 				end
 				
 				% Find cells passing threshold and record gate
-				thrGateNames{ch} = ['TH_', self.SHORT_COLORS.(chan)];
+				thrGateNames{ch} = ['TH', self.SHORT_COLORS.(chan)];
 				for i = 1:self.numSamples
 					passThresh = (self.sampleData(i).(chan).raw >= threshVal);
 					self.sampleData(i).gates.(thrGateNames{ch}) = passThresh;
