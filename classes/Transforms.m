@@ -605,7 +605,7 @@ classdef Transforms < handle
 						fit = lsqcurvefit(@(p, x) linearFunc([1; p(2)], x), [1; 1], pointsMean, pointsMEF, [], [], opt);
 					end
 					fits(:, chID) = reshape(fit, [], 1);
-
+					
 					% Measure and collate residuals
 					yResid = abs(pointsMEF - polyval(fitNL, pointsMean));
 					ssResid = sum(yResid.^2);
