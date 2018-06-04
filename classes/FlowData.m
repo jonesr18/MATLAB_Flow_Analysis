@@ -300,7 +300,11 @@ classdef FlowData < handle
 					'Channel not in dataStruct: %s\n', badChannels{:});
 				
 				% Import all data
-				dataStruct = [ds, FlowAnalysis.openFiles(dataFnames{2:end})];
+				if (numel(dataFnames) > 1)
+					dataStruct = [ds, FlowAnalysis.openFiles(dataFnames{2:end})];
+				else
+					dataStruct = ds;
+				end
 			end
 		end
 		
