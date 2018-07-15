@@ -1185,10 +1185,18 @@ classdef FlowData < handle
 			
 			% Set up binStats struct
 			sliceBins = sliceParams.bins;
-			for m = metrics
-				binStats.(m{:}) = zeros(size(sliceBins, 1), numel(sliceParams.channels));
+			binAll = (numel(sliceBins) == self.numBins);
+			if binAll
+				binStatSize = self.binSizes;
+			else
+				binStatSize = size(sliceBins, 1);
 			end
-			binStats.numCells = zeros(size(sliceBins, 1), 1);
+			for m = metrics
+				if binAll
+					binStats.(m{:}) = zeros([binStatSize, numel(sliceParams.channels)]);
+				end
+			end
+			binStats.numCells = zeros(binStatSize);
 			
 			% Iterate over bins, compute stats for each one independently
 			for b = 1:size(sliceBins, 1)
@@ -1200,6 +1208,9 @@ classdef FlowData < handle
 				
 				for ch = 1:numel(sliceParams.channels)
 					
+					% Compute linear index
+					binStatIdx = b + numel(sliceBins) * (ch - 1);
+					
 					% Extract channel data
 					dataInBin = slicedData(:, ch);
 					dataInBin = dataInBin(~isnan(dataInBin));
@@ -1207,16 +1218,16 @@ classdef FlowData < handle
 					
 					% Calculate requested metrics
 					prctiles = prctile(dataInBin, [10, 50, 90]);
-					if ismember('p10', metrics), binStats.p10(b, ch) = prctiles(1); end
-					if any(ismember({'p50', 'median'}, metrics)), binStats.p50(b, ch) = prctiles(2); end
-					if ismember('p90', metrics), binStats.p90(b, ch) = prctiles(3); end
-					if ismember('mean', metrics), binStats.mean(b, ch) = mean(dataInBin); end
-					if ismember('geomean', metrics), binStats.geomean(b, ch) = geomean(dataInBin(posData)); end
-					if ismember('stdev', metrics), binStats.stdev(b, ch) = std(dataInBin); end
-					if ismember('geostdev', metrics), binStats.geostdev(b, ch) = geostd(dataInBin(posData)); end
-					if ismember('sem', metrics), binStats.sem(b, ch) = std(dataInBin) / sqrt(numel(dataInBin)); end
-					if ismember('semb', metrics), binStats.semb(b, ch) = semBootstrap(dataInBin); end % NOTE: SUPER SLOW
-% 					if ismember('ci95', metrics), binStats.CI95(b, ch) = ci95(dataInBin); end
+					if ismember('p10', metrics), binStats.p10(binStatIdx) = prctiles(1); end
+					if any(ismember({'p50', 'median'}, metrics)), binStats.p50(binStatIdx) = prctiles(2); end
+					if ismember('p90', metrics), binStats.p90(binStatIdx) = prctiles(3); end
+					if ismember('mean', metrics), binStats.mean(binStatIdx) = mean(dataInBin); end
+					if ismember('geomean', metrics), binStats.geomean(binStatIdx) = geomean(dataInBin(posData)); end
+					if ismember('stdev', metrics), binStats.stdev(binStatIdx) = std(dataInBin); end
+					if ismember('geostdev', metrics), binStats.geostdev(binStatIdx) = geostd(dataInBin(posData)); end
+					if ismember('sem', metrics), binStats.sem(binStatIdx) = std(dataInBin) / sqrt(numel(dataInBin)); end
+					if ismember('semb', metrics), binStats.semb(binStatIdx) = semBootstrap(dataInBin); end % NOTE: SUPER SLOW
+% 					if ismember('ci95', metrics), binStats.CI95(binStatIdx) = ci95(dataInBin); end
 				end
 			end
 			
@@ -1233,8 +1244,12 @@ classdef FlowData < handle
 				% Only need to check sliceParams for fields that are used by
 				% this function, so we let slice() itself check the rest.
 				validateattributes(sliceParams, {'struct'}, {}, mfilename, 'sliceParams', 2);
-				if (isfield(sliceParams, 'channels') && ischar(sliceParams.channels))
-					sliceParams.channels = {sliceParams.channels}; % Needed in main function
+				if isfield(sliceParams, 'channels') 
+					if ischar(sliceParams.channels)
+						sliceParams.channels = {sliceParams.channels}; % Needed in main function
+					end
+				else
+					sliceParams.channels = self.channels;
 				end
 				
 				% The default behavior is slightly different than slice - we
