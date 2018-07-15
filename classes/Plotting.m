@@ -1831,10 +1831,12 @@ classdef Plotting < handle
 							'EdgeColor', 'none', 'FaceColor', 'flat');
 						
 						% Set axes properties/labels
+						% - We do this before setting values on the Z-axis since
+						%	we want any 3rd dim bins to be evenly spaced
 						Plotting.biexpAxes(ax, ismember('X', options.biexp), ...
-										   ismember('Y', options.biexp), ...
-										   ismember('Z', options.biexp), ...
-										   options.doMEF, options.logicle)
+							   ismember('Y', options.biexp), ...
+							   ismember('Z', options.biexp), ...
+							   options.doMEF, options.logicle)
 						set(ax, axProperties);
 						xlabel(ax, labels{1});
 						ylabel(ax, labels{2});
@@ -1844,13 +1846,19 @@ classdef Plotting < handle
 					if (size(dataMatrix, 3) > 1 && doTitle(3))
 						centers3 = cell(1, size(dataMatrix, 3));
 						for c3i = 1:numel(centers3)
-							if (size(dataMatrix, 3) < numel(edges{3}))
-								centers3{c3i} = num2str(mean([edges{3}(c3i), edges{3}(c3i + 1)]));
+							if iscell(edges{3}(c3i))
+								centers3{c3i} = edges{3}{c3i};
 							else
-								if iscell(edges{3}(c3i))
-									centers3{c3i} = edges{3}{c3i};
+								if (size(dataMatrix, 3) < numel(edges{3}))
+									edgeVal = mean([edges{3}(c3i), edges{3}(c3i + 1)]);
 								else
-									centers3{c3i} = num2str(edges{3}(c3i));
+									edgeVal = edges{3}(c3i);
+								end
+								if edges{3}(c3i) > 1e3
+									% Show large numbers in scientific notation
+									centers3{c3i} = sprintf('%.2g', edgeVal);
+								else
+									centers3{c3i} = num2str(edgeVal);
 								end
 							end
 						end
@@ -1865,25 +1873,37 @@ classdef Plotting < handle
 					% Plot titles w/ 4/5D labels if applicable
 					titleTxt = {};
 					if (size(dataMatrix, 4) > 1 && doTitle(5))
-						if (size(dataMatrix, 4) < numel(edges{4}))
-							center4 = num2str(mean([edges{4}(d4), edges{4}(d4 + 1)]));
+						if iscell(edges{4}(d4))
+							center4 = edges{4}{d4};
 						else
-							if iscell(edges{4}(d4))
-								center4 = edges{4}{d4};
+							if (size(dataMatrix, 4) < numel(edges{4}))
+								edgeVal = mean([edges{4}(d4), edges{4}(d4 + 1)]);
 							else
-								center4 = num2str(edges{4}(d4));
+								edgeVal = edges{4}(d4);
+							end
+							if edges{4}(d4) > 1e3
+								% Show large numbers in scientific notation
+								center4 = sprintf('%.2g', edgeVal);
+							else
+								center4 = num2str(edgeVal);
 							end
 						end
 						titleTxt = [titleTxt; {sprintf('%s = %s', labels{4}, center4)}]; %#ok<AGROW>
 					end
 					if (size(dataMatrix, 5) > 1 && doTitle(5))
-						if (size(dataMatrix, 5) < numel(edges{5}))
-							center5 = num2str(mean([edges{5}(d5), edges{5}(d5 + 1)]));
+						if iscell(edges{5}(d5))
+							center5 = edges{5}{d5};
 						else
-							if iscell(edges{5}(d5))
-								center5 = edges{5}{d5};
+							if (size(dataMatrix, 5) < numel(edges{5}))
+								edgeVal = mean([edges{5}(d5), edges{5}(d5 + 1)]);
 							else
-								center5 = num2str(edges{5}(d5));
+								edgeVal = edges{5}(d5);
+							end
+							if edges{5}(d5) > 1e3
+								% Show large numbers in scientific notation
+								center5 = sprintf('%.2g', edgeVal);
+							else
+								center5 = num2str(edgeVal);
 							end
 						end
 						titleTxt = [titleTxt; {sprintf('%s = %s', labels{5}, center5)}]; %#ok<AGROW>
@@ -1917,9 +1937,9 @@ classdef Plotting < handle
 				% Check edges
 				validateattributes(edges, {'cell'}, {}, mfilename, 'edges', 2);
 				assert(numel(edges) == ndims(dataMatrix), ...
-					'Number of edges (%d) does not match data dimensionality! (%d)', ...
-					numel(edges), ndims(dataMatrix));
-				doTitle = false(size(edges));
+						'Number of edges (%d) does not match data dimensionality! (%d)', ...
+						numel(edges), ndims(dataMatrix));
+				doTitle = true(size(edges));
 				for ei = 1:numel(edges)
 					if isempty(edges{ei})
 						doTitle(ei) = false;
