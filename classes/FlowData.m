@@ -1265,7 +1265,7 @@ classdef FlowData < handle
 					end
 				end
 				
-				validMetrics = {'p10', 'p50', 'p90', 'median', 'mean', 'geomean', 'stdev', 'geostdev', 'sem', 'semb'};
+				validMetrics = {'numCells', 'p10', 'p50', 'p90', 'median', 'mean', 'geomean', 'stdev', 'geostdev', 'sem', 'semb'};
 				if exist('metrics', 'var')
 					validateattributes(metrics, {'cell', 'char'}, {}, mfilename, 'metrics', 3);
 					if ischar(metrics), metrics = {metrics}; end % For simplicity
