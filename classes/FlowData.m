@@ -468,6 +468,7 @@ classdef FlowData < handle
 			% Check if gates have already been made for this data first, then
 			% process if necessary. 
 			gatesSaveName = [self.date, '_', self.name];
+			
 			gatesFnameControls = [gateDirControls, 'Controls_GatePolygons.mat'];
 			if exist(gatesFnameControls, 'file')
 				% Load existing control gates
@@ -476,7 +477,7 @@ classdef FlowData < handle
 				% Do manual control gating
 				[gateP1c, gateP2c, gateP3c, gateFigs] = Gating.standardGating(self.controlDataScatter, onlyP1, swap);
 				save(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
-				for f = fieldnames(gateFigs)
+				for f = fieldnames(gateFigs)'
 					saveas(gateFigs.(f{:}), [gateDirControls, 'Controls_gate', f{:}, 'c']);
 				end
 			end
@@ -489,7 +490,7 @@ classdef FlowData < handle
 				% Do manual sample gating
 				[gateP1s, gateP2s, gateP3s, gateFigs] = Gating.standardGating(self.sampleDataScatter, onlyP1, swap);
 				save(gatesFnameSamples, 'gateP1s', 'gateP2s', 'gateP3s');
-				for f = fieldnames(gateFigs)
+				for f = fieldnames(gateFigs)'
 					saveas(gateFigs.(f{:}), [gateDirSamples, gatesSaveName, '_gate', f{:}, 's']);
 				end
 			end
@@ -507,7 +508,7 @@ classdef FlowData < handle
 			self.controlDataScatter = Gating.applyStandardGates(self.controlDataScatter, gateP1c, gateP2c, gateP3c, swap);
 			self.sampleDataScatter	= Gating.applyStandardGates(self.sampleDataScatter,  gateP1s, gateP2s, gateP3s, swap);
 			
-			% Transfer gate logicals to extrenally accesible data
+			% Transfer gate logicals to externally accesible data
 			for cd = 1:self.numControls
 				self.controlData(cd).gates = self.controlDataScatter(cd).gates;
 			end
