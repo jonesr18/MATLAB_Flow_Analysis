@@ -218,7 +218,7 @@ classdef FlowData < handle
 			end
 			
 			% Extract data from the given channels
-			self.numSamples = numel(dataStruct);
+			self.numSamples = size(IDs, 2);
 			self.numCells = zeros(1, self.numSamples);
 			for i = 1:size(IDs, 2)
 				
