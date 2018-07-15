@@ -1089,7 +1089,8 @@ classdef FlowData < handle
 			
 			self.bins = binnedData;
 			self.numBins = numel(binnedData{1});
-			self.binSizes = size(binnedData{1});
+			bSizes = size(binnedData{1});
+			self.binSizes = bSizes(1:numel(binChannels)); % Handles single-channel binning so only one size is given
 			self.binInputs = binInputs;
 			self.binDataType = binDataType;
 			self.binned = true;
