@@ -451,7 +451,7 @@ classdef FlowData < handle
 			assert(self.controlsAdded, 'Controls must be added before gating!\n');
 			
 			% Determine gating options
-			onlyP1 = (~exist('onlyP1', 'var') || all(logical(onlyP1)));
+			onlyP1 = (exist('onlyP1', 'var') && all(logical(onlyP1)));
 			self.onlyP1 = onlyP1;
 			if strcmpi(self.cytometer, 'Koch-LSRII-HTS2'), swap = true; else, swap = false; end
 			
