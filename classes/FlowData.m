@@ -1155,7 +1155,11 @@ classdef FlowData < handle
 			%									Automatically forces 'dataType' to be 
 			%									'self.binDataType' regardless of whether 
 			%									they are given or not
-			%									<Can input 'all' to select all bins>
+			%									Can input 'all' to select all bins.
+			%									** Requesting anything but all bins
+			%									will cause the output to be 2D rather 
+			%									than N+1 D as the data will not be 
+			%									reshaped to match the bin sizes.  
 			%
 			%		metrics			<char, cell> (Optional) A list of metrics to compute
 			%						Valid metrics:
@@ -1167,16 +1171,15 @@ classdef FlowData < handle
 			%
 			%	Outputs
 			%		binStats	<struct> A struct where each field is the name of 
-			%					a statistical metric and the value is a BxC
-			%					matrix of the metric values in B bins across C
-			%					channels (channels given in sliceParams). 
-			%					--> We do not structure the bin stats into their "true" 
-			%						shape since this would require always requesting
-			%						bins from an entire row/column to avoid errors
-			%						in the matrix reshaping process. Additionally,
-			%						it would require quite a bit of deconvoluting
-			%						the requested bins and ultimately it is easier
-			%						to just have the user reshape their own data
+			%					a statistical metric and the value is a N+1 D
+			%					matrix of the metric values in N bin dimensions 
+			%					across C channels (given in sliceParams) in the 
+			%					final dimension. 
+			%					--> In the case of requesting stats from specific bins
+			%						rather than all of them, we do not structure the 
+			%						bin stats into their "true" shape and instead return 
+			%						a BxC matrix of metric values in each of the 
+			%						requested B bins in all the C channels. 
 			
 			zCheckInputs_computeBinStats(self);
 			
