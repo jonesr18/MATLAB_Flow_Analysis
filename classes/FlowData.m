@@ -272,7 +272,7 @@ classdef FlowData < handle
 				channels = reshape(channels, 1, []); % Ensure row vector
 				
 				% Check required experiment details are present
-				requiredFields = {'date', 'name', 'folder', 'sampleMap', 'cytometer'};
+				requiredFields = {'date', 'name', 'folder', 'cytometer'};
 				missingFields = setdiff(requiredFields, fieldnames(expDetails));
 				assert(isempty(missingFields), 'Experiment details missing field: %s\n', missingFields{:});
 				assert(logical(exist(expDetails.folder, 'file')), 'Experiment folder does not exist!');
