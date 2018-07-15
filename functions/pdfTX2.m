@@ -1,15 +1,14 @@
-function [gapdf, gpdf, apdf] = pdfTX(x, k, theta, mu, sigma, C)
+function [gapdf, ppdf, gpdf, apdf] = pdfTX2(x, lambda, k, theta, mu, sigma)
 	
 	assert(numel(unique(diff(x))) == 1, 'x must be evenly spaced for convolution')
-	if exist('C', 'var')
-		assert(size(C, 1) == size(C, 2), 'C must be square!'); 
-	else
-		C = 1;
-	end
 	
-	gpdf = gampdf(x, k, theta);
-% 	gpdf = gampdf_ND(x, k, theta, C);
-	apdf = normpdf(x, mu, sigma);	% No covariance in autofluorescence
+	xpoiss = 0:100;
+	ppdf = poisspdf(xpoiss, lambda); 
+	gpdf = zeros(size(x)); 
+	for pi = 1:numel(ppdf)
+		gpdf = gpdf + ppdf(pi) * gampdf(x, k * xpoiss(pi), theta);
+	end
+	apdf = normpdf(x, mu, sigma);
 	
 	% Find x step value and generate x vals for conv vector
 	dx = mean(diff(x));
