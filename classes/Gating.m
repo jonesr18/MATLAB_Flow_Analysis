@@ -273,7 +273,10 @@ classdef Gating < handle
             % First do FSC-A vs SSC-A
             [subIdxP1, gateP1, gateFigs.P1] = Gating.gatePolygon( ...
 					combinedData.FSC_A.raw(pointsIdx), ...
-					combinedData.SSC_A.raw(pointsIdx), 'semilogy'); 
+					combinedData.SSC_A.raw(pointsIdx), ...
+					struct('YScale', 'log', ...
+						'XLabel', struct('String', 'FSC\_A'), ...
+						'YLabel', struct('String', 'SSC\_A'))); 
 			
 			if onlyP1
 				gateP2 = [];
@@ -291,7 +294,9 @@ classdef Gating < handle
 				% Second do FSC-W vs FSC-H
 				[subIdxP2, gateP2, gateFigs.P2] = Gating.gatePolygon( ... 
 						combinedData.(chans{1}).raw(idxP1), ...
-						combinedData.(chans{2}).raw(idxP1), 'linear');
+						combinedData.(chans{2}).raw(idxP1), ...
+						struct('XLabel', struct('String', strrep(chans{1}, '_', '\_')), ...
+							'YLabel', struct('String', strrep(chans{2}, '_', '\_'))));
 				
 				numIdxP2 = numIdxP1(subIdxP2);  % Get positions in P1 of objects passing P2 gate
 				idxP2 = falseIdx;               % Copy this to get the full-sized indexing vector
@@ -299,8 +304,11 @@ classdef Gating < handle
 
 				% Third do SSC-W vs SSC-H
 				[~, gateP3, gateFigs.P3] = Gating.gatePolygon( ... 
-					combinedData.(chans{3}).raw(idxP2), ...
-					combinedData.(chans{4}).raw(idxP2), 'semilogy');    
+						combinedData.(chans{3}).raw(idxP2), ...
+						combinedData.(chans{4}).raw(idxP2), ...
+						struct('YScale', 'log', ...
+							'XLabel', struct('String', strrep(chans{3}, '_', '\_')), ...
+							'YLabel', struct('String', strrep(chans{4}, '_', '\_'))));
 			end
         end
         
@@ -344,7 +352,7 @@ classdef Gating < handle
                 [idxP1, ~] = Gating.gatePolygon( ...
                     data(d).FSC_A.raw, ...
                     data(d).SSC_A.raw, ...
-                    'semilogy', gateP1);
+                    struct('YScale', 'log'), gateP1);
 				
 				% Save Gate P1
 				data(d).gates.P1 = idxP1;
@@ -360,7 +368,7 @@ classdef Gating < handle
 					[subIdxP2, ~] = Gating.gatePolygon( ...
 						data(d).(chans{1}).raw(idxP1), ...
 						data(d).(chans{2}).raw(idxP1), ...
-						'linear', gateP2);
+						struct(), gateP2);
 					
 					idxP2 = Gating.fixGateIdxs(idxP1, subIdxP2);
 					
@@ -372,7 +380,7 @@ classdef Gating < handle
 					[subIdxP3, ~] = Gating.gatePolygon( ...
 						data(d).(chans{3}).raw(idxP2), ...
 						data(d).(chans{4}).raw(idxP2), ...
-						'semilogy', gateP3);
+						struct('YScale', 'log'), gateP3);
 					
 					idxP3 = Gating.fixGateIdxs(idxP2, subIdxP3);
 					
@@ -383,7 +391,7 @@ classdef Gating < handle
         end
         
         
-		function [cellsInGate, gatePolygons, gateFig] = gatePolygon(xdata, ydata, axScale, position)
+		function [cellsInGate, gatePolygons, gateFig] = gatePolygon(xdata, ydata, axProperties, position)
 			% Gates a given population.  Uses the polygon vertices specified by
 			% 'position' or if this is not given, the user is asked to specify the polygon
 			% through UI
@@ -402,10 +410,8 @@ classdef Gating < handle
 %             AXES_MAX = 2^18;
             
 			% Check axis scaling
-			if exist('axScale', 'var')
-				validatestring(axScale, {'linear', 'loglog', 'semilogy', 'semilogx'}, mfilename, 'axis_scales', 3);
-			else
-				axScale = 'linear';
+			if ~exist('axProperties', 'var')
+				axProperties = struct();
 			end
 			
             % position input is optional, and thus the method will only pull up a GUI to create a 
@@ -417,20 +423,18 @@ classdef Gating < handle
                 ax = gca(); hold(ax, 'on');
 				plot(ax, xdata, ydata, '.', 'MarkerSize', 2)
 				
+				for f = fieldnames(axProperties)'
+					if contains(f{:}, 'Label')
+						set(ax.(f{:}), axProperties.(f{:}))
+					else
+						set(ax, f{:}, axProperties.(f{:}));
+					end
+				end
+				
 				% Exclude outliers that can throw off the graph
 				ax.XLim = prctile(xdata, [1, 99]); 
 				ax.YLim = prctile(ydata, [1, 99]);
-				
-				switch axScale
-					case {'loglog'}
-						ax.XScale = 'log';
-						ax.YScale = 'log';
-					case {'semilogy'}
-						ax.YScale = 'log';
-					case {'semilogx'}
-						ax.XScale = 'log';
-				end
-				
+								
 %                 ax.XLim = [AXES_MIN, AXES_MAX];
 %                 ax.YLim = [AXES_MIN, AXES_MAX];
                 
@@ -493,15 +497,15 @@ classdef Gating < handle
 			ch_red = getChannel(fcshdr,'Red'); %Get channel number for Texas-Red
 
 
-			[P1inds g1] = Gating.gatePolygon(fcsdat(:,ch_FSC_A),fcsdat(:,ch_SSC_A),'semilogy',GF.gate1);
-			[P2inds g2] = Gating.gatePolygon(fcsdat(:,ch_FSC_W),fcsdat(:,ch_FSC_H),'linear',GF.gate2);
-			[P3inds g3] = Gating.gatePolygon(fcsdat(:,ch_SSC_W),fcsdat(:,ch_SSC_H),'semilogy',GF.gate3);
+			[P1inds g1] = Gating.gatePolygon(fcsdat(:,ch_FSC_A),fcsdat(:,ch_SSC_A),struct('YScale', 'log'),GF.gate1);
+			[P2inds g2] = Gating.gatePolygon(fcsdat(:,ch_FSC_W),fcsdat(:,ch_FSC_H),struct(),GF.gate2);
+			[P3inds g3] = Gating.gatePolygon(fcsdat(:,ch_SSC_W),fcsdat(:,ch_SSC_H),struct('YScale', 'log'),GF.gate3);
 			JCInds = P1inds & P2inds & P3inds;
 
 			if isfield(GF,'gate4') && isfield(GF,'gate5') && isfield(GF,'gate6') % modified by JG. only does this if time is applied in the gate file
-				[P4inds g4] = Gating.gatePolygon(fcsdat(:,ch_time),fcsdat(:,ch_blue),'semilogy',GF.gate4);
-				[P5inds g5] = Gating.gatePolygon(fcsdat(:,ch_time),fcsdat(:,ch_yellow),'semilogy',GF.gate5);
-				[P6inds g6] = Gating.gatePolygon(fcsdat(:,ch_time),fcsdat(:,ch_red),'semilogy',GF.gate6);
+				[P4inds g4] = Gating.gatePolygon(fcsdat(:,ch_time),fcsdat(:,ch_blue),struct('YScale', 'log'),GF.gate4);
+				[P5inds g5] = Gating.gatePolygon(fcsdat(:,ch_time),fcsdat(:,ch_yellow),struct('YScale', 'log'),GF.gate5);
+				[P6inds g6] = Gating.gatePolygon(fcsdat(:,ch_time),fcsdat(:,ch_red),struct('YScale', 'log'),GF.gate6);
 				JCInds = P1inds & P2inds & P3inds & P4inds & P5inds & P6inds;
 			end
 
@@ -556,7 +560,7 @@ classdef Gating < handle
 				xlabel('FSC-A')
 				ylabel('SSC-A')
 				hold on
-				[P1_logicals, gate1] = Gating.gatePolygon(datFSC_A, datSSC_A, 'semilogy');
+				[P1_logicals, gate1] = Gating.gatePolygon(datFSC_A, datSSC_A, struct('YScale', 'log'));
 				
 				
 				%P2 - Create and apply gate 2
@@ -574,7 +578,7 @@ classdef Gating < handle
 				xlabel('FSC-W')
 				ylabel('FSC-H')
 				hold on
-				[P2_logicals, gate2] = Gating.gatePolygon(datFSC_W, datFSC_H, 'linear');
+				[P2_logicals, gate2] = Gating.gatePolygon(datFSC_W, datFSC_H);
 				
 				
 				%P3 - Create and apply gate 3
@@ -591,7 +595,7 @@ classdef Gating < handle
 				xlabel('SSC-W')
 				ylabel('SSC-H')
 				hold on
-				[P3_logicals, gate3] = Gating.gatePolygon(datSSC_W,datSSC_H,'semilogy');
+				[P3_logicals, gate3] = Gating.gatePolygon(datSSC_W, datSSC_H, struct('YScale', 'log'));
 				
 				if use_time ~=0 %only apply time gating if user indicates so
 					
@@ -610,7 +614,7 @@ classdef Gating < handle
 					xlabel('Time')
 					ylabel('Pacific Blue')
 					hold on
-					[P4_logicals gate4] = Gating.gatePolygon(dat_time,dat_blue,'loglog');
+					[P4_logicals gate4] = Gating.gatePolygon(dat_time, dat_blue, struct('YScale', 'log', 'XScale', 'log'));
 					
 					
 					%P5  - Create and apply gate 5
@@ -628,7 +632,7 @@ classdef Gating < handle
 					xlabel('Time')
 					ylabel('Yellow')
 					hold on
-					[P5_logicals gate5] = Gating.gatePolygon(dat_time,dat_yellow,'semilogy');
+					[P5_logicals gate5] = Gating.gatePolygon(dat_time, dat_yellow, struct('YScale', 'log'));
 					
 					
 					%P6 - Create and apply gate 6
@@ -645,7 +649,7 @@ classdef Gating < handle
 					xlabel('Time')
 					ylabel('Red')
 					hold on
-					[P6_logicals gate6] = Gating.gatePolygon(dat_time,dat_red,'semilogy');
+					[P6_logicals gate6] = Gating.gatePolygon(dat_time, dat_red, struct('YScale', 'log'));
 				end
 				
 				
