@@ -503,7 +503,8 @@ classdef Plotting < handle
 				[colors, sortIdx] = Plotting.getColors(dMode, cmap, struct('min', 0, 'max', 4.5, 'numColors', 100));
 			end
 			
-			scatter(ax, xdata(sortIdx), ydata(sortIdx), 8, colors, 'filled');
+			ss = FlowAnalysis.subSample(numel(xdata), nPoints);
+			scatter(ax, xdata(sortIdx(ss)), ydata(sortIdx(ss)), dotSize, colors(ss, :), 'filled');
 			
 			
 			% --- Helper Functions --- %
