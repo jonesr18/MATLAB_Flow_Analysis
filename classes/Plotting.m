@@ -529,8 +529,8 @@ classdef Plotting < handle
 				end
 				
 				if exist('dotSize', 'var')
-					validateattributes(dotSize, {'numerical'}, {'scalar'}, mfilename, 'dotSize', 7);
-					dotSize = round(dotSize);
+					validateattributes(dotSize, {'numeric'}, {'scalar'}, mfilename, 'dotSize', 7);
+% 					dotSize = round(dotSize);
 				else
 					dotSize = 8;
 				end
