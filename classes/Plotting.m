@@ -995,6 +995,72 @@ classdef Plotting < handle
 			end
 		end
 		
+		
+		function ax = logAxes(ax, limits)
+			% Converts the axes to log scales and overwrites the ticks
+			% so that they don't disappear and only show log-multiples of 5
+			%
+			%	ax = logAxes(ax, limits)
+			%
+			%	Inputs
+			%
+			%		ax				<Axes> The axes object to modify
+			%
+			%		limits			<struct> A struct where fields are 'x', 'y',
+			%						and/or 'z' and the values are log10-transformed 
+			%						axes limits, eg [3, 8] for [10^3, 10^8].
+			%
+			%	Outputs
+			%	
+			%		ax				<Axes> The modified axes
+			
+			zcheckInputs_logAxes();
+			
+			if isfield(limits, 'x')
+				xrange = limits.x(1) : limits.x(2);
+				set(ax, 'XScale', 'log', ...
+						'XLim', 10.^limits.x, ...
+						'XTick', 10.^(xrange), ...
+						'XTickLabel', cellfun(@(x) ['10^' num2str(x)], ...
+							num2cell(xrange), 'uniformoutput', false))
+			end
+			
+			if isfield(limits, 'y')
+				yrange = limits.y(1) : limits.y(2);
+				set(ax, 'YScale', 'log', ...
+						'YLim', 10.^limits.y, ...
+						'YTick', 10.^(yrange), ...
+						'YTickLabel', cellfun(@(x) ['10^' num2str(x)], ...
+							num2cell(yrange), 'uniformoutput', false))
+			end
+			
+			if isfield(limits, 'z')
+				zrange = limits.z(1) : limits.z(2);
+				set(ax, 'ZScale', 'log', ...
+						'ZLim', 10.^limits.z, ...
+						'ZTick', 10.^(zrange), ...
+						'ZTickLabel', cellfun(@(x) ['10^' num2str(x)], ...
+							num2cell(zrange), 'uniformoutput', false))
+			end
+			
+			% Set remaining axes properties
+			set(ax, 'TickLength', [0.02, 0.025], ...
+					'TickDir', 'out', ...
+					'LineWidth', 1, ...
+					'box', 'off')
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zcheckInputs_logAxes()
+				validateattributes(ax, {'matlab.graphics.axis.Axes'}, {}, mfilename, 'ax', 1);
+				validateattributes(limits, {'struct'}, {}, mfilename, 'limits', 2);
+			end
+						
+		end
+		
+		
 		function cbar = biexpColorbar(ax, doMEF, params)
 			% Generates a colorbar w/ biexponential labels for a given axes
 			%
