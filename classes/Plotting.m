@@ -34,7 +34,41 @@ classdef Plotting < handle
 	methods (Static)
 		
 		
-		function density = computeDensity(dataMatrix, dMode, numPoints, nonZero)
+		function ax = setAxProps(ax, axProperties)
+			% An easier method to apply a struct of axes properties to an axis
+			%
+			%	ax = Plotting.setAxProps(ax, axProperties);
+			%
+			%	Inputs
+			%
+			%		ax				<Axes> The axes object to modify
+			%
+			%		axProperties	<struct> A struct array of axes property-value
+			%						pairs to modify. 
+			%
+			%	Outputs
+			%
+			%		ax				<Axes> The updated axes object
+			%
+			%	Axes handles point to objects with many fields, some of which
+			%	are themselves struct arrays. To edit these structs, we cannot
+			%	just say set(ax, 'Title', struct( ... )) - the Axes gets
+			%	confused because it is expecting a full String with several
+			%	other fields as well. Instead, we have to edit each desired
+			%	property independently. This method handles that while allowing
+			%	the input to still be a simple struct of property-value pairs. 
+			
+			for f = fieldnames(axProperties)'
+				if isstruct(axProperties.(f{:}))
+					set(ax.(f{:}), axProperties.(f{:}))
+				else
+					set(ax, f{:}, axProperties.(f{:}));
+				end
+			end
+		end
+		
+		
+		function [density, binCenters, binCounts] = computeDensity(dataMatrix, dMode, numPoints, nonZero)
 			% Computes the density of a given set of points
 			%
 			%	density = computeDensity(dataMatrix, mode, numPoints, nonZero)
@@ -56,6 +90,17 @@ classdef Plotting < handle
 			%		nonZero			(Optional) <logical> Flag to only estimate using
 			%						non-zero values
 			%
+			%	Outputs
+			%
+			%		density			An Nx1 vector of density values for each
+			%						element in dataMatrix.
+			%
+			%		binCenters		If computing with 'hist' mode, then the bin edges 
+			%						used in the calculation can be requested. 
+			%
+			%		binCounts		As with above, the binCounts can also be requested
+			%
+			%
 			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
@@ -71,6 +116,8 @@ classdef Plotting < handle
 			% Check mode of point coloration
 			subsample = randperm(size(dataValid, 1), numPoints);
 			dataSub = dataValid(subsample, :);
+			binCenters = [];	% Only fill if using dMode = 'hist'
+			binCounts = [];		% Same as above
 			switch dMode 
 				case {'neighbors', 'fastn'}
 					% Find how many neighbours there are less than dX and dY away.
@@ -333,7 +380,7 @@ classdef Plotting < handle
 			if (inputSize(2) == 1)
 				reshapeSize = [inputSize(1), 3];	% Handles column vector input
 			elseif (inputSize(1) == 1)
-				reshapeSize = [3, inputSize(2)];	% Handles row vector input
+				reshapeSize = [inputSize(2), 3];	% Handles row vector input
 			else
 				reshapeSize = [inputSize, 3];		% Handles 2D+ input
 			end
