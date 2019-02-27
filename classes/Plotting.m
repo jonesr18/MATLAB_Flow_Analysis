@@ -890,6 +890,111 @@ classdef Plotting < handle
 		end
 		
 		
+		function ax = biexpAxes2(ax, scales, params)
+            % Tranforms the given axes to a scale used for biexponential views.
+            %   
+			%	ax = biexpAxes(ax, scales, params);
+			%
+            %   Inputs (all optional - defaults to X/Y both logicle using scale factor = 1)
+            %       
+			%		scales		<struct> (Optional) Property-value pairs of scaling 
+			%					factors to use for each logicle-transformed dimension. 
+			%					 - Valid fields: 'x', 'y', 'z' (case-insensitive)
+			%					 - Any missing field will cause that dimension
+			%					   to be plotted linearly
+			%					 - The values here are used as the MEF value for
+			%					   logicle conversions and are used as references 
+			%					   for determining axes labels
+			%
+			%		params		<struct> (Optional) Biexp transform parameters
+			%					 - Note that the MEF parameter is overwritten
+			%					   based on the scale provided for each dimension
+			%					 - See Transforms.lin2logicle for more info
+			%		
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
+            			
+            % Check inputs
+			zCheckInputs_biexpAxes2();
+			
+			dims = reshape(fieldnames(scales), 1, []);
+			for dim = dims
+				
+				if ~any(strcmpi(dim{:}, {'x', 'y', 'z'})), continue, end
+				
+				% Adjust to closest round log value
+				scaleFactor = 10^round(log10(scales.(dim{:})));
+				exps = (1:5) + log10(scaleFactor);
+				expsStr = strrep(num2str(exps), ' ', ''); % Remove white space
+				
+				% Set MEF parameter for logicle calculation
+				dimParams = params;
+				dimParams.MEF = scaleFactor;
+				
+				% Create tick values
+				tickVals = Transforms.lin2logicle( sort( ...
+					[-10^exps(2), -(1:9).*10^exps(1), 0, ...
+					 (1:9).*10^exps(1), (1:9).*10^exps(2), ...
+					 (1:9).*10^exps(3), (1:9).*10^exps(4), (1:2).*10^exps(5)]), ...
+					 true, dimParams);
+				
+				% Create tick labels
+				text = { ...['-10^', expsStr(2)], '', '', '', '', '', '', '', '', '', '', ...
+						 '', '', '', '', '', '', '', '', '', '', '', ...
+						 '', '', '', '', '', '', '', '', '', ['10^', expsStr(2)], ...
+						 '', '', '', '', '', '', '', '', ['10^', expsStr(3)], ...
+						 '', '', '', '', '', '', '', '', ['10^', expsStr(4)], ...
+						 '', '', '', '', '', '', '', '', ['10^', expsStr(5)], ''};
+				
+				% Determine axes limits
+				AXES_MAX = 2^18 * scaleFactor;
+				AXES_MIN = -1.5e2 * scaleFactor;
+				axTransformed = Transforms.lin2logicle( ...
+						[AXES_MIN, AXES_MAX], true, dimParams);
+				
+				% Set axes parameters
+				set(ax, [dim{:}, 'Lim'], axTransformed, ...
+						[dim{:}, 'Tick'], tickVals, ...
+						[dim{:}, 'TickLabel'], text)
+			end
+			
+            % Set remaining axes properties
+			set(ax, 'TickLength', [0.02, 0.025], ...
+					'TickDir', 'out', ...
+					'LineWidth', 1, ...
+					'box', 'off')
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_biexpAxes2()
+
+				% Check scales input
+				if exist('scales', 'var')
+					validateattributes(scales, {'struct'}, {}, mfilename, 'scales', 1);
+				else
+					scales = struct('x', 1, 'y', 1);
+				end
+				
+				% Check params input
+				if exist('params', 'var')
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 2);
+				else
+					params = struct();
+				end
+				
+				% Set parameters (default to AFU scaling - so doMEF input is false)
+				params = Transforms.checkLogicleParams(false, params);
+			end
+		end
+		
 		function cbar = biexpColorbar(ax, doMEF, params)
 			% Generates a colorbar w/ biexponential labels for a given axes
 			%
