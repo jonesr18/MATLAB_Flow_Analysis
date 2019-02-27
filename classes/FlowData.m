@@ -2028,7 +2028,7 @@ classdef FlowData < handle
 		end
 				
 		
-		function self = threshGate(self, channels, mode, thresh)
+		function self = threshGate(self, channels, mode, thresh, options)
 			% Thresholds cells in the given channel(s) using the given mode to
 			% select thresholded cells from multiple channels. 
 			%
@@ -2041,20 +2041,32 @@ classdef FlowData < handle
 			% generally doesn't matter which dataType is used (though
 			% compensation does have a slight effect on distributions).
 			%
-			%	self.threshGate(channels, mode)
+			%	self.threshGate(channels, mode, thresh, options)
 			%
 			%	Inputs
 			%		channels	<char, cell> A cell list of channels to threshold on. 
 			%					(A single string for one channel is also accepted)
+			%
 			%		mode		<char> {'or', 'and'} - determines how thresh gates are crossed
-			%		threshVal	(optional) Either a specific threshold value to use or 
-			%					the keyword 'auto', which automatically determines
-			%					thresholds from the wtData 99.9th %ile
-			%					If numeric, the thresh value given should be a
-			%					true (non-logical, non-MEF/MEFL) number. A
-			%					single number can be given to threshold in each
-			%					channel, or individual numbers for each channel 
-			%					can be given. 
+			%
+			%		thresh		(optional) Either a specific threshold value to use 
+			%					or one of the keywords: {'manual', 'auto'}. In
+			%					any case, the threshold value and any generated
+			%					plots are saved in the 'Gating' folder. 
+			%						Numeric: The thresh value given should be a
+			%						non-transformed number. A single value can be 
+			%						given to threshold in each channel, or individual 
+			%						values for each channel. 
+			%						'Manual': The user will draw a line on a plot, 
+			%						the intercept of which determines the threshold
+			%						 --> Default if no option given
+			%						'Auto': The thresh is automatically determined
+			%						from the 99.9th %ile of the wtData. 
+			%
+			%		options		<char, cell> A string or cell list of strings with
+			%					additional options: 
+			%						'recompute': Overwrites the automatic loading 
+			%						of existing threshold values from saved files. 
 			
 			zCheckInputs_threshGate(self);
 			
@@ -2063,61 +2075,78 @@ classdef FlowData < handle
 			if ~exist(gateDir, 'file')
 				mkdir(gateDir)
 			end
-			gatesSaveName = [self.date, '_', self.name, '_Thresh_'];
+			gateSaveName = [self.date, '_', self.name];
+			threshFname = [gateDir, 'Thresh-Vals_', gateSaveName, '.mat'];
+			
+			% Find thresholds - load from file if not already present
+			if (exist(threshFname, 'file') && ~ismember('recompute', options))
+				load(threshFname, 'threshVals');
+			else
+				threshVals = zeros(1, numel(channels));
+				for ci = 1:numel(channels)
+					
+					chan = channels{ci};
+					
+					if (ischar(thresh) && strcmpi(thresh, 'auto'))
+						% Thresh value is found using the untransfected (wt) cells
+						% --> Set at 99.9th %ile of fluorescence in a channel
+						threshVals(ci) = prctile(self.controlData(end).(chan).raw, 99.9);
+					elseif isnumeric(thresh)
+						% Thresh value given as an option
+						threshVals(ci) = thresh(ci); % Ignore extra entries
+					else
+						% Thresh value is found by marking a line on a graph
+						combData = [];
+						for i = 1:self.numSamples
+							combData = [combData; self.sampleData(i).(chan).raw(1:self.numSamples:end)];
+						end
 						
-			thrGateNames = cell(1, numel(channels));
-			for ch = 1:numel(channels)
-				
-				chan = channels{ch};
-				
-				if (ischar(thresh) && strcmpi(thresh, 'auto'))
-					% Thresh value is found using the untransfected (wt) cells
-					% --> Set at 99.9th %ile of fluorescence in a channel
-					threshVal = prctile(self.controlData(end).(chan).raw, 99.9);
-				elseif isnumeric(thresh)
-					% Thresh value given as an option
-					threshVal = thresh(ch); % Ignore extra entries
-				else
-					% Thresh value is found by marking a line on a graph
-					combData = [];
-					for i = 1:self.numSamples
-						combData = [combData; self.sampleData(i).(chan).raw(1:self.numSamples:end)];
+						ss = FlowAnalysis.subSample(numel(combData), 1e4);
+						
+						figThresh = figure();
+						ax = gca(); hold(ax, 'on')
+						edges = 0:0.1:4.5;
+						histogram(ax, Transforms.lin2logicle(combData(ss), false, self.logicleParams), edges)
+						title('Draw a line to set an x-axis threshold', 'fontsize', 16)
+						ylabel('Count', 'fontsize', 14)
+						xlabel(strrep(chan, '_', '-'), 'fontsize', 14)
+						Plotting.biexpAxes(ax, true, false, false, false, self.logicleParams);
+						
+						h = imline();
+						position = wait(h);
+						
+						saveas(figThresh, [gateDir, 'Gate-Thresh_', ...
+								strrep(chan, '_', '-'), '_', gateSaveName, '.fig']);
+						
+						% Fit the points to get a line, then use that to find the
+						% x-intercept (threshold value)
+						fit = polyfit(position(:, 1), position(:, 2), 1);
+	% 					plot(ax, (0:0.5:4.5), fit(1) * (0:0.5:4.5) + fit(2), 'r-');
+						threshVals(ci) = Transforms.logicle2lin(-fit(2) / fit(1), false, self.logicleParams);
 					end
-					
-					ss = FlowAnalysis.subSample(numel(combData), 1e4);
-					
-					figThresh = figure();
-					ax = gca(); hold(ax, 'on')
-					histogram(ax, Transforms.lin2logicle(combData(ss), false, self.logicleParams))
-					title('Draw a line to set an x-axis threshold', 'fontsize', 16)
-					ylabel('Count', 'fontsize', 14)
-					xlabel(strrep(chan, '_', '-'), 'fontsize', 14)
-					Plotting.biexpAxes(ax, true, false, false, false, self.logicleParams);
-					
-					h = imline();
-					position = wait(h);
-					
-					saveas(figThresh, [gateDir, gatesSaveName, chan, '.fig']);
-					
-					% Fit the points to get a line, then use that to find the
-					% x-intercept (threshold value)
-					fit = polyfit(position(:, 1), position(:, 2), 1);
-% 					plot(ax, (0:0.5:4.5), fit(1) * (0:0.5:4.5) + fit(2), 'r-');
-					threshVal = Transforms.logicle2lin(-fit(2) / fit(1), false, self.logicleParams);
 				end
 				
+				% Save newly created thresh values
+				save(threshFname, 'threshVals');
+			end
+			
+			thrGateNames = cell(1, numel(channels));
+			for ci = 1:numel(channels)
+				
+				chan = channels{ci};
+				
 				% Find cells passing threshold and record gate
-				thrGateNames{ch} = ['TH', self.SHORT_COLORS.(chan)];
+				thrGateNames{ci} = ['TH', self.SHORT_COLORS.(chan)];
 				for i = 1:self.numSamples
-					passThresh = (self.sampleData(i).(chan).raw >= threshVal);
-					self.sampleData(i).gates.(thrGateNames{ch}) = passThresh;
+					passThresh = (self.sampleData(i).(chan).raw >= threshVals(ci));
+					self.sampleData(i).gates.(thrGateNames{ci}) = passThresh;
 				end
 				
 				% Do the same for controls
 				for i = 1:self.numControls
 					if ~isempty(self.controlData(i).(chan)) % Some tcData will be empty 
-						passThresh = (self.controlData(i).(chan).raw >= threshVal);
-						self.controlData(i).gates.(thrGateNames{ch}) = passThresh;
+						passThresh = (self.controlData(i).(chan).raw >= threshVals(ci));
+						self.controlData(i).gates.(thrGateNames{ci}) = passThresh;
 					end
 				end
 			end
@@ -2144,16 +2173,26 @@ classdef FlowData < handle
 				end
 				
 				if exist('thresh', 'var')
-					validateattributes(thresh, {'char', 'numeric'}, {}, mfilename, 'threshVal', 3);
+					validateattributes(thresh, {'char', 'numeric'}, {}, mfilename, 'thresh', 3);
 					if isnumeric(thresh)
 						if (numel(thresh) == 1)
 							thresh = repmat(thresh, size(channels));
 						end
 						assert(numel(thresh) == numel(channels), ...
 							'# threshold values given different than # of channels given');
+					else
+						thresh = lower(thresh);
 					end
 				else
 					thresh = false;
+				end
+				
+				if exist('options', 'var')
+					validateattributes(options, {'cell', 'char'}, {}, mfilename, 'options', 4);
+					if ischar(options), options = {options}; end % For simplicity
+					options = cellfun(@lower, options, 'uniformoutput', false);
+				else
+					options = {};
 				end
 			end
 		end
