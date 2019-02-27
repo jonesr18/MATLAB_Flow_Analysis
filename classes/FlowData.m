@@ -899,7 +899,7 @@ classdef FlowData < handle
 				% Setup filenames, check if already exists
 				beadSaveName = [beads{b}.date, '_', beads{b}.type, '_', ...
 						beads{b}.lot, '_', beads{b}.cytometer];
-				mefFname = [beadDirs{b}, beadSaveName '_MEF_Fits.mat'];
+				mefFname = [beadDirs{b}, 'MEF-Fits_', beadSaveName, ccString, '.mat'];
 				
 				if exist(mefFname, 'file')
 					fprintf(1, 'Loading pre-computed bead fits\n');
@@ -915,10 +915,20 @@ classdef FlowData < handle
 					if ~isempty(fieldnames(figFits))
 						for chID = 1:numel(self.channels)
 							saveas(figFits.(self.channels{chID}), ...
-									[beadDirs{b}, beadSaveName, '_', self.channels{chID}, '_', MEF_units{chID}, '_Fit.fig']); 
+									[beadDirs{b}, 'MEF-Fit_', self.colors{chID}, '_', ...
+									strrep(self.channels{chID}, '_', '-'), '_', ...
+									MEF_units{chID}, '_', beadSaveName, '.fig']); 
 						end
 						if isfield(figFits, 'manualPeaks')
-							saveas(figFits.manualPeaks, [beadDirs{b}, beadSaveName, '_manualPeaks.fig']);
+							saveas(figFits.manualPeaks, [beadDirs{b}, 'Manual-Peaks_', beadSaveName, '.fig']);
+						end
+						if isfield(figFits, 'gate')
+							if (b == 1) % Control beads
+								gateDir = [self.controlFolder, 'Gating', filesep];
+							else % Sample beads
+								gateDir = [self.folder, 'Gating', filesep];
+							end
+							saveas(figFits.gate, [gateDir, 'Gate-Beads_', beadSaveName, '.fig']);
 						end
 					end
 				end
@@ -1001,7 +1011,9 @@ classdef FlowData < handle
 			if ~exist(beadDir, 'file')
 				error('Controls bead directory not found! It should be set up during MEF calibration')
 			end
-			meflFname = [beadDir, 'MEFL_Conversions.mat'];
+			colors_channels = reshape([self.colors; strrep(self.channels, '_', '-')], 1, []);
+			colorString = sprintf('_%s', colors_channels{:});
+			meflFname = [beadDir, 'MEFL-Fits', colorString, '.mat'];
 			
 			if exist(meflFname, 'file')
 				fprintf(1, 'Loading pre-computed MEFL conversions\n');
@@ -1009,16 +1021,19 @@ classdef FlowData < handle
 			else
 				% Compute mefl conversions
 				tcData = self.controlData(numel(self.channels) + 1 : 2 * numel(self.channels));
-				[meflFits, figFits] = Transforms.calibrateMEFL(tcData, self.channels, 'mef', showPlots);
+				[meflFitsCalc, figFits] = Transforms.calibrateMEFL(tcData, self.channels, ...
+						self.colors, 'mef', ismember('showPlots', options));
 			
-				save(meflFname, 'meflFits');
+				save(meflFname, 'meflFitsCalc');
 				
+				FITC_IDX = find(strcmpi('FITC_A', self.channels));
 				if ~isempty(fieldnames(figFits))
-					for chID = 1:numel(self.channels)
-						if ~strcmpi(self.channels{chID}, 'FITC_A')
-							saveas(figFits.(self.channels{chID}), ...
-									[beadDir, self.channels{chID}, '_MEFL_Conversion.fig']); 
-						end
+					for chID = setdiff(1:numel(self.channels), FITC_IDX)
+						saveas(figFits.(self.colors{chID}), ...
+								[beadDir, 'MEFL-Fit_', self.colors{chID}, '_', ...
+								strrep(self.channels{chID}, '_', '-'), '_', ...
+								self.colors{FITC_IDX}, '_', ...
+								strrep(self.channels{FITC_IDX}, '_', '-'), '.fig']); 
 					end
 				end
 			end
