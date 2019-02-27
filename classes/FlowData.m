@@ -655,6 +655,41 @@ classdef FlowData < handle
 				end
 			end
 			
+			
+			function outData = extractData(channels, wtData, scData, tcData, FITC_IDX)
+				% Generates the new controlData struct based on the given
+				% individual structs and the desired channels
+				%
+				%	The FITC_IDX input is needed to tell the function which
+				%	channel ID to skip when extracting two-color data. There is
+				%	no two-color data for FITC since the FITC channel itself is
+				%	the reference for the other fluorescent proteins. 
+				
+				for ch = channels
+					for sc = 1:numel(scData)
+						outData(sc).(ch{:}) = scData(sc).(ch{:});
+					end
+					
+					tc = 0;
+					if ~isempty(tcData)
+						tcIdx = 0;
+						for tc = 1:numel(scData) % Go over length of scData since they should match
+							if tc == FITC_IDX
+								% No two color controls for FITC channel, since it
+								% is the reference color for MEFL conversion
+								outData(sc + tc).(ch{:}) = [];
+							else
+								tcIdx = tcIdx + 1; % For indexing tcData separate of tc iterator
+								outData(sc + tc).(ch{:}) = tcData(tcIdx).(ch{:});
+							end
+						end
+					end
+					outData(sc + tc + 1).(ch{:}) = wtData.(ch{:});
+				end
+			end
+		end
+		
+		
 		function self = addControls(self, controlFolder, wildTypeFname, singleColorFnames, twoColorFnames)
 			% Adds wild-type, single-color, and two-color (optional) data to the dataset
 			% so that we can do compensation (single-colors) and MEFL conversion (two-colors).
