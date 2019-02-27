@@ -1607,13 +1607,14 @@ classdef Plotting < handle
             end
             
             % Plot data
-            for i = 1:numel(data)
+			binEdges = 0:0.1:4.5;
+            for di = 1:numel(data)
                 
                 % Assign x- and y-axis datasets
-                ydata = Transforms.lin2logicle(data(i).(channel).(dataType));
+                ydata = Transforms.lin2logicle(data(di).(channel).(dataType));
                 
                 % Plot points
-                Plotting.violinplot(ax, ydata, i, 'hist', colors(i, :));
+                Plotting.violinplot(ax, ydata, di, binEdges, colors(di, :));
             end
             
             % Set Y-axis to biexp
@@ -1743,7 +1744,7 @@ classdef Plotting < handle
 				case {'logicle', 'biexp'}
 					Plotting.biexpAxes(ax, true, false);
 				case {'logicleMEF', 'MEF'}
-					Plotting.biexpAxesMEF(ax, true, false);
+					Plotting.biexpAxes(ax, true, false, false, true);
 			end
 			
 			% Set Y-axis
@@ -1781,13 +1782,14 @@ classdef Plotting < handle
 		end
         
 		
-		function singleLineDensity(ax, xdata, color, options)
+		function p = singleLineDensity(ax, xdata, color, options)
 			% Plots a sinlge line representing a histogram of values in a vector
 			% of given values. The Y-axis represents the probability density function.
 			%
-			%	Plotting.singleLineDensity(ax, xdata, color, options)
+			%	p = Plotting.singleLineDensity(ax, xdata, color, options)
 			%
 			%	Inputs
+			%
 			%		ax			<axes> axes handle to plot on
 			%		xdata		<numeric> A vector of data values to plot
 			%		color		<numeric> (optional) A single 1x3 RGB color 
@@ -1797,6 +1799,9 @@ classdef Plotting < handle
 			%						'shade'		Flag to shade in the area under the line. 
 			%						'counts'	Flag to plot bin counts rather than PDF
 			%						'smooth'	Flag to smooth the histogram data
+			% 
+			%	Outputs
+			%		p			<handle> A handle to the plot object for legends
 			%
 			% Written By
 			% Ross Jones
@@ -1842,11 +1847,11 @@ classdef Plotting < handle
 			% Plot w/ or w/o shading
 			if ismember('shade', options)
 				area(ax, binCenters, binCounts, 'FaceColor', color, 'linewidth', 1, 'FaceAlpha', 0.4);
-				plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 3);
-				line(ax, [binCenters(1), binCenters(1)], [1, binCounts(1)], 'color', color, 'linewidth', 3);
-				line(ax, [binCenters(end), binCenters(end)], [1, binCounts(end)], 'color', color, 'linewidth', 3);
+				p = plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 3);
+				line(ax, [binCenters(1), binCenters(1)], [1e-10, binCounts(1)], 'color', color, 'linewidth', 3);
+				line(ax, [binCenters(end), binCenters(end)], [1e-10, binCounts(end)], 'color', color, 'linewidth', 3);
 			else
-				plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 5);
+				p = plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 5);
 			end
 			
 			
@@ -1939,6 +1944,11 @@ classdef Plotting < handle
 			%	2018-01-15:		Changed extra inputs to options, added colorbar editing
 			%
 			
+			% Check optional inputs exist
+			if ~exist('options', 'var')
+				options = struct();
+			end
+			
             % Invert data rows because stupid heatmap
             flippedData = flipud(dataMatrix);
             
@@ -1994,7 +2004,7 @@ classdef Plotting < handle
 						case {'raw'}
 							cbar = Plotting.biexpColorbar(ax);
 						case {'mef', 'mefl'}
-							cbar = Plotting.biexpColorbarMEF(ax);
+							cbar = Plotting.biexpColorbar(ax, true);
 						otherwise
 							cbar = colorbar('peer', ax, 'EastOutside');
 							cbar.TickDirection = 'out';
