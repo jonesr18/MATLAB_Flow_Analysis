@@ -501,6 +501,37 @@ classdef FlowData < handle
 					self.sampleData(si).gates.(gateName) = inGateFixed;
 				end
 			end
+			
+			% Todo adjust for existing gate idxs
+			
+			% Save gate polygon
+			self.gatePolygons.(gateName) = gatePolygon;
+			self.addGates(gateName);
+				
+			% Save gate figure
+			if ~isempty(gateFig)
+				gateFigFname = [gateDirSamples, self.date, '_', self.name, '_gate', gateName, '.fig'];
+				saveas(gateFig, gateFigFname);
+			end
+			
+			
+			% --- Helper Functions --- % 
+			
+			
+			function zCheckInputs_customGate()
+				
+				if exist('sliceParams', 'var')
+					validateattributes(sliceParams, {'struct'}, {}, mfilename, 'sliceParams', 2);
+				else
+					sliceParams = struct();
+				end
+				
+				if ~exist('axScale', 'var')
+					axScale = 'linear';
+				end
+			end
+		end
+		
 		
 		function self = addControls(self, controlFolder, wildTypeFname, singleColorFnames, twoColorFnames)
 			% Adds wild-type, single-color, and two-color (optional) data to the dataset
