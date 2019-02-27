@@ -12,8 +12,6 @@ classdef FlowData < handle
 	%		channels		 <cell>		Cytometer channel names
 	%		colors			 <cell>		Fluorescent color names
 	%
-	%		numSamples		 <numeric>	The number of data samples
-	%		numCells		 <array>	The number of cells in each sample
 	%		sampleData		 <struct>	Sample fluorescence and gate data in standard struct
 	%		controlData		 <struct>	Similar to sampleData but for controls.
 	%									The order of controls should be the same
@@ -151,7 +149,7 @@ classdef FlowData < handle
 	
 	methods (Access = public)
 		
-		function self = FlowData(dataFnames, channels, expDetails)
+		function self = FlowData(dataFnames, expDetails)
 			% Initializes the FlowData object 
 			% by importing data from the given files, which should correspond
 			% with the given sample map and contain data in the given channels.
@@ -164,23 +162,28 @@ classdef FlowData < handle
 			%						last 3 characters (excluding '.fcs'). 
 			%						The sorted order should coincides with 
 			%						sample numbers in sampleMap.
-			%
-			%		channels		<cell, char> The color channel(s) corresponding
-			%						with the desired subset of data in dataStruct.
-			%						**Must be a field of dataStruct
-			%						**FSC/SSC are automatically taken
-			%
+			%		
 			%		expDetails		<struct> A struct with the following fields
 			%						recording experimental details:
 			%							name		|	<char>
 			%							date		|	<char>
 			%							folder		|	<char> (full-path folder name)
-			%							sampleMap*	|	<char>
+			%						*	sampleMap	|	<char>
 			%							cytometer	|	<char>
+			%						**	channels	|	<char, cell>
+			%						***	colors		|	<char, cell>
 			%
-			%						*sampleMap: name of the .txt file containing 
+			%						* 'sampleMap': name of the .txt file containing 
 			%						treatments information for each sample. 
-			%						**See example file in source folder.
+			%						 - See example file in source folder.
+			%						** 'channels': The color channel(s) corresponding
+			%						with the desired subset of data in dataStruct.
+			%						 - Must be a field of dataStruct
+			%						 - FSC/SSC are automatically taken
+			%						*** 'colors': The name(s) of the fluorescent
+			%						proteins or fluorophores that correspond
+			%						with each measured channel
+			%						 - Must match size and order of 'channels'
 			%
 			%	Outputs
 			%		self			A handle to the object
@@ -195,6 +198,8 @@ classdef FlowData < handle
 			self.name = expDetails.name;
 			self.folder = expDetails.folder;
 			self.cytometer = expDetails.cytometer;
+			self.channels = expDetails.channels;
+			self.colors = expDetails.colors;
 			
 			% Defaults
 			numReplicates = 1;
@@ -239,7 +244,7 @@ classdef FlowData < handle
 				self.numCells(i) = nObs;
 				
 				% Extract desired color channels
-				for ch = channels
+				for ch = expDetails.channels
 					sd = [];
 					for r = 1:numReplicates
 						sd = [sd; dataStruct(IDs(r, i)).(ch{:}).raw];
@@ -258,7 +263,6 @@ classdef FlowData < handle
 				end
 				self.sampleDataScatter(i).nObs = nObs;
 			end
-			self.channels = channels;
 			
 			% Add listeners for settable public properties
 % 			addlistener(self, 'test', 'PostSet', @self.handlePropEvents);
@@ -273,17 +277,31 @@ classdef FlowData < handle
 			
 			function [dataStruct, sampleMapFname] = zCheckInputs(self)
 				validateattributes(dataFnames, {'cell', 'char'}, {}, mfilename, 'dataFilenames', 1);
-				validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 2);
-				validateattributes(expDetails, {'struct'}, {}, mfilename, 'exptDetails', 3);
-				
-				% Convert channels to cell array if single char value is given
-				if ischar(channels), channels = {channels}; end
-				channels = reshape(channels, 1, []); % Ensure row vector
+				validateattributes(expDetails, {'struct'}, {}, mfilename, 'exptDetails', 2);
 				
 				% Check required experiment details are present
-				requiredFields = {'date', 'name', 'folder', 'cytometer'};
+				requiredFields = {'date', 'name', 'folder', 'cytometer', 'channels', 'colors'};
 				missingFields = setdiff(requiredFields, fieldnames(expDetails));
 				assert(isempty(missingFields), 'Experiment details missing field: %s\n', missingFields{:});
+				
+				% Check channels is a valid input then force a cell array
+				channels = expDetails.channels;
+				validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'expDetails.channels');
+				if ischar(channels), channels = {channels}; end
+				expDetails.channels = reshape(channels, 1, []); % Ensure row vector
+				
+				% Check colors is a valid input, force cell array, validate number
+				colors = expDetails.colors;
+				validateattributes(colors, {'cell', 'char'}, {}, mfilename, 'expDetails.channels');
+				if ischar(colors), colors = {colors}; end
+				expDetails.colors = reshape(colors, 1, []); % Ensure row vector
+				
+				% Verify all other expDetails fields are chars
+				for fi = setdiff(fieldnames(expDetails), {'channels', 'colors'})'
+					validateattributes(fi{:}, {'char'}, {}, mfilename, ['expDetails.', fi{:}])
+				end
+				
+				% Check experiment folder exist and add filesep to end for later extensions
 				assert(logical(exist(expDetails.folder, 'file')), 'Experiment folder does not exist!');
 				if ~(expDetails.folder(end) == filesep)
 					expDetails.folder = [expDetails.folder, filesep];
@@ -304,7 +322,7 @@ classdef FlowData < handle
 				ds = FlowAnalysis.openFiles(dataFnames{1});
 				
 				% Check channels are present in dataStruct
-				badChannels = setdiff(channels, fieldnames(ds));
+				badChannels = setdiff(expDetails.channels, fieldnames(ds));
 				assert(isempty(badChannels), ...
 					'Channel not in dataStruct: %s\n', badChannels{:});
 				
