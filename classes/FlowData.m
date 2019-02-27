@@ -1748,13 +1748,12 @@ classdef FlowData < handle
 			%						'controls':  <logical> TRUE slices from
 			%									 controlData rather than sampleData
 			%									 (default = FALSE)
-			%						'bins':		 <numeric> defaults to all cells
+			%						'bins':		 <numeric> Defaults to all cells
 			%									 An Nx1 set of numerical bin IDs or an 
 			%									 NxD set of bin coordinates where D = #
 			%									 of bin channels. 
 			%									 Automatically forces 'dataType' to be 
-			%									 'self.binDataType' regardless of whether 
-			%									 they are given or not
+			%									 'self.binDataType'
 			%									 <Can input 'all' to select all bins>
 			%
 			%	Ouputs
@@ -1831,7 +1830,7 @@ classdef FlowData < handle
 				% Ensure sampleID is a valid integer
 				validateattributes(sampleIDs, {'numeric'}, {'positive'}, ...
 					mfilename, 'sampleIDs', 1);
-				sampleIDs = unique(round(sampleIDs)); 
+				sampleIDs = reshape(unique(round(sampleIDs)), 1, []); 
 				assert(all(sampleIDs <= numel(sliceData)), ...
 					'At least one sampleID is too large!')
 				
@@ -1846,18 +1845,18 @@ classdef FlowData < handle
 				% Applies the given gate to the sliced data
 				if isfield(sliceParams, 'gate')
 					validatestring(sliceParams.gate, self.gateNames, mfilename, 'sliceParams.gate');
-					sliceGates = cell(1, numel(sampleIDs));
-					for id = 1:numel(sampleIDs)
-						sampleID = sampleIDs(id);
-% 						sliceGates{id} = sliceData(sampleID).gates.(sliceParams.gate);
-						sliceGates{id} = find(sliceData(sampleID).gates.(sliceParams.gate));
+					sliceGates = cell(size(sampleIDs));
+					for si = 1:numel(sampleIDs)
+						sampleID = sampleIDs(si);
+% 						sliceGates{si} = sliceData(sampleID).gates.(sliceParams.gate);
+						sliceGates{si} = find(sliceData(sampleID).gates.(sliceParams.gate));
 					end
 				else
-					for id = 1:numel(sampleIDs)
-						sampleID = sampleIDs(id);
+					for si = 1:numel(sampleIDs)
+						sampleID = sampleIDs(si);
 						numSliceCells = numel(sliceData(sampleID).(sliceChannels{1}).raw);
-% 						sliceGates{id} = true(numSliceCells, 1);
-						sliceGates{id} = (1:numSliceCells)'; % Default is all cells
+% 						sliceGates{si} = true(numSliceCells, 1);
+						sliceGates{si} = (1:numSliceCells)'; % Default is all cells
 					end
 				end
 				
@@ -1872,35 +1871,36 @@ classdef FlowData < handle
 					% If sP.equalize TRUE and sP.numPoints not given, then use minPoints
 					% If both or just sP.numPoints given, use min of numPoints sP.numPoints
 					% If neither are given, then subsampling is completely skipped
-					for id = 1:numel(sampleIDs)
-						ss = FlowAnalysis.subSample(numel(sliceGates{id}), numPoints);
-						sliceGates{id} = sliceGates{id}(ss);
+					for si = 1:numel(sampleIDs)
+						ss = FlowAnalysis.subSample(numel(sliceGates{si}), numPoints);
+						sliceGates{si} = sliceGates{si}(ss);
 					end
 				end
 				
-				% Slices from the given bins
-				if (isfield(sliceParams, 'bins') && ~isempty(self.bins))
-					% Controls are not binned, so if they are the sliceData, we
-					% just skip the rest of the inputs checking
-					if sliceControls
-						warning('Controls are not binned! Skipping')
-						return
-					end
+				% Slices from the given bins. Controls are not binned, so if they 
+				% are the sliceData, we just skip the rest of the inputs checking
+				if (isfield(sliceParams, 'bins') && ~isempty(self.bins) && ~sliceControls)
 					
 					validateattributes(sliceParams.bins, {'numeric', 'char'}, {}, mfilename, 'sliceParams.bins');
 					if ischar(sliceParams.bins)
 						if strcmpi(sliceParams.bins, 'all')
 							sliceParams.bins = (1:self.numBins)';
 						else
-							error('Bin char input not recognized: %s', sliceParams.bins)
+							sliceParams.bins = []; 
 						end
 					end
+				else
+					sliceParams.bins = [];
+				end
+				
+				% Only bin if we have some bins to bin!
+				if ~isempty(sliceParams.bins)
 					assert(size(sliceParams.bins, 2) == 1 || ...
 						   size(sliceParams.bins, 2) == numel(fieldnames(self.binInputs)), ...
 						   'Bin IDs formatted incorrectly!')
 					assert(size(sliceParams.bins, 1) <= self.numBins, ...
 						   'Too many bins requested!')
-					
+
 					% Convert bin indexes to linear 
 					if (size(sliceParams.bins, 2) == 1)
 						binIdxs = sliceParams.bins';
@@ -1921,17 +1921,13 @@ classdef FlowData < handle
 					sliceDataType = self.binDataType;
 
 					% Extract cells in the requested bins
-					for id = 1:numel(sampleIDs)
-						sampleID = sampleIDs(id);
+					for si = 1:numel(sampleIDs)
+						sampleID = sampleIDs(si);
 						cellsInBins = [];
 						for b = binIdxs % Sequentially looks at each bin ID
 							cellsInBins = [cellsInBins, self.bins{sampleID}{b}];
 						end
-
-	% 						inBin = false(size(sliceGates{id}));  % Make 'gate' for cells in bins
-	% 						inBin(cellsInBins) = true;		 % Fill out logical index array
-	% 						sliceGates{id} = (sliceGates{id} & inBin); % Combine w/ sliceGate for simplicity
-						sliceGates{id} = intersect(sliceGates{id}, cellsInBins);
+						sliceGates{si} = intersect(sliceGates{si}, cellsInBins);
 					end
 				end
 			end
