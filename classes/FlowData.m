@@ -563,6 +563,98 @@ classdef FlowData < handle
 			if ~isempty(removed), fprintf(1, 'Removed gate: %s\n', removed{:}); end
 		end
 		
+		
+		function self = addControls2(self, controlFolder, sampleMap, colors)
+			% TODO
+			% Adds wild-type, single-color, and two-color (optional) data to the dataset
+			% so that we can do compensation (single-colors) and MEFL conversion (two-colors).
+			%
+			% The method generates self.controlData, a struct array where single-color  
+			% data from channel X is in position X, two-color data from channel X is
+			% in position 2*X (if applicable), and wild-type data is in the last
+			% position (regardless of the presence of two-color data). 
+			% 
+			%	self.addControls(controlFolder, wildTypeFname, singleColorFnames, twoColorFnames)
+			%
+			%	Inputs
+			%		controlFolder	<char> The full-path folder name for controls
+			%		
+			%		sampleMap		<char> The filename which relates control
+			%						file names to the fluorescent protein or
+			%						fluorophore that they are a single- or two-
+			%						color control for. (Including non-fluorescent 
+			%						or wild-type cells)
+			%		
+			%		colors			<char, cell> The fluorescent protein or
+			%						fluorophore names used in the experiment. 
+			%						These must be represented in the sample map.
+			
+			[wildTypeData, singleColorData, twoColorData] = zCheckInputs_addControls(self);
+			FITC_IDX = find(strcmpi('FITC_A', self.channels));
+			self.controlFolder = controlFolder;
+			
+			% Extract data
+			self.controlData = extractData([self.channels, {'nObs'}], ...
+						wildTypeData, singleColorData, twoColorData, FITC_IDX);
+			
+			% Extract scatter data
+			self.controlDataScatter = extractData([Gating.SCATTER_CHANNELS, {'nObs'}], ...
+						wildTypeData, singleColorData, twoColorData, FITC_IDX);
+			
+			% Find number of cells per control
+			self.numControls = numel(self.controlData);
+			self.numCellsControls = zeros(self.numControls, 1);
+			for ci = 1:self.numControls
+				nc = self.controlData.nObs;
+				if isempty(nc), nc = 0; end
+				self.numCellsControls = nc;
+			end
+			
+			self.controlsAdded = true;
+			fprintf(1, 'Finished adding controls\n');
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function [wildTypeData, singleColorData, twoColorData] = zCheckInputs_addControls(self)
+				
+				validateattributes(controlFolder, {'char'}, {}, mfilename, 'controlFolder', 1);
+				assert(logical(exist(controlFolder, 'file')), 'Controls folder does not exist!');
+				if ~(controlFolder(end) == filesep), controlFolder = [controlFolder, filesep]; end
+				
+				validateattributes(wildTypeFname, {'cell', 'char'}, {}, mfilename, 'wildTypeFname', 2);
+				validateattributes(singleColorFnames, {'cell', 'char'}, {}, mfilename, 'singleColorFnames', 3);
+				
+				% Convert to cell arrays if necessary for convenience
+				if ischar(wildTypeFname), wildTypeFname = {wildTypeFname}; end
+				if ischar(singleColorFnames), singleColorFnames = {singleColorFnames}; end
+				
+				% Check number of scFiles
+				assert(numel(singleColorFnames) == numel(self.channels), ...
+					'Incorrect number of single color controls');
+				
+				% Add full-path to filenames
+				wildTypeFname = self.convertToFullFile(wildTypeFname, controlFolder);
+				singleColorFnames = self.convertToFullFile(singleColorFnames, controlFolder);
+				
+				% Open files
+				wildTypeData = FlowAnalysis.openFiles(wildTypeFname{:});
+				singleColorData = FlowAnalysis.openFiles(singleColorFnames{:});
+				
+				% Add twoColorData if applicable
+				if exist('twoColorFnames', 'var')
+					validateattributes(twoColorFnames, {'cell', 'char'}, {}, mfilename, 'twoColorFnames', 4);
+					if ischar(twoColorFnames), twoColorFnames = {twoColorFnames}; end
+					assert(numel(twoColorFnames) == sum(~strcmpi('FITC_A', self.channels)), ...
+						'Incorrect number of two color controls');
+					twoColorFnames = self.convertToFullFile(twoColorFnames, controlFolder);
+					twoColorData = FlowAnalysis.openFiles(twoColorFnames{:});
+				else
+					twoColorData = [];
+				end
+			end
+			
 		function self = addControls(self, controlFolder, wildTypeFname, singleColorFnames, twoColorFnames)
 			% Adds wild-type, single-color, and two-color (optional) data to the dataset
 			% so that we can do compensation (single-colors) and MEFL conversion (two-colors).
