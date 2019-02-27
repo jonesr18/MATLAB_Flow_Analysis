@@ -1143,6 +1143,91 @@ classdef Plotting < handle
 				
 			end
 		end
+		
+		
+		function cbar = biexpColorbar2(ax, scale, params)
+            % Generates a colorbar w/ biexponential labels for a given axes.
+            %   
+			%	cbar = biexpColorbar2(ax, scales, params);
+			%
+            %   Inputs (all optional - defaults to logicle using scale factor = 1)
+            %       
+			%		scale		<numeric> (optional) scaling factor to use for the 
+			%					colorbar's logicle-transformation
+			%					 - The values here are used as the MEF value for
+			%					   logicle conversions and are used as references 
+			%					   for determining axes labels
+			%
+			%		params		<struct> (Optional) Biexp transform parameters
+			%					 - Note that the MEF parameter is overwritten
+			%					   based on the scale provided for each dimension
+			%					 - See Transforms.lin2logicle for more info
+			%
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
+			
+			% Check inputs
+			zCheckInputs_biexpColorbar2();
+			
+			cbar = colorbar('peer', ax, 'EastOutside');
+			
+			% Adjust to closest round log value
+			scaleFactor = 10^round(log10(scale));
+			exps = (1:5) + log10(scaleFactor);
+			expsStr = strrep(num2str(exps), ' ', ''); % Remove white space
+
+			% Set MEF parameter for logicle calculation
+			cbarParams = params;
+			cbarParams.MEF = scaleFactor;
+
+			% Create tick values
+			tickVals = Transforms.lin2logicle( sort( ...
+				[-10^exps(2), -(1:9).*10^exps(1), 0, ...
+				 (1:9).*10^exps(1), (1:9).*10^exps(2), ...
+				 (1:9).*10^exps(3), (1:9).*10^exps(4), (1:2).*10^exps(5)]), ...
+				 true, cbarParams);
+
+			% Create tick labels
+			text = { ['-10^', expsStr(2)], '', '', '', '', '', '', '', '', '', '', ...
+					 '', '', '', '', '', '', '', '', '', ['10^', expsStr(2)], ...
+					 '', '', '', '', '', '', '', '', ['10^', expsStr(3)], ...
+					 '', '', '', '', '', '', '', '', ['10^', expsStr(4)], ...
+					 '', '', '', '', '', '', '', '', ['10^', expsStr(5)], ''};
+			
+			cbar.Ticks = tickVals;
+			cbar.TickLabels = text;
+			cbar.TickDirection = 'out';
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_biexpColorbar2()
+
+				% Check scales input
+				if exist('scale', 'var')
+					validateattributes(scale, {'numeric'}, {'positive'}, mfilename, 'scale', 1);
+				else
+					scale = 1;
+				end
+				
+				% Check params input
+				if exist('params', 'var')
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 2);
+				else
+					params = struct();
+				end
+				
+				% Set parameters (default to AFU scaling - so doMEF input is false)
+				params = Transforms.checkLogicleParams(false, params);
+			end
+		end
 
         
 		function [numElements, binCenters] = biexhist(Y, numBins, showPlot)
