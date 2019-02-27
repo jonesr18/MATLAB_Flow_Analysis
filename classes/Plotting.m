@@ -2026,7 +2026,7 @@ classdef Plotting < handle
 			% Creates a heatmap representing the given bin data. The presentation 
 			% depends on the dimensionality of the data.
 			%
-			%	figBinHmap = binHeatmap(data, cmap, axProperties)
+			%	figBinHmap = binHeatmap(data, edges, labels, cmap, axProperties, options)
 			%
 			%	 - 2D data is plotted as a simple heatmap on a single axis
 			%	 - 3D data is plotted as a series of 2D heatmaps stacked in
@@ -2055,6 +2055,11 @@ classdef Plotting < handle
 			%						 - Edges for dimensions 3+ can also be
 			%						   categorical, given as a cell list of
 			%						   strings with length equal to size(data, N)
+			%						 - If the contents of one array element is
+			%						   itself a cell list (which must be the
+			%						   same size as dimensions 3+), then each
+			%						   element will be used independently for
+			%						   each higher-dimensional heatmap. 
 			%
 			%		labels			<cell> A cell list of labels for each dimension.
 			%						NOTE: The last entry is the label for the
@@ -2080,6 +2085,9 @@ classdef Plotting < handle
 			%							  axes in the given dimensions 
 			%								({'C', 'X', 'Y', 'Z'} accepted, where 
 			%								'C' corresponds w/ the colorbar)
+			%							  - Can also pass a struct with the
+			%								dimension names as fields to set the
+			%								MEF scaling factor for axes labels
 			%							'doMEF' If TRUE, does logicle conversion
 			%							  with MEF-unit scaling
 			%								(default = FALSE)
@@ -2109,7 +2117,7 @@ classdef Plotting < handle
 			%
 			%	2018-03-06		Added option for giving figure handle to plot on
 			
-			[figBinHmap, doTitle] = zCheckInputs_binHeatmap();
+			[figBinHmap, doTitle, dataSize] = zCheckInputs_binHeatmap();
 			
 			spIdx = 0;
 			for d5 = 1:size(dataMatrix, 5)
@@ -2126,23 +2134,37 @@ classdef Plotting < handle
 						patchesZ = ones(size(patchesX)) * (d3 - 1);
 						patIdx = 0;
 						
+						% Adjust for differential edges in higher dims. Linear indexing
+						% ensures that this works no matter how the edges were formatted
+						currSubsIdx = {d3, d4, d5};
+						currLinearIdx = sub2ind(dataSize(3:end), currSubsIdx{:});
+						if iscell(edges{2})
+							e2 = edges{2}{currLinearIdx};
+						else
+							e2 = edges{2};
+						end
+						
 						% Extract patch coordinates
 						for d2 = 1:size(dataMatrix, 2)
+							
+							% Adjust first dimension for dims 2+
+							currSubsIdx = {d2, d3, d4, d5};
+							currLinearIdx = sub2ind(dataSize(2:end), currSubsIdx{:});
+							if iscell(edges{1})
+								e1 = edges{1}{currLinearIdx};
+							else
+								e1 = edges{1};
+							end
+							
 							for d1 = 1:size(dataMatrix, 1)
 								
 								patIdx = patIdx + 1;
 								
 								patchesX(:, patIdx) = [
-									edges{1}(d1)
-									edges{1}(d1 + 1)
-									edges{1}(d1 + 1)
-									edges{1}(d1)];
+									e1(d1); e1(d1 + 1); e1(d1 + 1); e1(d1)];
 								
 								patchesY(:, patIdx) = [
-									edges{2}(d2)
-									edges{2}(d2)
-									edges{2}(d2 + 1)
-									edges{2}(d2 + 1)];
+									e2(d2); e2(d2); e2(d2 + 1); e2(d2 + 1)];
 								
 							end
 						end
@@ -2158,11 +2180,11 @@ classdef Plotting < handle
 						% Set axes properties/labels
 						% - We do this before setting values on the Z-axis since
 						%	we want any 3rd dim bins to be evenly spaced
-						Plotting.biexpAxes(ax, ismember('X', options.biexp), ...
-							   ismember('Y', options.biexp), ...
-							   ismember('Z', options.biexp), ...
-							   options.doMEF, options.logicle)
-						set(ax, axProperties);
+% 						Plotting.biexpAxes(ax, ismember('X', options.biexp), ...
+% 							   ismember('Y', options.biexp), ...
+% 							   ismember('Z', options.biexp), ...
+% 							   options.doMEF, options.logicle);
+						Plotting.biexpAxes2(ax, options.biexp, options.logicle);
 						xlabel(ax, labels{1});
 						ylabel(ax, labels{2});
 					end
@@ -2192,12 +2214,13 @@ classdef Plotting < handle
 						% added/removed as plot size changes
 						ax.ZTick = 0:(size(dataMatrix, 3) - 1); 
 						ax.ZTickLabel = centers3;
+						ax.ZLim = [0, size(dataMatrix, 3) - 1];
 						zlabel(ax, labels{3});
 					end
 					
 					% Plot titles w/ 4/5D labels if applicable
 					titleTxt = {};
-					if (size(dataMatrix, 4) > 1 && doTitle(5))
+					if (size(dataMatrix, 4) > 1 && doTitle(4))
 						if iscell(edges{4}(d4))
 							center4 = edges{4}{d4};
 						else
@@ -2234,15 +2257,20 @@ classdef Plotting < handle
 						titleTxt = [titleTxt; {sprintf('%s = %s', labels{5}, center5)}]; %#ok<AGROW>
 					end
 					title(ax, titleTxt);
+					Plotting.setAxProps(ax, axProperties);
 				end
 			end
 			
-			if ismember('C', options.biexp)
-				cbar = Plotting.biexpColorbar(ax, options.doMEF, options.logicle);
+			
+			if ismember('C', fieldnames(options.biexp))
+% 				cbar = Plotting.biexpColorbar(ax, options.doMEF, options.logicle);
+				cbar = Plotting.biexpColorbar2(ax, options.biexp.C, options.logicle);
 			else
 				cbar = colorbar(ax);
-				cbar.Limits = [min(dataMatrix(:)), max(dataMatrix(:))];
+% 				cbar.Limits = [min(dataMatrix(:)), max(dataMatrix(:))];
 			end
+			colormap(ax, cmap);
+			cbar.Limits = [options.min, options.max];
 			cbar.Label.String = labels{end};
 			if isfield(axProperties, 'FontSize')
 				cbar.Label.FontSize = axProperties.FontSize;
@@ -2252,12 +2280,17 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function [figBinHmap, doTitle] = zCheckInputs_binHeatmap()
+			function [figBinHmap, doTitle, dataSize] = zCheckInputs_binHeatmap()
 				
 				% Check data + dimensions
 				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'data', 1);
 				assert(ndims(dataMatrix) > 1, 'Data must have at least two dimensions!')
 				assert(ndims(dataMatrix) < 6, 'Data must have no more than 5 dimensions!')
+				
+				% Determine size of data
+				dataSize = ones(1, 5); % 5 Max allowed number of dimensions
+				dataSizeTemp = size(dataMatrix);
+				dataSize(1:numel(dataSizeTemp)) = dataSizeTemp;
 				
 				% Check edges
 				validateattributes(edges, {'cell'}, {}, mfilename, 'edges', 2);
@@ -2271,8 +2304,17 @@ classdef Plotting < handle
 						continue
 					end
 					if ei <= 2
-						assert(numel(edges{ei}) == (size(dataMatrix, ei) + 1), ...
-							   'Number of edges supplied for dim %d is incorrect!', ei)
+						if iscell(edges{ei}) % Cell list of edges for each higher dim
+							assert(numel(edges{ei}) == prod(dataSize(ei + 1:end)), ...
+									'Number of dim %d edges variants does not match data', ei);
+							for dei = 1:numel(edges{ei})
+								assert(numel(edges{ei}{dei}) == (size(dataMatrix, ei) + 1), ...
+									'Number of edges supplied for dim %d is incorrect!', ei)
+							end
+						else
+							assert(numel(edges{ei}) == (size(dataMatrix, ei) + 1), ...
+								   'Number of edges supplied for dim %d is incorrect!', ei)
+						end
 					else % Allow specifying exact positions for dims 3+
 						assert(numel(edges{ei}) == size(dataMatrix, ei) || ...
 							   numel(edges{ei}) == (size(dataMatrix, ei) + 1), ...
@@ -2290,6 +2332,11 @@ classdef Plotting < handle
 				if exist('cmap', 'var')
 					validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, ...
 							{}, mfilename, 'cmap', 4);
+					if ischar(cmap)
+						cmap = ColorMap(cmap).getColormap(100);
+					elseif isa(cmap, 'ColorMap')
+						cmap = cmap.getColorMap(100);
+					end
 				else
 					cmap = parula(100);
 				end
@@ -2310,12 +2357,25 @@ classdef Plotting < handle
 				if ~isfield(options, 'biexp'), options.biexp = {}; end
 				if ~isfield(options, 'logicle'), options.logicle = struct(); end
 				if ~isfield(options, 'doMEF'), options.doMEF = false; end
+				if options.doMEF, autoscale = 1e3; else, autoscale = 1; end
 				if ~isfield(options, 'min'), options.min = 0; end
 				if ~isfield(options, 'max'), options.max = 4.5; end
 				if isfield(options, 'fig')
 					figBinHmap = options.fig; 
 				else
 					figBinHmap = figure();
+				end
+				
+				% Convert biexp options to struct if necessary
+				if iscell(options.biexp)
+					biexp = struct();
+					for i = 1:numel(options.biexp)
+						try
+							biexp.(options.biexp{i}) = autoscale;
+						catch % in case the fieldname is invalid
+						end
+					end
+					options.biexp = biexp;
 				end
 			end
 			
