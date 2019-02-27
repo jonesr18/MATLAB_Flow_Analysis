@@ -1401,6 +1401,7 @@ classdef FlowData < matlab.mixin.Copyable
 				doPar = exist('doPar', 'var') && all(logical(doPar));
 			end
 		end
+				
 		
 		function stats = computeStats(self, sampleIDs, sliceParams, metrics, options)
 			% Computes the given statistic metrics on the combined data 
@@ -2169,6 +2170,7 @@ classdef FlowData < matlab.mixin.Copyable
 				assert(isempty(badChannels), 'Channel not valid: %s\n', badChannels{:});
 
 				if (numel(channels) > 1) % Not necessary for < 2 channels
+					mode = lower(mode);
 					validatestring(mode, {'and', 'or'}, mfilename, 'mode', 2);
 				end
 				
@@ -2340,6 +2342,12 @@ classdef FlowData < matlab.mixin.Copyable
 				newSampleMap.Properties.VariableNames = varNames;
 			end
 			
+			% Adjust table size for combined replicates
+			if ismember('Replicate', newSampleMap.Properties.VariableNames)
+				% Wean sampleMap to only be have one replicate
+				newSampleMap = newSampleMap(newSampleMap.Replicate == 1, :);
+			end
+			
 			% Check table size
 			assert(height(newSampleMap) == self.numSamples, ...
 				'New Sample Map has incorrect number of samples (%d) compared to the data (%d)', ...
@@ -2352,12 +2360,12 @@ classdef FlowData < matlab.mixin.Copyable
 		end
 		
 		
-		function self = editlogicleParams(self, newParams)
+		function self = editLogicleParams(self, newParams)
 			% Allows the user to change the logicle conversion parameters used
 			% by the object by passing a new set of parameters. This method
 			% ensures that the new parameters are valid.
 			
-			validateattributs(newParams, {'struct'}, {}, mfilename, 'newParams', 1);
+			validateattributes(newParams, {'struct'}, {}, mfilename, 'newParams', 1);
 			
 			% Look for any missing fields - keep existing parameters for those
 			% that are not given
@@ -2367,10 +2375,10 @@ classdef FlowData < matlab.mixin.Copyable
 			if ~isfield(newParams, 'MEF'), newParams.MEF = self.logicleParams.MEF; end
 			
 			% Check the values are valid
-			validateattributes(newParam.T, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.T');
-			validateattributes(newParam.M, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.M');
-			validateattributes(newParam.r, {'numeric'}, {'scalar', 'negative'}, mfilename, 'newParams.r');
-			validateattributes(newParam.MEF, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.MEF');
+			validateattributes(newParams.T, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.T');
+			validateattributes(newParams.M, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.M');
+			validateattributes(newParams.r, {'numeric'}, {'scalar', 'negative'}, mfilename, 'newParams.r');
+			validateattributes(newParams.MEF, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.MEF');
 			
 			self.logicleParams = newParams;
 		end
