@@ -369,7 +369,7 @@ classdef FlowData < handle
 			% process if necessary. 
 			gatesSaveName = [self.date, '_', self.name];
 			
-			gatesFnameControls = [gateDirControls, 'Controls_GatePolygons.mat'];
+			gatesFnameControls = [gateDirControls, 'Gate-Polygons_Controls.mat'];
 			if exist(gatesFnameControls, 'file')
 				% Load existing control gates
 				load(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
@@ -378,11 +378,11 @@ classdef FlowData < handle
 				[gateP1c, gateP2c, gateP3c, gateFigs] = Gating.standardGating(self.controlDataScatter, onlyP1, swap);
 				save(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
 				for f = fieldnames(gateFigs)'
-					saveas(gateFigs.(f{:}), [gateDirControls, 'Controls_gate', f{:}, 'c']);
+					saveas(gateFigs.(f{:}), [gateDirControls, 'Gate-', f{:}, '_Controls']);
 				end
 			end
 			
-			gatesFnameSamples = [gateDirSamples, gatesSaveName '_GatePolygons.mat'];
+			gatesFnameSamples = [gateDirSamples, 'Gate-Polygons_', gatesSaveName '.mat'];
 			if exist(gatesFnameSamples, 'file')
 				% Load existing sample gates
 				load(gatesFnameSamples, 'gateP1s', 'gateP2s', 'gateP3s');
@@ -391,7 +391,7 @@ classdef FlowData < handle
 				[gateP1s, gateP2s, gateP3s, gateFigs] = Gating.standardGating(self.sampleDataScatter, onlyP1, swap);
 				save(gatesFnameSamples, 'gateP1s', 'gateP2s', 'gateP3s');
 				for f = fieldnames(gateFigs)'
-					saveas(gateFigs.(f{:}), [gateDirSamples, gatesSaveName, '_gate', f{:}, 's']);
+					saveas(gateFigs.(f{:}), [gateDirSamples, 'Gate-', f{:}, '_', gatesSaveName]);
 				end
 			end
 			
