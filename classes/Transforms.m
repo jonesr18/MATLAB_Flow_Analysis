@@ -29,14 +29,15 @@ classdef Transforms < handle
 	
 	properties (Constant)
 		
-		MEF_CONVERSION_FACTOR = 2e3;
+		MEF_CONVERSION_FACTOR = 1e3;
 		
 		% Unique names - has error when you select more peaks than the one w/
 		% the least number of peaks!
 % 		CHANNEL_MAP = struct( ...
-% 			'BUV_396_A',		'MECSB', ...	% Not exactly right but the closest one
-% 			'Cascade_Blue_A',	'MECSB', ...
-% 			'Pacific_Blue_A',	'MEBFP', ...
+% 			'BUV_396_A',		'MEPB', ...		% Not exactly right but the closest one
+% 			'Cascade_Blue_A',	'MEPB', ...
+%			'Pacific_Blue_A',	'MEPB', ...
+%			'AmCyan_A',			'MEAmC', ...
 % 			'FITC_A',			'MEFL', ...
 % 			'PE_A',				'MEPE', ...
 %			'PE_YG_A'			'MEPE', ...		% Alt name for Koch LSRII-HTS2
@@ -50,43 +51,18 @@ classdef Transforms < handle
 		% All MEFLs - ignore peak # error, calculation should come out the same
 		CHANNEL_MAP = struct( ...
 			'BUV_396_A',		'MEFL', ...
+			'Cascade_Blue_A',	'MEFL', ...
 			'Pacific_Blue_A',	'MEFL', ...
+			'AmCyan_A',			'MEFL', ...
 			'FITC_A',			'MEFL', ...
 			'PE_A',				'MEFL', ...
 			'PE_YG_A',			'MEFL', ...		% Alt name for Koch LSRII-HTS2
 			'PE_Texas_Red_A',	'MEFL', ...
 			'PE_TxRed_YG_A',	'MEFL', ...		% Alt name for Koch LSRII-HTS2
+			'PE_Cy5_5_A',		'MEFL', ...
+			'PE_Cy7_A',			'MEFL', ...
 			'APC_A',			'MEFL', ...
 			'APC_Cy7_A',		'MEFL');
-		
-		BEAD_TYPES = {'RCP-30-5A'};
-		
-		RCP305A_LOTS_001 = {'AD04', 'AE01', 'AF01', 'AF02', ...
-							'AH01', 'AH02', 'AJ01'};
-		RCP305A_LOTS_002 = {'AA01', 'AA02', 'AA03', 'AA04', ...
-							'AB01', 'AB02', 'AC01', 'GAA01-R'};
-		
-		RCP305A_VALS_001 = struct( ... % from http://www.spherotech.com/RCP-30-5a%20%20rev%20H%20ML%20071712.xls
-			'MECSB',	[216, 464, 1232, 2940, 7669, 19812, 35474], ...
-			'MEBFP',	[861, 1997, 5776, 15233, 45389, 152562, 396759], ...
-			'MEFL',		[792, 2079, 6588, 16471, 47497, 137049, 271647], ...
-			'MEPE',		[531, 1504, 4819, 12506, 36159, 109588, 250892], ...
-			'MEPTR',	[233, 669, 2179, 5929, 18219, 63944, 188785], ...
-			'MECY',		[1614, 4035, 12025, 31896, 95682, 353225, 1077421], ...
-			'MEPCY7',	[14916, 42336, 153840, 494263], ...
-			'MEAP',		[373, 1079, 3633, 9896, 28189, 79831, 151008], ...
-			'MEAPCY7',	[2864, 7644, 19081, 37258]);
-		
-		RCP305A_VALS_002 = struct( ... % from http://www.spherotech.com/RCP-30-5a%20%20rev%20G.2.xls
-			'MECSB',	[179, 400, 993, 3203, 6083, 17777, 36331], ...
-			'MEBFP',	[700, 1705, 4262, 17546, 35669, 133387, 412089], ...
-			'MEFL',		[692, 2192, 6028, 17493, 35674, 126907, 290983], ...
-			'MEPE',		[505, 1777, 4974, 13118, 26757, 94930, 250470], ...
-			'MEPTR',	[207, 750, 2198, 6063, 12887, 51686, 170219], ...
-			'MECY',		[1437, 4693, 12901, 36837, 76621, 261671, 1069858], ...
-			'MEPCY7',	[32907, 107787, 503797], ...
-			'MEAP',		[587, 2433, 6720, 17962, 30866, 51704, 146080], ...
-			'MEAPCY7',	[718, 1920, 5133, 9324, 14210, 26735]);
 	end
 	
 	methods (Static)
@@ -357,6 +333,9 @@ classdef Transforms < handle
 			%		beadVals		<struct> A struct where bead unit names (eg 'MEF'  
 			%						are the keys and the bead peaks are the values
 			% 
+			%	The valid bead lots and the respective fluorophore counts are in
+			%	the folder /Spherotech Bead Data/. 
+			%
 			% Written By
 			% Ross Jones
 			% jonesr18@mit.edu
@@ -364,33 +343,47 @@ classdef Transforms < handle
 			% 
 			% Update Log:
 			% 
+						
+			% Find files w/ bead data: 'BEADS_<beadType>_<beadLot1_beadLot2...>.txt'
+			thisFname = mfilename('fullpath');
+			fnameSplit = split(thisFname, filesep);
+			folderName = join(fnameSplit(1:end-2), filesep); % Comes out as a 1x1 Cell
+			beadValueFiles = dir([folderName{:}, filesep, '**', filesep, 'BEADS*.txt']);
+			beadValueFnames = {beadValueFiles.name};
 			
-			% Check inputs
-			validBeadLots = [Transforms.RCP305A_LOTS_001, Transforms.RCP305A_LOTS_002];
-			validatestring(beadType, Transforms.BEAD_TYPES, mfilename, 'beadType', 1);
+			% Extract bead types and lots
+			beadValueFnamesSplit = cellfun(@(x) split(x, {'_', '.'}), ...
+					beadValueFnames, 'uniformoutput', false);
+			beadTypes = cellfun(@(x) x{2}, beadValueFnamesSplit, 'uniformoutput', false);
+			validBeadTypes = unique(beadTypes);
+			beadLots = cellfun(@(x) x(3:end-1)', beadValueFnamesSplit, 'uniformoutput', false);
+			validBeadLots = unique(cat(2, beadLots{:}));
+			
+			% Check input types
+			validatestring(beadType, validBeadTypes, mfilename, 'beadType', 1);
 			validatestring(beadLot, validBeadLots, mfilename, 'beadLot', 2);
 			validateattributes(channels, {'char', 'cell'}, {}, mfilename, 'channels', 3);
+			
+			% Check channels are valid
 			if ischar(channels), channels = {channels}; end % For simplicity
 			badChannels = setdiff(channels, fieldnames(Transforms.CHANNEL_MAP));
 			assert(isempty(badChannels), ...
 				'Channel not valid: %s', badChannels{:});
-			
 			requestedUnits = Transforms.getBeadUnits(channels);
+			
+			% Find which bead value file to load data from
+			whichFile = beadValueFnames{ ...
+					contains(beadValueFnames, beadType) & ...
+					contains(beadValueFnames, beadLot)};
+			beadValuesTable = readtable([beadValueFiles(1).folder, filesep, whichFile], ...
+					'delimiter', '\t');
+			beadValues = table2struct(beadValuesTable, 'ToScalar', true);
 			
 			% Collect values into struct
 			beadVals = struct();
-			switch beadType
-				case {'RCP-30-5A'}
-					switch beadLot
-						case Transforms.RCP305A_LOTS_001
-							for u = requestedUnits
-								beadVals.(u{:}) = Transforms.RCP305A_VALS_001.(u{:});
-							end
-						case Transforms.RCP305A_LOTS_002
-							for u = requestedUnits
-								beadVals.(u{:}) = Transforms.RCP305A_VALS_002.(u{:});
-							end
-					end
+			for u = requestedUnits
+				nonnan = ~isnan(beadValues.(u{:}));
+				beadVals.(u{:}) = beadValues.(u{:})(nonnan);
 			end
 		end
 
@@ -564,7 +557,7 @@ classdef Transforms < handle
 			end
 			
 			% Filter means
-			thresh = 8;
+			thresh = 8; % Not sure where this number comes from
 			filteredMeans = filterMeans(means, counts, centers, thresh);
 			
 			numPeaks = size(filteredMeans, 1) - 1;	
@@ -586,16 +579,16 @@ classdef Transforms < handle
 				res_all = zeros(1, numel(channels));
 				fits = zeros(2, numel(channels));
 				for chID = 1:numel(channels)
-
+					
 					% Extract vals 
-					MEF = flipud(beadVals.(MEF_units{chID})');
-
+					MEF = flipud(beadVals.(MEF_units{chID}));
+					
 					% Identify which bead pops to query
 					beadPops = hpi : (hpi + numPeaks - 1);
 					pointsMean = filteredMeans(2:end, chID); % Means already log10 transf
 					pointsMEF = flipud(log10(MEF(beadPops)));
-% 						pointsMEF = flipud((MEF(beadPops)));
-
+% 					pointsMEF = flipud((MEF(beadPops)));
+					
 					% Fit bead fluorescence to MEF values
 					linearFunc = @(p, x) p(1) * x + p(2);
 					fitNL = lsqcurvefit(linearFunc, [1; 1], pointsMean, pointsMEF, [], [], opt);
@@ -669,8 +662,8 @@ classdef Transforms < handle
 					xlabel('Fluorescence (AFU)')
 					
 					% Plot MEF fits, fit line, and squared sum of residuals
-					MEF = fliplr(beadVals.(MEF_units{chID}));
-					MEF = fliplr(MEF(BEAD_PEAKS - beadPops + 1));
+					MEF = flipud(beadVals.(MEF_units{chID}));
+					MEF = flipud(MEF(BEAD_PEAKS - beadPops + 1));
 					peakIntensity = meansLin(:, chID);
 					
 					% Plot fits
@@ -702,13 +695,13 @@ classdef Transforms < handle
 			function [beadData, beadVals] = zCheckInputs_calMEF()
 				
 				validateattributes(beads, {'struct'}, {}, mfilename, 'beadsFilename', 1);
-				validFields = {'filename', 'type', 'lot', 'date', 'cytometer'};
-				badFields  = setdiff(fieldnames(beads), validFields);
-				assert(isempty(badFields), 'Field not valid: %s\n', badFields{:})
+				minimumFields = {'filename', 'type', 'lot', 'date', 'cytometer'};
+				missingFields  = setdiff(minimumFields, fieldnames(beads));
+				assert(isempty(missingFields), 'Field not found: %s\n', missingFields{:})
 				
 				beadsFilename = beads.filename;
 				assert(logical(exist(beadsFilename, 'file')), ...
-					'File does not exist: %s\n', beadsFilename)				
+						'File does not exist: %s\n', beadsFilename)				
 				
 				% Type and lot are checked in Transforms.getBeadVals();
 				
@@ -724,8 +717,22 @@ classdef Transforms < handle
 				% Check channels are valid
 				badChannels = setdiff(channels, fieldnames(beadData(1)));
 				assert(isempty(badChannels), ...
-					'Channel does not exist: %s\n', badChannels{:});
+						'Channel does not exist: %s\n', badChannels{:});
 				
+				% Combine data from multiple bead samples if applicable 
+				% (should just be a single file)
+				if numel(beadData) > 1
+					for ch = 1:numel(channels)
+						channelData = [];
+						for bdi = 1:numel(beadData)
+							channelData = [channelData; beadData(bdi).(channels{ch}).raw]; %#ok<AGROW>
+						end
+						beadData(1).(channels{ch}).raw = channelData;
+					end
+					beadData(1).nObs = size(beadData.(channels{1}).raw, 1);
+					beadData = beadData(1);
+				end
+								
 				% Get bead MEF values
 				beadVals = Transforms.getBeadVals(beads.type, beads.lot, channels);
 			end
