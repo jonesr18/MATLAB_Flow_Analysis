@@ -1258,7 +1258,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function self = bin(self, binInputs, binDataType, doPar)
+		function self = bin(self, binInputs, binDataType, sampleIDs, binFuncs, doPar)
 			% Sorts the sample data using the given set of channels/edges into a
 			% number of bins using the given dataType for assignments. 
 			%
@@ -1272,6 +1272,25 @@ classdef FlowData < handle
 			%						on and where to draw the bins in each dimension. 
 			%		
 			%		binDataType		<char> The cell dataType to use (eg 'mefl', 'comp')
+			%
+			%		sampleIDs		<numeric> (Optional) This allows for constraining 
+			%						which samples to bin (possibly saving time). 
+			%						 - The default behavior is to bin all samples. 
+			%						 - Pass an empty array to skip. 
+			%
+			%		binFuncs		<struct> (Optional) A struct with channel names as
+			%						keys and edge functions as values. The channel names
+			%						must match those in 'binInputs'. The functions are
+			%						anonymous functions that allow altering the bin edges
+			%						for a channel as a function of the other channels.
+			%							Example: 
+			%								struct('PE_A', @(x) x / (x(1) + 1e5))
+			%							Here, x is assumed to be an array representing the
+			%							channels passed into binInputs, in the order that
+			%							they were entered into the struct (ie 
+			%							fieldnames(binInputs)). So for two channels,
+			%							'Pacific_Blue_A', and 'PE_A', the above code
+			%							would adjust PE bins based on Pac Blue values. 
 			%
 			%		doPar			<logical> (Optional) Flag to use parallel
 			%						computing for binning. Default = false. Runs
@@ -1296,9 +1315,9 @@ classdef FlowData < handle
 			[binChannels, binEdges] = zCheckInputs_bin(self);
 			
 			slicedData = cell(1, self.numSamples);
-			for i = 1:self.numSamples
-								
-				slicedData{i} = self.slice(i, struct( ...
+			for sid = sampleIDs
+				
+				slicedData{sid} = self.slice(sid, struct( ...
 						'channels', {binChannels}, ...
 						'dataType', binDataType, ...
 						'equalize', false));
@@ -1307,19 +1326,26 @@ classdef FlowData < handle
 			
 			binnedData = cell(size(slicedData));
 			if doPar
-				parfor i = 1:numel(slicedData)
-					binnedData{i} = FlowAnalysis.simpleBin(slicedData{i}, binEdges);
+				parfor sid = sampleIDs
+					binnedData{sid} = FlowAnalysis.simpleBin(slicedData{sid}, binEdges, binFuncs);
 				end
 			else
-				for i = 1:numel(slicedData)
-					binnedData{i} = FlowAnalysis.simpleBin(slicedData{i}, binEdges);
+				for sid = sampleIDs
+					binnedData{sid} = FlowAnalysis.simpleBin(slicedData{sid}, binEdges, binFuncs);
 				end
 			end
 			
+			% Extract size of each dimension independently, otherwise all
+			% singular dimensions over 2D are lost! Also handles single-channel 
+			% binning so only one size is given (rather than two).
+			bSizes = zeros(1, numel(binChannels));
+			for ci = 1:numel(binChannels)
+				bSizes(ci) = size(binnedData{sampleIDs(1)}, ci);
+			end
+			
 			self.bins = binnedData;
-			self.numBins = numel(binnedData{1});
-			bSizes = size(binnedData{1});
-			self.binSizes = bSizes(1:numel(binChannels)); % Handles single-channel binning so only one size is given
+			self.numBins = numel(binnedData{sampleIDs(1)});
+			self.binSizes = bSizes;
 			self.binInputs = binInputs;
 			self.binDataType = binDataType;
 			self.binned = true;
@@ -1352,6 +1378,26 @@ classdef FlowData < handle
 				assert(any(strcmp(binDataType, self.dataTypes)), ...
 						'Bin data type does not match any existing data types: %s\n', binDataType);
 				
+				if exist('sampleIDs', 'var') && ~isempty(sampleIDs)
+					validateattributes(sampleIDs, {'numeric'}, {'positive'}, ...
+							mfilename, 'sampleIDs', 3);
+					sampleIDs = reshape(unique(round(sampleIDs)), 1, []); 
+					assert(all(sampleIDs <= self.numSamples), ...
+							'At least one sampleID is too large!')
+				else
+					sampleIDs = 1:self.numSamples;
+				end
+
+				% Check binFuncs if applicable
+				if exist('binFuncs', 'var')
+					validateattributes(binFuncs, {'function_handle', 'cell'}, {}, mfilename, 'dataMatrix', 1);
+					% The rest of the validation occurs within FlowAnalysis.simpleBin()
+				else
+					% In the case of no binFuncs, all are independent
+					binFuncs = cell(size(binEdges));
+					binFuncs(:) = {@(x) 1};
+				end
+
 				doPar = exist('doPar', 'var') && all(logical(doPar));
 			end
 		end
