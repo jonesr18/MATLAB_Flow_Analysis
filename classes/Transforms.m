@@ -395,7 +395,7 @@ classdef Transforms < handle
             %
             %   Inputs
             %
-			%       data            A standard data struct. The channels must match those in channelFits. 
+			%       data            A standard data struct. The channels must be present in channelFits. 
             %
             %       channelFits     (Output from calibrateMEF())
             %                       An Nx2 table of slopes/intercepts for linear conversion of 
@@ -464,10 +464,10 @@ classdef Transforms < handle
 				validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
                 validateattributes(channelFits, {'table'}, {}, mfilename, 'channelFits', 2);
                 
-                channels = channelFits.Properties.VariableNames;
-                badChannels = setdiff(channels, fieldnames(data(1)));
+                channels = setdiff(fieldnames(data(1)), {'gates', 'nObs'});
+                badChannels = setdiff(channels, channelFits.Properties.VariableNames);
                 assert(isempty(badChannels), ...
-                    'Channel not in data: %s\n', badChannels{:});
+                    'Channel not in fits: %s\n', badChannels{:});
                 
                 validatestring(dataType, fieldnames(data(1).(channels{1})), mfilename, 'dataType', 3);
 			end
@@ -591,16 +591,15 @@ classdef Transforms < handle
 					
 					% Fit bead fluorescence to MEF values
 					linearFunc = @(p, x) p(1) * x + p(2);
-					fitNL = lsqcurvefit(linearFunc, [1; 1], pointsMean, pointsMEF, [], [], opt);
 					if ismember('nonLinear', options)
-						fit = fitNL;
+						fit = lsqcurvefit(linearFunc, [1; 1], pointsMean, pointsMEF, [], [], opt);
 					else
 						fit = lsqcurvefit(@(p, x) linearFunc([1; p(2)], x), [1; 1], pointsMean, pointsMEF, [], [], opt);
 					end
 					fits(:, chID) = reshape(fit, [], 1);
 					
 					% Measure and collate residuals
-					yResid = abs(pointsMEF - polyval(fitNL, pointsMean));
+					yResid = abs(pointsMEF - polyval(fit, pointsMean));
 					ssResid = sum(yResid.^2);
 					ssTotal = (length(pointsMEF) - 1) * var(pointsMEF);
 					res_all(chID) = ssResid / ssTotal;
@@ -789,7 +788,7 @@ classdef Transforms < handle
 						extrBeadDataBiex(:, sortIdx(end)), ...
 						extrBeadDataBiex(:, sortIdx(end-1)), ...
 						5000, 'hist', ColorMap('parula'));
-				title('Draw a line connecting the peaks (in any order)')
+				title('Draw a shape connecting the peaks (in any order)')
 				xlabel([strrep(channels{sortIdx(end)}, '_', '-'), ' (AFU)'])
 				ylabel([strrep(channels{sortIdx(end - 1)}, '_', '-'), ' (AFU)'])
 				h = impoly();
