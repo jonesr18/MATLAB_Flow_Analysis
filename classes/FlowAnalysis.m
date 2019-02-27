@@ -338,28 +338,43 @@ classdef FlowAnalysis < handle
         end
         
         
-        function [bins, binSizes] = simpleBin(dataMatrix, binEdges)
+        function [bins, binSizes] = simpleBin(dataMatrix, binEdges, binFuncs)
             % Takes an array of data values and bins them using the given edges, 
             % returning a double array of bin IDs for each element
             %
 			%	TIMING RESULTS: 1.3 seconds. (Fastest)
 			%
             %   Inputs
+			%
             %       'dataMatrix'    A N x D double matrix of N elements with D
             %						dimensions to be binned. 
+			%
             %       'binEdges'		An array of edges defining each bin in logicle space.
 			%						The edges are applied to all dimensions. To make unique 
 			%						edges for each dimension, pass a cell array of bin edges, 
 			%						where each cell element corresponds with a channel in the
 			%						same order as the columns of 'dataMatrix'. 
 			%						*Note: Bin edges are sorted prior to binning.
+			%
+			%		'binFuncs'		(Optional) A cell array of anonymous functions defining
+			%						how 'binEdges' are adjusted for other bin dimensions.
+			%							Example:
+			%								{@(x) x / (x(2) + 1e5)}
+			%							Here, x is assumed to be an array representing the
+			%							channels in the same order as binEdges. So for two 
+			%							channels, the above code would adjust first channel's 
+			%							bins based on the values of the second channel. 
+			%							Leave an empty array or "@(x) 1" for channels which 
+			%							are not to be adjusted. 
             %
-            %   Output
-            %       'bins'          A D-dimensional cell matrix where each cell 
+            %   Outputs
+            %
+			%       'bins'          A D-dimensional cell matrix where each cell 
             %                       holds a double array of numerical indexes 
             %                       for each element in a given bin. The size of
             %                       each dimension is given by the number of
             %                       edges given in each dimensison. 
+			%
 			%		'binDims'		A vector indicating the number of bins in
 			%						each dimension. 
 			%
@@ -370,21 +385,8 @@ classdef FlowAnalysis < handle
 			% 
 			% Update Log:
 			%
-            			
-			if iscell(binEdges)
-				% Unique bin edges for all
-				binSizes = zeros(1, numel(binEdges));
-				for be = 1:numel(binEdges)
-					binSizes(be) = numel(binEdges{be}) - 1;
-					binEdges{be} = sort(binEdges{be});
-				end
-			else
-				% Bin edges same and apply to all channels
-				binSizes = (numel(binEdges) - 1) .* ones(1, size(dataMatrix, 2));
-				be = binEdges; % Store for name override
-				binEdges = cell(1, size(dataMatrix, 2));
-				binEdges(:) = {be};
-			end
+			
+			binSizes = zCheckInputs_simpleBin();
             
             % Setup bins as a cell array with dimensions equal to number of cell channels. 
             numDims = length(binSizes);
@@ -397,13 +399,13 @@ classdef FlowAnalysis < handle
 			binCoords = ones(binSizes);
 			binCoords(1) = 0; % For the first iteration
 			cellsIdx = 1:size(dataMatrix, 1);
-			for i = 1:numel(bins)
+			for bi = 1:numel(bins)
 				
 				% Find bin coordinates in ND-space
-				for j = 1:numDims
-					binCoords(j) = binCoords(j) + 1;
-					if binCoords(j) > binSizes(j)
-						binCoords(j) = 1;
+				for di = 1:numDims
+					binCoords(di) = binCoords(di) + 1;
+					if binCoords(di) > binSizes(di)
+						binCoords(di) = 1;
 					else
 						break
 					end
@@ -411,12 +413,81 @@ classdef FlowAnalysis < handle
 				
 				% Identify all cells within bin by checking bin edges in each dimension
 				cellsInBin = true(size(dataMatrix(:, 1)));
-				for j = 1:numDims
-					cellsInBin = (cellsInBin & ...
-								 (dataMatrix(:, j) <= binEdges{j}(binCoords(j) + 1)) & ...
-								 (dataMatrix(:, j) > binEdges{j}(binCoords(j))));
+				edgesHigh = zeros(1, numDims);
+				edgesLow = zeros(1, numDims);
+				for di = 1:numDims
+					% Adjust for other bins
+					edgesHigh(di) = binEdges{di}(binCoords(di) + 1);
+					edgesLow(di) = binEdges{di}(binCoords(di));
 				end
-				bins{i} = cellsIdx(cellsInBin);
+				
+				for di = 1:numDims
+					
+					% Adjust high edges by other high edges and low by low
+					% (easier than finding centers and possibly more accurate (?)
+					edgeHigh = edgesHigh(di) * binFuncs{di}(edgesHigh);
+					edgeLow = edgesLow(di) * binFuncs{di}(edgesLow);
+					
+					cellsInBin = (cellsInBin & ...
+								 (dataMatrix(:, di) <= edgeHigh) & ...
+								 (dataMatrix(:, di) > edgeLow));
+				end
+				bins{bi} = cellsIdx(cellsInBin);
+			end
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function [binSizes] = zCheckInputs_simpleBin()
+				
+				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'dataMatrix', 1);
+				validateattributes(binEdges, {'cell', 'numeric'}, {}, mfilename, 'binEdges', 2);
+				
+				% Check if binEdges needs to be expanded to all channels
+				if iscell(binEdges)
+					% Unique bin edges for all
+					binSizes = zeros(1, numel(binEdges));
+					for be = 1:numel(binEdges)
+						binSizes(be) = numel(binEdges{be}) - 1;
+						binEdges{be} = sort(binEdges{be});
+					end
+				else
+					% Bin edges same and apply to all channels
+					binSizes = (numel(binEdges) - 1) .* ones(1, size(dataMatrix, 2));
+					be = binEdges; % Store for name override
+					binEdges = cell(1, size(dataMatrix, 2));
+					binEdges(:) = {be};
+				end
+				
+				% Check binFuncs if applicable
+				if exist('binFuncs', 'var')
+					validateattributes(binFuncs, {'function_handle', 'cell'}, {}, mfilename, 'dataMatrix', 1);
+					
+					% If a single function handle, extend to all channels
+					if isa(binFuncs, 'function_handle')
+						bf = cell(size(binEdges));
+						bf(:) = {binFuncs};
+						binFuncs = bf;
+					end
+					
+					% Validate number of functions matches number of channels
+					assert(numel(binFuncs) == numel(binEdges), ...
+							'Number of bin functions (%d) does not match bin edges (%d)', ...
+							numel(binFuncs), numel(binEdges));
+					
+					% Check for empty or non-function entities and replace	
+					for fi = 1:numel(binFuncs)
+						if isempty(binFuncs{fi}) || ~isa(binFuncs{fi}, 'function_handle')
+							binFuncs{fi} = @(x) 1;
+						end
+					end
+				else
+					% In the case of no binFuncs, all are independent
+					binFuncs = cell(size(binEdges));
+					binFuncs(:) = {@(x) 1};
+				end
+				
 			end
 		end
 		
