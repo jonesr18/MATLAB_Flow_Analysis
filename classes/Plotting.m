@@ -592,11 +592,14 @@ classdef Plotting < handle
 		end
         
         
-		function violinplot(ax, ydata, xcenter, mode, faceColor)
-			% Plots the data as a violin plot, which represents 
-			% density as a vertical, horizontally symmetric histogram
+		function violinplot(ax, ydata, xcenter, binEdges, faceColor)
+			% Plots the data as a violin plot, which represents density as a vertical,
+			% horizontally symmetric histogram. The histograms are overlaid with
+			% a black box-and-whisker plot with the box representing the 25th - 75th
+			% percentiles, the whiskers showing the 95th - 5th percentiles, and the
+			% white dot in the middle showing the median.
 			%   
-			%	violinplot(ax, ydata, xcenter, mode, faceColor)
+			%	violinplot(ax, ydata, xcenter, binEdges, faceColor)
 			%
 			%   Inputs
 			%   
@@ -606,16 +609,12 @@ classdef Plotting < handle
 			%
 			%       xcenter (integer)   The value to center the x-values on
 			%
-			%       mode (string)       Determines how density is calculated
-			%                            'normal'        Computes density directly from the points
-			%                            'fast'          Uses 1/10 points to compute density
-			%                            'kernel'        Kernel density estimation 
-			%                                            (auto-selects bandwidth - see kde.m)
-			%                            'hist'          Interpolates density from a 2D histogram
+			%		binEdges (vector)	Bin edges for histogram computation
+			%							 - Should be equal for all violins for
+			%							   valid comparison
 			%       
 			%       faceColor (rgb)     The color of the violin face. The face is plotted with an
 			%                           alpha value of 0.5 to look nice.
-			%
 			%
 			%
 			% Written By
@@ -626,34 +625,48 @@ classdef Plotting < handle
 			% Update Log:
 			%
 			%	2018-01-28:		Switched to using separate density computing function
+			%	2018-10-03:		Fixed density calculation and added box plot overlay
 
 			% Check inputs
 			zCheckInputs_violinplot(); 
 			xcenter = round(xcenter(1)); % Ensure integer and only one point
-
+			
 			% Fix negative infinite values by setting the resulting values to the 
 			% otherwise minimum value.
 			if any(ydata == -inf)
 				warning('Negative values detected - setting to min value')
 				ydata(ydata == -inf) = min(ydata(ydata ~= -inf));
 			end
-
-			% Reduce number of points to speed density calculation
-			numPoints = min(numel(ydata), 5000);
 			
 			% Compute density
-			density = Plotting.computeDensity(ydata, mode, numPoints);
-
+			binCounts = histcounts(ydata, binEdges, 'Normalization', 'count');
+			binCenters = reshape(binEdges(2:end) - diff(binEdges) / 2, [], 1);
+			
 			% Put density on log scale for better visualization
-			density = log10(density);
-			density = interp1([min(density), max(density)], [0, 0.4], density);
-
+			% - Divide by 2 to accurately portray area
+			% - Multiply by 0.4 so that violins don't overlap
+			binCounts = reshape(log10(binCounts), [], 1) * 0.4 / max(log10(binCounts(:)));
+			valid = ~isinf(binCounts) & ~isnan(binCounts);
+			
 			% Plot violins
-			axes(ax);
-			fill( [xcenter + density; xcenter - flipud(density)], ...
-				  [points; flipud(points)], ...
-				  faceColor, 'EdgeColor', 'none');
-
+			fill(ax, [xcenter + binCounts(valid); xcenter - flipud(binCounts(valid))], ...
+					[binCenters(valid); flipud(binCenters(valid))], ...
+					faceColor, 'EdgeColor', 'k', 'LineWidth', 1);
+			
+			% Plot pseudo boxplot
+			prctiles = prctile(ydata, [95, 75, 50, 25, 5]);
+			errorbar(ax, xcenter, prctiles(3), prctiles(3) - prctiles(5), ...
+					prctiles(1) - prctiles(3), 'k', 'linewidth', 0.5)
+			fill(ax, [xcenter + 0.07 * ones(2, 1); xcenter - 0.07 * ones(2, 1)], ...
+					[prctiles([2, 4])'; prctiles([4, 2])'], ...
+					'k', 'EdgeColor', 'none');
+			plot(ax, xcenter, prctiles(3), '.w', 'markersize', 16);
+			
+			% TODO Get this to work someday - technically better than the hacked
+			% version above since the whiskers should be calculated by an algorithm
+% 			boxplot(ax, ydata, 'positions', xcenter, 'boxstyle', 'filled', 'colors', 'k')
+			
+			
 			% --- Helper Function --- %
 
 
@@ -662,7 +675,7 @@ classdef Plotting < handle
 				validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'data', 2);
 				ydata = reshape(ydata, [], 1); % Force column vector
 				validateattributes(xcenter, {'numeric'}, {}, mfilename, 'xcenter', 3);
-				validatestring(mode, {'normal', 'fast', 'kernel', 'hist'}, mfilename, 'mode', 4);
+				validateattributes(binEdges, {'numeric'}, {'vector'}, mfilename, 'binEdges', 4);
 				validateattributes(faceColor, {'numeric'}, {'vector'}, mfilename, 'faceColor', 5);
 				assert(length(faceColor) == 3);
 			end
