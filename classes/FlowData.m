@@ -860,6 +860,7 @@ classdef FlowData < handle
 			%							rather than having the function iterate
 			%							through all possible high peaks automaticallly
 			%			noFilter		Do not filter out peaks by height
+			%			recompute		Flag to force recalculation
 			
 			assert(self.controlsAdded, 'Controls must be added before converting to MEF units!\n');
 			
@@ -901,7 +902,7 @@ classdef FlowData < handle
 						beads{b}.lot, '_', beads{b}.cytometer];
 				mefFname = [beadDirs{b}, 'MEF-Fits_', beadSaveName, ccString, '.mat'];
 				
-				if exist(mefFname, 'file')
+				if ~ismember('recompute', options) && logical(exist(mefFname, 'file'))
 					fprintf(1, 'Loading pre-computed bead fits\n');
 					load(mefFname, 'mefFits');
 				else
@@ -990,7 +991,7 @@ classdef FlowData < handle
 		end
 		
 		
-		function self = convertToMEFL(self, showPlots)
+		function self = convertToMEFL(self, options)
 			% Converts each channel to MEFL units using the compensated MEF units. 
 			% The two-color controls are utilized to get ratios between each MEF
 			% unit and MEFLs. Conversion factors are stored in self.meflConversions.
@@ -1000,12 +1001,16 @@ classdef FlowData < handle
 			%	Adds new dataTypes: {'mefl'}
 			%
 			%	Inputs
-			%		showPlots	(optional) <logical> Flag to show conversion plots
-			
+			%		options			<cell> Contains optional string flags:
+			%			showPlots		Flag to show fitted plots
+			%			recompute		Flag to force recalculation
+
 			% Check pre-requisites for running
 			assert(self.controlsAdded, 'Controls must be added before converting to MEFL units!\n');
 			assert(self.mefConverted, 'MEF conversion must be run before converting to MEFL units!\n');
-						
+			
+			zCheckInputs_convertToMEFL();
+			
 			% Check if conversions already exist
 			beadDir = [self.controlFolder, 'Calibration', filesep];
 			if ~exist(beadDir, 'file')
@@ -1015,9 +1020,9 @@ classdef FlowData < handle
 			colorString = sprintf('_%s', colors_channels{:});
 			meflFname = [beadDir, 'MEFL-Fits', colorString, '.mat'];
 			
-			if exist(meflFname, 'file')
+			if ~ismember('recompute', options) && logical(exist(meflFname, 'file'))
 				fprintf(1, 'Loading pre-computed MEFL conversions\n');
-				load(meflFname, 'meflFits')
+				load(meflFname, 'meflFitsCalc')
 			else
 				% Compute mefl conversions
 				tcData = self.controlData(numel(self.channels) + 1 : 2 * numel(self.channels));
@@ -1060,6 +1065,16 @@ classdef FlowData < handle
 			self.addDataTypes('mefl');
 			self.meflConverted = true;
 			fprintf(1, 'Finished converting to MEFL\n');
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_convertToMEFL()
+				if ~exist('options', 'var')
+					options = {};
+				end
+			end
 		end
 		
 		
