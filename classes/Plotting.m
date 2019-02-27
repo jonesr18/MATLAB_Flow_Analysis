@@ -1797,7 +1797,7 @@ classdef Plotting < handle
 			%		options		<cell, char> (optional) A cell array of strings (or a single 
 			%					string) specifying optional plotting behavior:
 			%						'shade'		Flag to shade in the area under the line. 
-			%						'counts'	Flag to plot bin counts rather than PDF
+			%						'counts'	Flag to plot bin counts rather than probability
 			%						'smooth'	Flag to smooth the histogram data
 			% 
 			%	Outputs
@@ -1826,7 +1826,7 @@ classdef Plotting < handle
 			if ismember('counts', options)
 				normMode = 'count';
 			else
-				normMode = 'pdf';
+				normMode = 'probability';
 			end
 			[binCounts, edges] = histcounts(xdata, 30, 'Normalization', normMode);
 			
