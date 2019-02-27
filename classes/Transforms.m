@@ -768,7 +768,7 @@ classdef Transforms < handle
 				
 				% Iterate over channels to extract data
 				for ch = 1:numel(channels)
-
+					
 					% Extract channel data
 					extractedBeadData(:, ch) = beadData.(channels{ch}).raw;
 					
@@ -876,7 +876,7 @@ classdef Transforms < handle
 		end
 		
 		
-		function [meflFits, figFits] = calibrateMEFL(controlData, channels, dataType, showPlots)
+		function [meflFits, figFits] = calibrateMEFL(controlData, channels, colors, dataType, showPlots)
 			% Computes conversions for MEF units to MEFL units using two-color controls 
 			%
 			%	Fits are calulated by simple linear regression - only the slope
@@ -890,6 +890,11 @@ classdef Transforms < handle
 			%						to MEF. Must coincide in the same order as the
 			%						two-color controls in controlData.
 			%						 * Also accepts a char for a single channel
+			%
+			%		colors			<cell, char> Name of fluorescent proteins and/or 
+			%						fluorophores used in the experiment. 
+			%						 - Should be equivalent in number to and match 
+			%						   the order of 'channels'.
 			%
 			%		dataType		<char> The dataType to use for calculations
 			%						 - This should be the post-MEF conversion 
@@ -915,14 +920,15 @@ classdef Transforms < handle
 			% 
 			
 			zCheckInputs_calibrateMEFL();
+			FITC_IDX = find(strcmpi('FITC_A', channels));
 			
 			% Compute conversions
 			meflFits = struct();
 			figFits = struct();
 			for chID = 1:numel(channels)
-				if strcmpi(channels{chID}, 'FITC_A') 
+				if (chID == FITC_IDX) 
 					% Skip FITC channel since it is the reference channel
-					meflFits.(channels{chID}) = 1;
+					meflFits.(colors{chID}) = 1;
 				else
 					currChanMEF = Transforms.CHANNEL_MAP.(channels{chID});
 					
@@ -946,14 +952,14 @@ classdef Transforms < handle
 % 					[rval, slope, ~] = regression(xdata', ydata'); % Convert column vectors to rows
 % 					rsq = rval.^2;
 
-					meflFits.(channels{chID}) = slope;
+					meflFits.(colors{chID}) = slope;
 					
 					if (exist('showPlots', 'var') && showPlots)
 						
-						figFits.(channels{chID}) = figure(); 
+						figFits.(colors{chID}) = figure(); 
 						ax = gca(); hold(ax, 'on');
 						xrange = logspace(0, 9, 50);
-						 
+						
 						plot(ax, xdata, ydata, ...
 							 '.', 'MarkerSize', 2)
 						plot(ax, xrange, xrange * slope, ...
@@ -963,8 +969,8 @@ classdef Transforms < handle
 						ax.XScale = 'log';
 						title(sprintf('Scale Factor: %.2f | R^2: %.3f', ...
 								slope, rsq), 'fontsize', 14)
-						ylabel('FITC_A (MEFL)')
-						xlabel(sprintf('%s (%s)', strrep(channels{chID}, '_', '-'), currChanMEF));
+						ylabel([colors{FITC_IDX}, ' (MEFL)'])
+						xlabel(sprintf('%s (%s)', strrep(colors{chID}, '_', '-'), currChanMEF));
 					end
 				end
 			end
@@ -977,13 +983,19 @@ classdef Transforms < handle
 				validateattributes(controlData, {'struct'}, {}, mfilename, 'controlData', 1);
 				validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 2);
 				if ischar(channels), channels = {channels}; end % Convert to cell for simplicity
-				assert(numel(channels) == numel(controlData), 'Number of channels and controls must be equal!\n');
+				assert(numel(channels) == numel(controlData), ...
+						'Number of channels and controls must be equal!\n');
+				
+				validateattributes(colors, {'cell', 'char'}, {}, mfilename, 'colors', 3);
+				if ischar(colors), colors = {colors}; end % For simplicity
+				assert(numel(colors) == numel(channels), ...
+						'Number of colors and channels must be equal!\n');
 				
 				validChannels = fieldnames(controlData(1));
 				badChannels = setdiff(channels, validChannels);
 				assert(isempty(badChannels), 'Channel not in controlData: %s\n', badChannels{:});
 				
-				validatestring(dataType, fieldnames(controlData(1).(channels{1})), mfilename, 'dataType', 3);
+				validatestring(dataType, fieldnames(controlData(1).(channels{1})), mfilename, 'dataType', 4);
 			end
 		end
 		
