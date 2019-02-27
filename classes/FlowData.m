@@ -828,6 +828,12 @@ classdef FlowData < handle
 			%	the MEF conversion is a simple scaling function of fluorescent
 			%	to MEF units. 
 			%
+			%	Note that all channels initially use the MEFL bead counts for
+			%	fitting (since not all channels have bead units and the
+			%	relationship between equivalent fluorophore counts are linear).
+			%	These MEFL units are _unadjusted_ and need to be MEFL converted
+			%	after running this method to 
+			%
 			%	Adds new dataTypes: {'mef'}
 			%	Adds new gates: {'nneg', 'P3_nneg'} 
 			%				   ({'nneg', 'P1_nneg'} if self.onlyP1 = TRUE)
@@ -875,6 +881,9 @@ classdef FlowData < handle
 			
 			beads = {beadsControls, beadsSamples};
 			beadDirs = {beadDirControls, beadDirSamples};
+			colorChans = reshape([self.colors; self.channels], 1, []);
+			colorChans = cellfun(@(x) strrep(x, '_', '-'), colorChans, 'uniformoutput', false);
+			ccString = sprintf('_%s', colorChans{:});
 			for b = 1:numel(beads)
 				
 				% This is unnessesary - remove after ensuring so
@@ -923,8 +932,8 @@ classdef FlowData < handle
 			end
 			
 			% Save fit information
-			self.beadFitsControls = fitsControls;
-			self.beadFitsSamples = fitsSamples;
+			self.mefFitsControls = fitsControls;
+			self.mefFitsSamples = fitsSamples;
 			
 			% Apply calibration to controls
 			self.controlData = Transforms.fcs2MEF(self.controlData, fitsControls, 'raw');
@@ -1015,20 +1024,24 @@ classdef FlowData < handle
 			end
 			
 			% Add converted data as 'mefl' data type
-			for ch = self.channels
+			for chIdx = 1:numel(self.channels)
+				
+				chan = self.channels{chIdx};
+				color = self.colors{chIdx};
+				
 				% Add MEFLs for controls
 				for i = 1:self.numControls
-					if isempty(self.controlData(i).(ch{:})), continue, end % Some tcData will be empty 
-					self.controlData(i).(ch{:}).mefl = self.controlData(i).(ch{:}).mef * meflFits.(ch{:});
+					if isempty(self.controlData(i).(chan)), continue, end % Some tcData will be empty 
+					self.controlData(i).(chan).mefl = self.controlData(i).(chan).mef * meflFitsCalc.(color);
 				end
 				
 				% Add MEFLs for sample
 				for i = 1:self.numSamples
-					self.sampleData(i).(ch{:}).mefl = self.sampleData(i).(ch{:}).mef * meflFits.(ch{:});
+					self.sampleData(i).(chan).mefl = self.sampleData(i).(chan).mef * meflFitsCalc.(color);
 				end
 			end
 			
-			self.meflConversions = meflFits; 
+			self.meflFits = meflFitsCalc; 
 			self.addDataTypes('mefl');
 			self.meflConverted = true;
 			fprintf(1, 'Finished converting to MEFL\n');
