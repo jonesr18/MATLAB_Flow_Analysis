@@ -1125,7 +1125,9 @@ classdef FlowData < handle
 			
 			% Check if compensation has already been done for this data
 			% --> If so, load and apply to data!
-			compFname = [compDir, 'CompFits.mat'];
+			colors_channels = reshape([self.colors; strrep(self.channels, '_', '-')], 1, []);
+			colorString = sprintf('_%s', colors_channels{:});
+			compFname = [compDir, 'Comp-Fits_', dataType, colorString, '.mat'];
 			if (exist(compFname, 'file') && ~all(logical(options.recompute)))
 				% Load existing sample gates
 				fprintf(1, 'Loading pre-computed coefficients and autofluorescence!\n');
@@ -1155,7 +1157,7 @@ classdef FlowData < handle
 % 					scData{sc} = binMedians(~isnan(binMedians(:, 1)), :); % Remove NaNs
 				end
 					[coeffs, ints, fitFigs.pre] = Compensation.computeCoeffs( ...
-						scData, self.channels, options); 
+						scData, self.channels, self.colors, options); 
 			end
 			
 			% Subtract autofluorescence
@@ -1208,7 +1210,7 @@ classdef FlowData < handle
 % 					scData{sc} = binMedians(~isnan(binMedians(:, 1)), :); % Remove NaNs
 				end
 				[~, ~, fitFigs.post] = Compensation.computeCoeffs( ...
-						scData, self.channels, options);
+						scData, self.channels, self.colors, options);
 			end
 			
 			% Save data/figures (default = do saving)
@@ -1216,8 +1218,8 @@ classdef FlowData < handle
 				save(compFname, 'coeffs', 'ints')
 				if (isfield(fitFigs, 'pre') && ~isempty(fitFigs.pre)) 
 					% Doesn't run if data was re-loaded or plots were not requested
-					saveas(fitFigs.pre, [compDir, 'pre-comp.fig'])
-					saveas(fitFigs.post, [compDir, 'post-comp.fig'])
+					saveas(fitFigs.pre, [compDir, 'Pre-Comp_', dataType, colorString, '.fig'])
+					saveas(fitFigs.post, [compDir, 'Post-Comp_', dataType, colorString, '.fig'])
 				end
 			end
 			
