@@ -1,4 +1,4 @@
-classdef FlowData < handle
+classdef FlowData < matlab.mixin.Copyable
 	% A data structure for managing flow cytometry data. Uses and references
 	% several other classes and functions in the repository. 
 	%
@@ -2373,6 +2373,93 @@ classdef FlowData < handle
 			validateattributes(newParam.MEF, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.MEF');
 			
 			self.logicleParams = newParams;
+		end
+		
+		
+		function rot = rotate(self, channels, theta)
+			% Rotates the data by the given angle (theta, degrees), returning a new
+			% FlowData object with rotated data, but the same coordinate system
+			%
+			%	Inputs
+			%		channels	<char, cell> Two channels to rotate on
+			%
+			%		theta		<numeric> The angle to rotate by. Negative = clockwise
+			%
+			%	Outputs
+			%		rot			<FlowData> A handle to the new object w/ rotated data
+			%
+			%	
+			%	Additional information: 
+			%
+			%		The rotation matrix:
+			%
+			%			[cos(theta), -sin(theta)
+			%			 sin(theta),  cos(theta)]
+			%
+			%		is multiplied against a two-row matrix where the X-values
+			%		are in the first row and the Y-values are in the second row.
+			%		The points are then rotated theta degress counter-clockwise
+			%		about the origin. 
+			%
+			%		<from: https://en.wikipedia.org/wiki/Rotation_matrix >
+			
+			% Check angle input
+			zCheckInputs_rotate(self);
+			
+			% Define rotation matrix
+			thetaRads = theta * pi / 180; 
+			rotMatrix = [cos(thetaRads), -sin(thetaRads)
+						 sin(thetaRads),  cos(thetaRads)];
+			
+			% Create output data structure
+			rot = self.copy();
+			
+			% Rotate data
+			for di = 1:numel(self.dataTypes)
+				
+				dt = self.dataTypes{di};
+				
+				for si = 1:self.numSamples
+					
+					% Extract data
+					sd = [rot.sampleData(si).(channels{1}).(dt), ...
+						  rot.sampleData(si).(channels{2}).(dt)]';
+					
+					% Apply rotation
+					sd = rotMatrix * sd;
+					
+					% Save data to new data structure
+					rot.sampleData(si).(channels{1}).(dt) = sd(1, :)';
+					rot.sampleData(si).(channels{2}).(dt) = sd(2, :)';
+				end
+				
+% 				for ci = 1:self.numControls
+% 					
+% 					% Extract data
+% 					cd = [rot.controlData(ci).(channels{1}).(dt), ...
+% 						  rot.controlData(ci).(channels{2}).(dt)]';
+% 					
+% 					% Apply rotation
+% 					cd = rotMatrix * cd;
+% 					
+% 					% Save data to new data structure
+% 					rot.controlData(ci).(channels{1}).(dt) = cd(1, :)';
+% 					rot.controlData(ci).(channels{2}).(dt) = cd(2, :)';
+% 				end
+			end
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_rotate(self)
+				
+				validateattributes(channels, {'cell', 'char'}, {}, mfilename, 'channels', 1);
+				validateattributes(theta, {'numeric'}, {'scalar', 'real'}, mfilename, 'theta', 2);
+				
+				badChannels = setdiff(channels, self.channels);
+				assert(isempty(badChannels), 'Channel not recognized: %s', badChannels{:});
+			end
 		end
 	end
 	
