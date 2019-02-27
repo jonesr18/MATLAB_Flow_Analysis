@@ -78,48 +78,65 @@ classdef ColorMap < handle
         end
         
         
-        function cm = getColormap(self, n, skew)
+        function cm = getColormap(self, numColors, skew)
             % Returns a colormap with the specified length (n)
 			%
 			% 'skew' input allows for forcing the top/bottom values to
 			% white/black: 'white', 'black', {'white', 'black'}
             
             % Check input
-            validateattributes(n, {'numeric'}, {}, mfilename, 'n', 1);
-            n = round(n);
+            validateattributes(numColors, {'numeric'}, {}, mfilename, 'n', 1);
+            numColors = round(numColors);
+			
+			
             
             if (self.matlab)
                 % If a MATLAB builtin, the colormap can be created directly using the name
                 % of the colormap - here we use the eval function to get the colormap from
                 % its name
-                cm = eval(strcat(self.cm_text, '(', num2str(n), ')'));
-            else
+                cm = eval(strcat(self.cm_text, '(', num2str(numColors), ')'));
+			else
                 % If not a MATLAB colormap, then we use one of our own
-				top = self.COLORS.(self.cm_text).cm_top;
-                bot = self.COLORS.(self.cm_text).cm_bot;
+				colorScheme = self.COLORS.(self.cm_text);
+				top = colorScheme.cm_top;
+                bot = colorScheme.cm_bot;
 				if exist('skew', 'var')
 					if ischar(skew), skew = {skew}; end
-					if ismember(skew, 'white'), top = [1, 1, 1]; end
-					if ismember(skew, 'black'), bot = [0, 0, 0]; end
+					if ismember('white', skew), top = [1, 1, 1]; end
+					if ismember('black', skew), bot = [0, 0, 0]; end
 				end
                 
                 % Setup colormap output
-                cm = zeros(n, numel(top));
+                cm = zeros(numColors, numel(top));
                 
                 % Check if the colormap has a middle value (eg white)
                 if isfield(self.COLORS.(self.cm_text), 'cm_mid')
-                    mid = self.COLORS.(self.cm_text).cm_mid;
+                    mid = colorScheme.cm_mid;
                     
-                    half_n = ceil(n / 2);
+					if (numColors > 3)
+						% Calculate a midpoint that maximally equalizes the gradient
+						% of color change above and below the midpoint
+						midDistBot = abs(mean(mid) - mean(bot));
+						midDistTop = abs(mean(mid) - mean(top));
+						optiMid = midDistBot / (midDistBot + midDistTop);
+
+						midPoint = ceil(optiMid * numColors);
+					elseif (numColors == 3)
+						% If 3 colors, midpoint is middle
+						midPoint = 2;
+					else 
+						% If 2 colors, midpoint is top, and if 1 color, just use midpoint. 
+						midPoint = numColors;
+					end
                     
                     for i = 1:numel(top)
-                        cm(1:half_n, i) = linspace(bot(i), mid(i), half_n);
-                        cm(half_n : n, i) = linspace(mid(i), top(i), n - half_n + 1);
+                        cm(1:midPoint, i) = linspace(bot(i), mid(i), midPoint);
+                        cm(midPoint : numColors, i) = linspace(mid(i), top(i), numColors - midPoint + 1);
                     end
                 else
                     % Take care of normal case (no middle)
                     for i = 1:numel(top)
-                        cm(:, i) = linspace(bot(i), top(i), n);
+                        cm(:, i) = linspace(bot(i), top(i), numColors);
                     end
                 end
             end
