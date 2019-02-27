@@ -742,37 +742,48 @@ classdef Transforms < handle
 				% in order that they were given, find initial peaks for each channel
 				% independently so we can figure out how many bead populations to fit.
 				
-				extractedBeadData = [];
+				extractedBeadData = zeros(beadData.nObs, numel(channels));
+				numBins = round(size(extractedBeadData, 1) / 100);
 				figFits = struct();
 				counts = struct();
 				centers = struct();
+				
+				% Check CV of forward and side scatter to determine if gating is
+				% needed to extract "good" bead population
+				fscData = beadData.FSC_A.raw;
+				sscData = beadData.SSC_A.raw;
+				fscCV = std(fscData) / mean(fscData);
+				sscCV = std(sscData) / mean(sscData);
+				if (fscCV > 1.0 || sscCV > 2.0)
+					warnString = 'High FSC/SSC Variance detected, please gate';
+					warning(warnString)
+					[gateIdx, ~, figFits.gate] = Gating.gatePolygon( ...
+							fscData, sscData, struct('YScale', 'log', ...
+									'XLabel', struct('String', 'FSC\_A'), ...
+									'YLabel', struct('String', 'SSC\_A'), ...
+									'Title', struct('String', warnString))); 
+				else
+					gateIdx = true(beadData.nObs, 1);
+				end
+				
+				% Iterate over channels to extract data
 				for ch = 1:numel(channels)
 
 					% Extract channel data
-					channelData = [];
-					for i = 1:length(beadData)
-						channelData = [channelData; beadData(i).(channels{ch}).raw]; %#ok<AGROW>
-					end
-					extractedBeadData(:, ch) = channelData; %#ok<AGROW>
-					numBins = round(length(channelData) / 100);
-
-					% Find points greater than 0 since we need to log transform for fitting
-					if ~exist('valid', 'var')
-						valid = (channelData > 0);
-					else
-						valid = valid & (channelData > 0);
-					end
-
+					extractedBeadData(:, ch) = beadData.(channels{ch}).raw;
+					
 					% Create histogram w/ biexp data so that peaks are easier to find
 					if showPlots
 						figFits.(channels{ch}) = figure(); 
 						subplot(2, 1, 1)
 					end
 					[counts.(channels{ch}), centers.(channels{ch})] = Plotting.biexhist( ...
-								channelData, numBins, showPlots);
+								extractedBeadData(:, ch), numBins, showPlots);
 				end
 				
-				extractedBeadData = extractedBeadData(valid, :);
+				% Only take positive data (that passes the gate if applicable)
+				valid = (sum(extractedBeadData > 0, 2) == numel(channels));
+				extractedBeadData = extractedBeadData((valid & gateIdx), :);
 			end
 			
 			
