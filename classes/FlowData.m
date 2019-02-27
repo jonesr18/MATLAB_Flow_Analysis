@@ -533,6 +533,36 @@ classdef FlowData < handle
 		end
 		
 		
+		function self = removeGates(self, gates)
+			% Removes the given gates if they exist in the data structure
+			
+			validateattributes(gates, {'cell', 'char'}, {}, mfilename, 'gates', 1);
+			if ~iscell(gates), gates = {gates}; end % For simplicity
+			
+			% Add dataTypes
+			removed = intersect(gates, self.gateNames);
+			self.gateNames = setdiff(self.gateNames, removed, 'stable');
+			
+			% Remove gate data (works fine if 'removed' is empty)
+			removePolygons = intersect(fieldnames(self.gatePolygons), removed);
+			self.gatePolygons = rmfield(self.gatePolygons, removePolygons);
+			for ci = 1:self.numControls
+				if isempty(self.controlData(ci).(self.channels{1}))
+					continue % Handle empty tcData
+				end
+				removeControls = intersect(fieldnames(self.controlData(ci).gates), removed);
+				self.controlData(ci).gates = rmfield( ...
+						self.controlData(ci).gates, removeControls);
+			end
+			for si = 1:numel(self.sampleData)
+				removeSamples = intersect(fieldnames(self.sampleData(ci).gates), removed);
+				self.sampleData(ci).gates = rmfield( ...
+						self.sampleData(ci).gates, removeSamples);
+			end
+			
+			if ~isempty(removed), fprintf(1, 'Removed gate: %s\n', removed{:}); end
+		end
+		
 		function self = addControls(self, controlFolder, wildTypeFname, singleColorFnames, twoColorFnames)
 			% Adds wild-type, single-color, and two-color (optional) data to the dataset
 			% so that we can do compensation (single-colors) and MEFL conversion (two-colors).
