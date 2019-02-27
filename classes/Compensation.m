@@ -26,7 +26,7 @@ classdef Compensation < handle
 	
 	methods (Static)		
 		
-		function [coeffs, ints, figFits] = computeCoeffs(scData, channels, options)
+		function [coeffs, ints, figFits] = computeCoeffs(scData, channels, colors, options)
 			% Finds the coefficients for linear fits between each channel
 			% when observing bleed-through.
 			%
@@ -43,6 +43,11 @@ classdef Compensation < handle
 			%		channels	<cell> A cell list of C channel names
 			%					corresponding with the cell list and
 			%					matrix data in scData.
+			%
+			%		colors		<cell, char> Name of fluorescent proteins and/or 
+			%					fluorophores used in the experiment. 
+			%					 - Should be equivalent in number to and match 
+			%					   the order of 'channels'.
 			%
 			%		options		<struct> (optional) Optional property-value pairs:
 			%			'minFunc':		A user-defined function for residual
@@ -189,12 +194,14 @@ classdef Compensation < handle
 					
 					% Axis labeling
 					title(sprintf('Slope: %.4f | Intercept: %.2f', ...
-						coeffs(chF, chB), ints(chF)), 'fontsize', 14)
+							coeffs(chF, chB), ints(chF)), 'fontsize', 10)
 					if (chF == numel(channels))
-						xlabel(strrep(channels{chB}, '_', '-'))
+						xlabel([strrep(channels{chB}, '_', '-'), ' (', colors{chB}, ')'], ...
+								'fontsize', 7)
 					end
 					if (chB == 1)
-						ylabel(strrep(channels{chF}, '_', '-'))
+						ylabel([strrep(channels{chF}, '_', '-'), ' (', colors{chF}, ')'], ...
+								'fontsize', 7)
 					end
 				end
 			end
@@ -217,16 +224,25 @@ classdef Compensation < handle
 				for sc = 1:numel(scData) 
 					validateattributes(scData{sc}, {'numeric'}, {}, mfilename, sprintf('scData{%d}', sc), 1);
 				end
-				validateattributes(channels, {'cell'}, {}, mfilename, 'channels', 2);
-				assert(numel(channels) == numel(scData), 'Incorrect number of channel controls or labels!')
-				assert(numel(channels) == size(scData{1}, 2), 'Incorrect number of channel data or labels!');
-				assert(numel(channels) > 1, 'Compensation with just one channel is useless!');
+				validateattributes(channels, {'char', 'cell'}, {}, mfilename, 'channels', 2);
+				if ischar(channels), channels = {channels}; end % for simplicity
+				assert(numel(channels) > 1, ...
+						'Compensation with just one channel is useless!');
+				assert(numel(channels) == numel(scData), ...
+						'Number of channels does not match number of controls!')
+				assert(numel(channels) == size(scData{1}, 2), ...
+						'Number of channels does not match size of data!');
+				
+				validateattributes(colors, {'char', 'cell'}, {}, mfilename, 'colors', 3);
+				if ischar(colors), colors = {colors}; end % for simplicity
+				assert(numel(colors) == numel(channels), ...
+						'Number of colors does not match number of channels!')
 				
 				if ~exist('options', 'var'), options = struct(); end
 				options.plotsOn = (isfield(options, 'plotsOn') && all(logical(options.plotsOn)));
 				options.plotLin = (isfield(options, 'plotLin') && all(logical(options.plotLin)));
 				if isfield(options, 'minFunc')
-					validateattributes(options.minFunc, {'function_handle'}, {}, mfilename, 'options.minFunc', 4)
+					validateattributes(options.minFunc, {'function_handle'}, {}, mfilename, 'options.minFunc')
 				else
 					options.minFunc = @(x) sum(x.^2);
 				end
