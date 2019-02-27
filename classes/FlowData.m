@@ -4,30 +4,39 @@ classdef FlowData < handle
 	%
 	%	Visible Properties
 	%
-	%		name			<char>		Experiment name
-	%		date			<char>		Experiment start date
-	%		folder			<char>		The full path name for the experiment
-	%		cytometer		<char>		The cytometer used for the experiment
+	%		name			 <char>		Experiment name
+	%		date			 <char>		Experiment start date
+	%		folder			 <char>		The full path name for the experiment
+	%		controlFolder	 <char>		The full path name for the controls
+	%		cytometer		 <char>		The cytometer used for the experiment
+	%		channels		 <cell>		Cytometer channel names
+	%		colors			 <cell>		Fluorescent color names
 	%
 	%		numSamples		 <numeric>	The number of data samples
 	%		numCells		 <array>	The number of cells in each sample
 	%		sampleData		 <struct>	Sample fluorescence and gate data in standard struct
+	%		controlData		 <struct>	Similar to sampleData but for controls.
+	%									The order of controls should be the same
+	%									as their corresponding channels. 
+	%		numSamples		 <numeric>	The number of data samples
+	%		numControls		 <numeric>	The number of control samples
+	%		numCells		 <numeric>	The number of cells in each sample
+	%		numCellsControls <numeric>	The number of cells in each control sample
 	%		sampleMap		 <table>	Experimental information for samples
+	%
 	%		dataTypes		 <cell>		Cell array of data types 
 	%									('raw', 'comp', 'mefl', etc)
 	%		gateNames		 <cell>		Cell array of gate names (strings)
 	%		gatePolygons	 <struct>	Mapping between gate names and polygons for sampleData
-	%		channels		 <cell>		Cell array of channel names
-	%		controlData		 <struct>	Similar to sampleData but for controls.
-	%									The order of controls should be the same
-	%									as their corresponding channels. 
-	%		controlFolder	 <char>		The full path name for the controls
+	%
 	%		coefficients	 <numeric>	Compensation coefficients
 	%		autfluor		 <numeric>  Autofluorescence per channel
 	%		compDataType	 <char>		Data type used for compensation
-	%		beadFitsControls <table>	Table containing MEF unit fits for controls
-	%		meflConversions  <struct>	Mapping between channel names to MEF-MEFL conversion factors 
-	%		beadFitsSamples	 <table>	Table containing MEF unit fits for samples
+	%
+	%		mefFitsSamples	 <table>	Table containing MEF unit fits for samples
+	%		mefFitsControls	 <table>	Table containing MEF unit fits for controls
+	%		meflFits		 <struct>	Mapping between channel names to MEF-MEFL conversion factors 
+	%
 	%		bins			 <cell>		Cell array where each element corresponds
 	%									with a data sample and contains an N-dim
 	%									M-element/dim cell array with an array of
@@ -39,7 +48,6 @@ classdef FlowData < handle
 	%									on the order of channels in binInputs).
 	%		binInputs		 <struct>	Struct w/ bin channels as fields and edges as values
 	%		binDataType		 <char>		Binned dataType ('raw', 'mComp', 'mefl', etc)
-	%		unnamedOps		 <numeric>	% # Of operate() calls with no newDataType input
 	%
 	%	Public Methods
 	%
@@ -73,29 +81,30 @@ classdef FlowData < handle
 		name = '';					% Experiment name
 		date = '';					% Experiment start date
 		folder = '';				% Experiment full path name
+		controlFolder = '';			% Controls full path name
 		cytometer = '';				% Experiment cytometer used
+		channels = {};				% Cytometer channel names
+		colors = {};				% Fluorescent color names
 		
+		sampleData = struct();		% Sample fluorescence and gate data in standard struct
+		controlData = struct();		% Similar to sampleData but for controls
 		numSamples = 0;				% The number of data samples
 		numControls = 0;			% The number of controls
 		numCells = [];				% The number of cells in each sample
 		numCellsControls = [];		% The number of cells in each control
-		sampleData = struct();		% Sample fluorescence and gate data in standard struct
 		sampleMap = table();		% Experimental information for samples
 		
+		dataTypes = {'raw'};		% Cell array of data types ('raw', 'mComp', 'mefl', etc)
 		gateNames = {};				% Cell array of gate names (strings)
 		gatePolygons = struct();	% Mapping between gate names and polygons for sampleData
-		dataTypes = {'raw'};		% Cell array of data types ('raw', 'mComp', 'mefl', etc)
-		channels = {};				% Cell array of channel names
 		
-		controlData = struct();		% Similar to sampleData but for controls
-		controlFolder = '';			% Controls full path name
 		coefficients = [];			% Compensation coefficients
 		autofluor = [];				% Autofluorescence per channel
 		compDataType = '';			% Data type used for compensation
 		
-		beadFitsControls = table();	% Table containing MEF unit fits for controls
-		beadFitsSamples = table();	% Table containing MEF unit fits for samples
-		meflConversions = struct(); % Mapping between channel names to MEF-MEFL conversion factors 
+		mefFitsSamples = table();	% Table containing MEF unit fits for samples
+		mefFitsControls = table();	% Table containing MEF unit fits for controls
+		meflFits = struct();		% Mapping between channel names to MEF-MEFL conversion factors 
 		
 		bins = {};					% Cell array where each element corresponds with a data sample
 		numBins = 0;				% Number of bins
