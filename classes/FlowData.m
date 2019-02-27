@@ -1402,10 +1402,11 @@ classdef FlowData < handle
 			end
 		end
 		
-		
-		function binStats = computeBinStats(self, sampleIDs, sliceParams, metrics)
-			% Computes the given bin statistic metrics on the combined data 
-			% from the given sampleIDs.
+		function stats = computeStats(self, sampleIDs, sliceParams, metrics, options)
+			% Computes the given statistic metrics on the combined data 
+			% from the given sampleIDs. Can get stats for independent bins. 
+			%
+			%	stats = self.computeStats(sampleIDs, sliceParams, metrics)
 			%
 			%	Inputs
 			%		sampleIDs		<integer> The sample(s) as given by the numerical 
@@ -1423,86 +1424,108 @@ classdef FlowData < handle
 			%									 per sample (if the minimum number 
 			%									 of cells per sample is lower, the 
 			%									 method will use that value). 
-			%						'bins':		<numeric> defaults to all bins
-			%									An Nx1 set of numerical bin IDs or an 
-			%									NxD set of bin coordinates where D = #
-			%									of bin channels. 
-			%									Automatically forces 'dataType' to be 
-			%									'self.binDataType' regardless of whether 
-			%									they are given or not
-			%									Can input 'all' to select all bins.
+			%						'bins':		<numeric, char> One of several inputs:
+			%									'none': Samples not split into bins
+			%									'all': Samples divided into all bins
+			%									<numeric>: An Nx1 set of numerical 
+			%										bin IDs or an NxD set of bin 
+			%										coordinates (D := bin channels) 
+			%									If binning, automatically forces 
+			%									'dataType' to be 'self.binDataType' 
 			%									** Requesting anything but all bins
 			%									will cause the output to be 2D rather 
 			%									than N+1 D as the data will not be 
 			%									reshaped to match the bin sizes.  
 			%
 			%		metrics			<char, cell> (Optional) A list of metrics to compute
-			%						Valid metrics:
-			%							'numCells', pctiles: 'p10', 'p50'/'median', 'p90',
-			%							'mean', 'geomean', 'stdev', 'geostdev', 'sem', semb*
-			%							 * semb = bootstrapped SEM
-			%							 -> If no metrics input given, then all
-			%								metrics except 'semb' are computed
+			%							'numCells', %iles: 'pX.Y' --> X.Y%, 
+			%							'median', 'mean', 'geomean', 'stdev', 
+			%							'geostdev', 'cv', 'sem', 'semb'*
+			%							 * semb = bootstrapped SEM - slow!
+			%							 -> If 'all' or no metrics are given, then
+			%								all metrics except 'semb' are computed,
+			%								along with %iles p10, p50, and p90. 
+			%							 -> For %iles, the output names are 'pX_Y' 
+			%								since '.' cannot be used in field names
+			%
+			%		options			<char, cell> (Optional) Optional inputs:
+			%							'pos': Calculate metrics for only the 
+			%							positive data - eg, useful for looking at
+			%							smaller percentiles to plot on log-log. 
 			%
 			%	Outputs
-			%		binStats	<struct> A struct where each field is the name of 
-			%					a statistical metric and the value is a N+1 D
+			%		stats		<struct> A struct where each field is the name of 
+			%					a statistical metric and the value is a (N+1)D
 			%					matrix of the metric values in N bin dimensions 
 			%					across C channels (given in sliceParams) in the 
-			%					final dimension. 
+			%					final dimension. If no binning has been done,
+			%					then the first dimension is singular. 
 			%					--> In the case of requesting stats from specific bins
 			%						rather than all of them, we do not structure the 
 			%						bin stats into their "true" shape and instead return 
 			%						a BxC matrix of metric values in each of the 
 			%						requested B bins in all the C channels. 
 			
-			zCheckInputs_computeBinStats(self);
+			zCheckInputs_computeStats(self);
 			
-			% Set up binStats struct
-			sliceBins = sliceParams.bins;
-			binAll = (numel(sliceBins) == self.numBins);
-			if binAll
-				binStatSize = self.binSizes;
+			% Set up binStats struct | Check size w/ 1st dim because that = # bins
+			doBinning = ~isempty(sliceParams.bins); % Need since we overwrite sliceParams.bins
+			if doBinning % Separate samples into bins
+				sliceBins = sliceParams.bins;
+				statSize = size(sliceBins, 1); 
+				iterMax = size(sliceBins, 1);
 			else
-				binStatSize = size(sliceBins, 1);
+				statSize = 1;
+				iterMax = 1;
 			end
+			
+			% Set up output matrix
 			for m = metrics
-				if binAll
-					binStats.(m{:}) = zeros([binStatSize, numel(sliceParams.channels)]);
-				end
+				stats.(m{:}) = zeros([statSize, numel(sliceParams.channels)]);
 			end
-			binStats.numCells = zeros(binStatSize);
+			stats.numCells = zeros([statSize, 1]);
 			
 			% Iterate over bins, compute stats for each one independently
-			for b = 1:size(sliceBins, 1)
+			for i = 1:iterMax
+				
+				% Set bin to extract from
+				if doBinning
+					sliceParams.bins = sliceBins(i, :);
+				end
 				
 				% Slice out data to compute stats with
-				sliceParams.bins = sliceBins(b, :);
 				slicedData = self.slice(sampleIDs, sliceParams);
-				binStats.numCells(b) = size(slicedData, 1);
+				stats.numCells(i) = size(slicedData, 1);
 				
 				for ch = 1:numel(sliceParams.channels)
 					
 					% Compute linear index
-					binStatIdx = b + numel(sliceBins) * (ch - 1);
+					statIdx = i + iterMax * (ch - 1);
 					
 					% Extract channel data
-					dataInBin = slicedData(:, ch);
-					dataInBin = dataInBin(~isnan(dataInBin));
-					posData = (dataInBin > 0);
+					dataOut = slicedData(:, ch);
+					dataOut = dataOut(~isnan(dataOut));
+					posData = dataOut(dataOut > 0);
+					if ismember('pos', options), dataOut = posData;	end
 					
-					% Calculate requested metrics
-					prctiles = prctile(dataInBin, [10, 50, 90]);
-					if ismember('p10', metrics), binStats.p10(binStatIdx) = prctiles(1); end
-					if any(ismember({'p50', 'median'}, metrics)), binStats.p50(binStatIdx) = prctiles(2); end
-					if ismember('p90', metrics), binStats.p90(binStatIdx) = prctiles(3); end
-					if ismember('mean', metrics), binStats.mean(binStatIdx) = mean(dataInBin); end
-					if ismember('geomean', metrics), binStats.geomean(binStatIdx) = geomean(dataInBin(posData)); end
-					if ismember('stdev', metrics), binStats.stdev(binStatIdx) = std(dataInBin); end
-					if ismember('geostdev', metrics), binStats.geostdev(binStatIdx) = geostd(dataInBin(posData)); end
-					if ismember('sem', metrics), binStats.sem(binStatIdx) = std(dataInBin) / sqrt(numel(dataInBin)); end
-					if ismember('semb', metrics), binStats.semb(binStatIdx) = semBootstrap(dataInBin); end % NOTE: SUPER SLOW
-% 					if ismember('ci95', metrics), binStats.CI95(binStatIdx) = ci95(dataInBin); end
+					% Calculate percentiles
+					pcts = metrics(contains(metrics, 'p'));
+					pctsNum = cellfun(@(x) str2double(x(2:end)), pcts);
+					prctiles = prctile(dataOut, pctsNum);
+					for pi = 1:numel(pcts)
+						stats.(strrep(pcts{pi}, '.', '_'))(statIdx) = prctiles(pi);
+					end
+					
+					% Calculate other metrics
+					if ismember('median', metrics), stats.median(statIdx) = median(dataOut); end % Same as p50, but preserving input name
+					if ismember('mean', metrics), stats.mean(statIdx) = mean(dataOut); end
+					if ismember('geomean', metrics), stats.geomean(statIdx) = geomean(posData); end
+					if ismember('stdev', metrics), stats.stdev(statIdx) = std(dataOut); end
+					if ismember('geostdev', metrics), stats.geostdev(statIdx) = geostd(posData); end
+					if ismember('cv', metrics), stats.cv(statIdx) = mean(dataOut) / std(dataOut); end
+					if ismember('sem', metrics), stats.sem(statIdx) = std(dataOut) / sqrt(numel(dataOut)); end
+					if ismember('semb', metrics), stats.semb(statIdx) = semBootstrap(dataOut); end % NOTE: SUPER SLOW
+% 					if ismember('ci95', metrics), binStats.CI95(binStatIdx) = ci95(dataOut); end
 				end
 			end
 			
@@ -1510,10 +1533,10 @@ classdef FlowData < handle
 			% --- Helper Functions --- %
 			
 			
-			function zCheckInputs_computeBinStats(self)
+			function zCheckInputs_computeStats(self)
 				
 				validateattributes(sampleIDs, {'numeric'}, {'positive'}, mfilename, 'sampleIDs', 1);
-				sampleIDs = unique(ceil(sampleIDs));
+				sampleIDs = reshape(unique(ceil(sampleIDs)), 1, []);
 				assert(max(sampleIDs) <= self.numSamples, 'Sample ID(s) too large!')
 				
 				% Only need to check sliceParams for fields that are used by
@@ -1527,28 +1550,45 @@ classdef FlowData < handle
 					sliceParams.channels = self.channels;
 				end
 				
-				% The default behavior is slightly different than slice - we
-				% take all bins instead of all cells when no input is given
-				if (~isfield(sliceParams, 'bins') || isempty(sliceParams.bins))
-					sliceParams.bins = 'all';
+				% If no information about bins are given, do not separate
+				% samples into bins. Otherwise, check if binning has been done
+				% then figure out which bins to use. 
+				if (~isfield(sliceParams, 'bins') || isempty(self.bins))
+					sliceParams.bins = [];
 				end
 				if ischar(sliceParams.bins)
 					if strcmpi(sliceParams.bins, 'all')
 						sliceParams.bins = (1:self.numBins)';
 					else
-						error('Bin char input not recognized: %s', sliceParams.bins)
+						sliceParams.bins = [];
 					end
 				end
+				if ~isempty(sliceParams.bins)
+					assert(size(sliceParams.bins, 2) == 1 || ...
+						   size(sliceParams.bins, 2) == numel(fieldnames(self.binInputs)), ...
+						   'Bin IDs formatted incorrectly!')
+					assert(size(sliceParams.bins, 1) <= self.numBins, ...
+						   'Too many bins requested!')
+				end
 				
-				validMetrics = {'numCells', 'p10', 'p50', 'p90', 'median', 'mean', 'geomean', 'stdev', 'geostdev', 'sem', 'semb'};
+				defaultMetrics = {'numCells', 'p10', 'p50', 'p90', 'mean', ...
+						'geomean', 'stdev', 'geostdev', 'cv', 'sem'};
 				if exist('metrics', 'var')
 					validateattributes(metrics, {'cell', 'char'}, {}, mfilename, 'metrics', 3);
 					if ischar(metrics), metrics = {metrics}; end % For simplicity
 					metrics = reshape(metrics, 1, []); % Force row vector
-					badMetrics = setdiff(metrics, validMetrics);
-					assert(isempty(badMetrics), 'Metric not recognized: %s\n', badMetrics{:});
+					metrics = cellfun(@lower, metrics, 'uniformoutput', false);
 				else
-					metrics = validMetrics(1:end-1);
+					metrics = defaultMetrics;
+				end
+				
+				if exist('options', 'var')
+					validateattributes(options, {'cell', 'char'}, {}, mfilename, 'options', 4);
+					if ischar(options), options = {options}; end % For simplicity
+					options = reshape(options, 1, []); % Force row vector
+					options = cellfun(@lower, options, 'uniformoutput', false);
+				else
+					options = {};
 				end
 			end
 		end
