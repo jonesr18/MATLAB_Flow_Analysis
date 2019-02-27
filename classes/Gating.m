@@ -423,13 +423,7 @@ classdef Gating < handle
                 ax = gca(); hold(ax, 'on');
 				plot(ax, xdata, ydata, '.', 'MarkerSize', 2)
 				
-				for f = fieldnames(axProperties)'
-					if contains(f{:}, 'Label')
-						set(ax.(f{:}), axProperties.(f{:}))
-					else
-						set(ax, f{:}, axProperties.(f{:}));
-					end
-				end
+				ax = Plotting.setAxProps(ax, axProperties);
 				
 				% Exclude outliers that can throw off the graph
 				ax.XLim = prctile(xdata, [1, 99]); 
