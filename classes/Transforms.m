@@ -464,7 +464,7 @@ classdef Transforms < handle
 				validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
                 validateattributes(channelFits, {'table'}, {}, mfilename, 'channelFits', 2);
                 
-                channels = setdiff(fieldnames(data(1)), {'gates', 'nObs'});
+                channels = setdiff(fieldnames(data(1)), {'gates', 'nObs', 'Time'});
                 badChannels = setdiff(channels, channelFits.Properties.VariableNames);
                 assert(isempty(badChannels), ...
                     'Channel not in fits: %s\n', badChannels{:});
