@@ -80,30 +80,34 @@ classdef FlowAnalysis < handle
 			%
             % Update Log: 
 			% 
+			%	2019-05-16		Fixed issue where eg concatenating files in
+			%					FlowJo would add another field to the header
+			%					which would not allow concatenation of structs.
+			%					So now we only take fields seen in all files. 
             
             % Check inputs (should be the transfection marker channel name, then filenames)
             filenames = {};
-            for i = 1:numel(varargin)
+            for fi = 1:numel(varargin)
 				
 				% Check each input to see if it is a single char or a cell of
 				% filenames, since the method should take in variable inputs
-				if iscell(varargin{i})
-					names = varargin{i};
+				if iscell(varargin{fi})
+					fnames = varargin{fi};
 				else
-					names = varargin(i);
+					fnames = varargin(fi);
 				end
 				
 				% For loop handles multiple files in a cell, but also works for
 				% a single filename
-				for n = 1:numel(names)
-					name = names{n};
-					if (~strcmpi(name(end-3:end), '.fcs'))
-						name = strcat(name, '.fcs');
+				for ni = 1:numel(fnames)
+					fname = fnames{ni};
+					if (~strcmpi(fname(end-3:end), '.fcs'))
+						fname = strcat(fname, '.fcs');
 					end
-					if (~exist(name, 'file'))
-						error('Filename %s does not exist in the path', name);
+					if (~exist(fname, 'file'))
+						error('Filename %s does not exist in the path', fname);
 					end
-					filenames = [filenames, {name}]; %#ok<AGROW>
+					filenames = [filenames, {fname}]; %#ok<AGROW>
 				end
             end
             
@@ -122,62 +126,93 @@ classdef FlowAnalysis < handle
             end
             numFiles = numel(filenames);
             
-            % Run through and extract data from files, putting it into the
-            % standardized struct array.
-			for i = 1:numFiles
+            % Find channel names common to all files
+			fullfiles = cell(1, numFiles);
+			for fi = 1:numFiles
                 % Depending on how the files were added, append the filepaths
                 if (nargin == 0)
                     % In this case, they were selected from the GUI, so we need the path
-                    fullfile = strcat(filepath, filenames{i});
+                    fullfiles{fi} = strcat(filepath, filenames{fi});
                 else
                     % In this case, they were given, so we assume they are on the path
                     % or the full path was given with the file.
-                    fullfile = filenames{i};
+                    fullfiles{fi} = filenames{fi};
                 end
-                [fcsdat, fcshdr, fcsdatscaled, fcsdatcomp] = fca_readfcs(fullfile);
+                [~, fcshdr, ~, ~] = fca_readfcs(fullfiles{fi});
 
                 % Get channel names and store relevant data in data's fields
-                channelNames = {fcshdr.par.name};
-                data(i).header = fcshdr;
-                data(i).nObs = size(fcsdat, 1);
-                
-                % Ensure channel names are legal field declarations
-                for channel = 1:numel(channelNames)
-                    chanName = channelNames{channel};
-                    chanName(chanName == '-') = '_';
-                    chanName(chanName == ' ') = '_';
-                    chanName(chanName == '#') = 'N';
-                    channelNames{channel} = chanName;
-                end
+				if (fi == 1)
+					channelNames = {fcshdr.par.name};
+				else
+					channelNames = intersect(channelNames, {fcshdr.par.name}, 'stable');
+				end
+			end
+			
+			% Extract data
+			for fi = 1:numFiles
+				
+				[fcsdat, fcshdr, fcsdatscaled, fcsdatcomp] = fca_readfcs(fullfiles{fi});
+				
+                data(fi).header = fcshdr;
+                data(fi).nObs = size(fcsdat, 1);
+				currChannelNames = {fcshdr.par.name};
                 
                 % Extract data :: The data is in columns, so we need the column numbers
-                for channel = 1:numel(channelNames)
+                for ci = 1:numel(currChannelNames)
                     
-                    chanName = channelNames{channel};
+                    chanName = currChannelNames{ci};
+					if ~ismember(chanName, channelNames), continue, end
+					
                     ch = struct();
                     
                     % Extract raw data
-                    ch.raw = fcsdat(:, channel);
+                    ch.raw = fcsdat(:, ci);
                     
                     % Only taken if the scaled is different
-                    if (~isempty(fcsdatscaled) && all(fcsdatscaled(:, channel) ~= fcsdat(:, channel)))
-                        ch.scaled = fcsdatscaled(:, channel);
+                    if (~isempty(fcsdatscaled) && all(fcsdatscaled(:, ci) ~= fcsdat(:, ci)))
+                        ch.scaled = fcsdatscaled(:, ci);
                     end
                     
                     % only taken if the comp is different
-                    if (~isempty(fcsdatcomp) && all(fcsdatcomp(:, channel) ~= fcsdat(:, channel)))
-                        ch.comp = fcsdatcomp(:, channel);
+                    if (~isempty(fcsdatcomp) && all(fcsdatcomp(:, ci) ~= fcsdat(:, ci)))
+                        ch.comp = fcsdatcomp(:, ci);
                     end
                     
                     % Store channel data
-                    data(i).(chanName) = ch;
+                    data(fi).(fixChanNames(chanName)) = ch;
                 end
 
                 % Has adjusted names
-                data(i).chanNames = channelNames;
+                data(fi).chanNames = fixChanNames(channelNames);
 			end
 
             fprintf(1, 'Finished creating data struct\n');
+			
+			
+			% --- Helper functions --- %
+			
+			
+			function fixedCNames = fixChanNames(cnames)
+				% Ensure channel names are legal field names
+				
+				% Handle character input
+				outChar = false;
+				if ischar(cnames)
+					outChar = true;
+					cnames = {cnames}; 
+				end
+				
+				fixedCNames = cell(1, numel(cnames));
+				for chi = 1:numel(cnames)
+					cname = cnames{chi};
+					cname = strrep(cname, '-', '_');
+					cname = strrep(cname, ' ', '_');
+					cname = strrep(cname, '#', 'N');
+					fixedCNames{chi} = cname;
+				end
+				
+				if outChar, fixedCNames = fixedCNames{:}; end
+			end
         end
         
         
