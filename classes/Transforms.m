@@ -313,7 +313,7 @@ classdef Transforms < handle
 			end
 			
 			if numel(unique(requestedUnits)) < numel(channels)
-				warning('Non-unique bead units detected - be sure to check channel names')
+				warning('Non-unique bead units detected: check channel names if this is not intentional')
 			end
 		end
 		
@@ -527,7 +527,7 @@ classdef Transforms < handle
 			%		Overhauled interface and processing
 			
             % Check inputs, initialize data struct
-            [beadData, beadVals] = zCheckInputs_calMEF();
+            [beadData, beadVals] = zCheckInputs_calibrateMEF();
 			MEF_units = fieldnames(beadVals)'; % Start in same order as channels
 			if (numel(MEF_units) == 1 && numel(channels) > 1)
 				warning('Adjusting %s units to match all channels', MEF_units{1});
@@ -691,7 +691,7 @@ classdef Transforms < handle
 			% --- Helper Functions --- %
 			
 			
-			function [beadData, beadVals] = zCheckInputs_calMEF()
+			function [beadData, beadVals] = zCheckInputs_calibrateMEF()
 				
 				validateattributes(beads, {'struct'}, {}, mfilename, 'beadsFilename', 1);
 				minimumFields = {'filename', 'type', 'lot', 'date', 'cytometer'};
