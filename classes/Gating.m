@@ -391,10 +391,29 @@ classdef Gating < handle
         end
         
         
-		function [cellsInGate, gatePolygons, gateFig] = gatePolygon(xdata, ydata, axProperties, position)
+		function [cellsInGate, polygon, gateFig] = gatePolygon(xdata, ydata, axProperties, polygon)
 			% Gates a given population.  Uses the polygon vertices specified by
 			% 'position' or if this is not given, the user is asked to specify the polygon
 			% through UI
+			%
+			%	Inputs
+			%
+			%		xdata			<numeric> X-values of data to gate
+			%
+			%		ydata			<numeric> Y-values of data to gate
+			%
+			%		axProperties	<struct> (Optional) Settable axes properties
+			%
+			%		polygon			<numeric> (Optional) Pre-made gate polygon
+			%
+			%	Outputs
+			%
+			%		cellsInGate		<logical> Logical index array of cells within 
+			%						the polygon and thus passing the gate.
+			%
+			%		polygon			<numeric> The gate polygon
+			%
+			%		gateFig			<Figure> The gating figure handle
 			% 
 			% Written By
 			% Bre DiAndreth
@@ -416,30 +435,25 @@ classdef Gating < handle
 			
             % position input is optional, and thus the method will only pull up a GUI to create a 
             % new gate if it is not included
-			if exist('position', 'var')
+			if exist('polygon', 'var')
 				gateFig = []; % Empty figure for returning
 			else
 				gateFig = figure();
                 ax = gca(); hold(ax, 'on');
 				plot(ax, xdata, ydata, '.', 'MarkerSize', 2)
 				
-				ax = Plotting.setAxProps(ax, axProperties);
-				
 				% Exclude outliers that can throw off the graph
 				ax.XLim = prctile(xdata, [1, 99]); 
 				ax.YLim = prctile(ydata, [1, 99]);
-								
-%                 ax.XLim = [AXES_MIN, AXES_MAX];
-%                 ax.YLim = [AXES_MIN, AXES_MAX];
+				
+				ax = Plotting.setAxProps(ax, axProperties);				
                 
 				h = impoly(ax, 'Closed', true); % modified by JG to use impoly to determine if event is within gate - much easier this way.
-				position = wait(h);
+				polygon = wait(h);
 			end
-
-			gatePolygons = position;
 			
 			% Determine if in or out of polygon
-			cellsInGate = inpolygon(xdata, ydata, position(:, 1), position(:, 2));
+			cellsInGate = inpolygon(xdata, ydata, polygon(:, 1), polygon(:, 2));
             
 		end
 		
