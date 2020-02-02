@@ -381,17 +381,17 @@ classdef FlowAnalysis < handle
 			%
             %   Inputs
 			%
-            %       'dataMatrix'    A N x D double matrix of N elements with D
+            %       'dataMatrix'    <numeric> A N x D double matrix of N elements with D
             %						dimensions to be binned. 
 			%
-            %       'binEdges'		An array of edges defining each bin in logicle space.
-			%						The edges are applied to all dimensions. To make unique 
+            %       'binEdges'		<numeric, cell> An array of edges defining each bin in logicle 
+			%						space. The edges are applied to all dimensions. To make unique 
 			%						edges for each dimension, pass a cell array of bin edges, 
 			%						where each cell element corresponds with a channel in the
 			%						same order as the columns of 'dataMatrix'. 
 			%						*Note: Bin edges are sorted prior to binning.
 			%
-			%		'binFuncs'		(Optional) A cell array of anonymous functions defining
+			%		'binFuncs'		<cell> (Optional) A cell array of anonymous functions defining
 			%						how 'binEdges' are adjusted for other bin dimensions.
 			%							Example:
 			%								{@(x) x / (x(2) + 1e5)}
@@ -404,14 +404,12 @@ classdef FlowAnalysis < handle
             %
             %   Outputs
             %
-			%       'bins'          A D-dimensional cell matrix where each cell 
-            %                       holds a double array of numerical indexes 
-            %                       for each element in a given bin. The size of
-            %                       each dimension is given by the number of
-            %                       edges given in each dimensison. 
+			%       'bins'          <cell> A D-dimensional cell matrix where each cell holds
+            %                       a double array of numerical indexes for each element in 
+			%						a given bin. The size of each dimension is given by the 
+			%						number of edges given in each dimensison. 
 			%
-			%		'binDims'		A vector indicating the number of bins in
-			%						each dimension. 
+			%		'binDims'		<numeric> A vector indicating the number of bins in each dimension. 
 			%
 			% Written By
 			% Ross Jones
