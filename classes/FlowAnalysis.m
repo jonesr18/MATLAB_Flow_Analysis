@@ -1181,7 +1181,7 @@ classdef FlowAnalysis < handle
 		end
 		
 		
-		function [indices] = subSample(len, numPoints)
+		function [indices] = subSample(len, numPoints, option)
 			% Returns a logical indices vector for subsampling numPoints 
 			% values from a vector of length len.
 			%
@@ -1192,10 +1192,15 @@ classdef FlowAnalysis < handle
 			%	Inputs 
 			%		len			<numeric> The length of the target vector/matrix
 			%		numPoints	<numeric> The number of points to subsample
+			%		options		<char>	  A string indicating how to subsample
+			%						'spread' - Evenly spaced indexes (default)
+			%						'first'  - Serial indexes starting at 1
+			%						'last'   - Serial indexes ending at 'len'
+			%						'rand'   - Randomly chosen indexes
 			%
 			%	Outputs
 			%		indices		<logical> A logical [len x 1] vector with numPoints
-			%					true values spaced as evenly as possible
+			%					true values spaced determined by the input 'options'
 			%
 			% Written by 
 			% Ross Jones
@@ -1208,6 +1213,12 @@ classdef FlowAnalysis < handle
 			% Check inputs
 			validateattributes(len, {'numeric'}, {'scalar'}, mfilename, 'length', 1);
 			validateattributes(numPoints, {'numeric'}, {'scalar'}, mfilename, 'numPoints', 2);
+			if exist('option', 'var')
+				option = lower(option);
+				validatestring(option, {'spread', 'first', 'last', 'rand'}, mfilename, 'option', 3);
+			else
+				option = 'spread';
+			end
 			len = round(len);
 			numPoints = round(numPoints);
 			
@@ -1215,8 +1226,17 @@ classdef FlowAnalysis < handle
 			if (numPoints >= len)
 				indices = true(len, 1);
 			else
-				indices = false(numPoints, 1);
-				numericIdxs = round(linspace(1, len, numPoints));
+				indices = false(len, 1);
+				switch option
+					case 'spread'
+						numericIdxs = round(linspace(1, len, numPoints));
+					case 'first'
+						numericIdxs = 1:numPoints;
+					case 'last'
+						numericIdxs = len - numPoints + 1 : len;
+					case 'rand'
+						numericIdxs = randperm(len, numPoints);
+				end
 				indices(numericIdxs) = true;
 			end
 		end
