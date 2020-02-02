@@ -754,14 +754,14 @@ classdef Transforms < handle
 				sscData = beadData.SSC_A.raw;
 				fscCV = std(fscData) / mean(fscData);
 				sscCV = std(sscData) / mean(sscData);
-				if (fscCV > 1.0 || sscCV > 2.0)
-					warnString = 'High FSC/SSC Variance detected, please gate';
-					warning(warnString)
+				if true%(fscCV > 1.0 || sscCV > 2.0)
+% 					warnString = 'High FSC/SSC Variance detected, please gate';
+% 					warning(warnString)
 					[gateIdx, ~, figFits.gate] = Gating.gatePolygon( ...
 							fscData, sscData, struct('YScale', 'log', ...
 									'XLabel', struct('String', 'FSC\_A'), ...
 									'YLabel', struct('String', 'SSC\_A'), ...
-									'Title', struct('String', warnString))); 
+									'Title', struct('String', 'Gate Beads Scatter'))); 
 				else
 					gateIdx = true(beadData.nObs, 1);
 				end
