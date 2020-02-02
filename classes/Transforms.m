@@ -563,7 +563,7 @@ classdef Transforms < handle
 			numPeaks = size(filteredMeans, 1) - 1;	
 			res_min = inf;
 			opt = optimoptions('lsqcurvefit', 'Display', 'off');
-			for hpi = 1 : (MAX_PEAKS - numPeaks + 1)
+			for hpi = 0 : (MAX_PEAKS - numPeaks)
 				% Its a bit simpler to index peaks from the highest down,
 				% since all beads have the largest populations, but some
 				% don't have smaller ones. By flipping so that low indexes 
@@ -571,7 +571,7 @@ classdef Transforms < handle
 				% the index for each bead population up or down.
 				% --> hpi := highestPeakIndex
 				
-				highestPeak = BEAD_PEAKS - hpi + 1;
+				highestPeak = BEAD_PEAKS - hpi;
 				fprintf(1, 'Trying highest peak: %d\n', highestPeak);
 				
 				% Iterate over each channel and add up residuals
@@ -584,7 +584,7 @@ classdef Transforms < handle
 					MEF = flipud(beadVals.(MEF_units{chID}));
 					
 					% Identify which bead pops to query
-					beadPops = hpi : (hpi + numPeaks - 1);
+					beadPops = hpi + 1: (hpi + numPeaks);
 					pointsMean = filteredMeans(2:end, chID); % Means already log10 transf
 					pointsMEF = flipud(log10(MEF(beadPops)));
 % 					pointsMEF = flipud((MEF(beadPops)));
@@ -617,11 +617,14 @@ classdef Transforms < handle
 					res_min = res;
 					res_all_min = res_all;
 					numPeaks_min = numPeaks;
-					highestPeak_min = BEAD_PEAKS - hpi + 1;
+					highestPeak_min = BEAD_PEAKS - hpi;
 					beadPops_min = BEAD_PEAKS - beadPops + 1;
 					fits_min = fits;
 					means_min = 10.^filteredMeans(2:end, :);
 % 						gmmMeans_min = means(2:end, :);
+				end
+				if (res_min == -inf) % The current peak was forced, skip the rest
+					break
 				end
 			end
 			
