@@ -193,8 +193,8 @@ classdef Compensation < handle
 					plot(ax, xrange, fitVals, '-', 'linewidth', 4)
 					
 					% Axis labeling
-					title(sprintf('Slope: %.4f | Intercept: %.2f', ...
-							coeffs(chF, chB), ints(chF)), 'fontsize', 10)
+					title({sprintf('Slope: %.4f', coeffs(chF, chB)), ...
+						   sprintf('Intercept: %.2f', ints(chF))}, 'fontsize', 10)
 					if (chF == numel(channels))
 						xlabel([strrep(channels{chB}, '_', '-'), ' (', colors{chB}, ')'], ...
 								'fontsize', 7)
