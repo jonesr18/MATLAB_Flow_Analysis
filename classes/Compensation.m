@@ -163,7 +163,7 @@ classdef Compensation < handle
 					
 					xrange = logspace(0, log10(max(scData{chB}(:, chB))), 100);
 					if ~all(logical(options.plotLin))
-						xrange = Transforms.lin2logicle(xrange, options.doMEF, options.logicle);
+						xrange = Transforms.lin2logicle2(xrange, options.scale, options.logicle);
 					end
 					
 					fitVals = xrange * coeffs(chF, chB) + ints(chF, chB);
@@ -177,16 +177,16 @@ classdef Compensation < handle
 						ydata = scData{chB}(:, chF);
 					else
 						% Do conversions
-						xdata = Transforms.lin2logicle(scData{chB}(:, chB), ...
-								options.doMEF, options.logicle);
-						ydata = Transforms.lin2logicle(scData{chB}(:, chF), ...
-								options.doMEF, options.logicle);
-						fitVals = Transforms.lin2logicle(fitVals, ...
-								options.doMEF, options.logicle);
+						xdata = Transforms.lin2logicle2(scData{chB}(:, chB), ...
+								options.scale, options.logicle);
+						ydata = Transforms.lin2logicle2(scData{chB}(:, chF), ...
+								options.scale, options.logicle);
+						fitVals = Transforms.lin2logicle2(fitVals, ...
+								options.scale, options.logicle);
 						
 						% Convert axes
-						Plotting.biexpAxes(ax, true, true, false, ...
-								 options.doMEF, options.logicle);
+						Plotting.biexpAxes2(ax, struct('x', options.scale, ...
+								'y', options.scale), [], options.logicle);
 					end
 					
 					plot(ax, xdata, ydata, '.', 'MarkerSize', 4)

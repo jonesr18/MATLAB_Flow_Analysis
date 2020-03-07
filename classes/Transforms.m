@@ -166,6 +166,105 @@ classdef Transforms < handle
 		end
 		
 		
+		function [logicleData, params] = lin2logicle2(linearData, scale, params)
+			% Converts input linear data to a logicle scale 
+			% 
+			%	biexpData = Transforms.lin2logicle2(linearData, scale, params);
+			%
+			%	Inputs
+			%		linearData	<numeric> Linear-scale input values
+			%
+			%		scale		<numeric> A scaling factor for 'stretching' the
+			%					transform to cover scaled values (e.g. MEFLs)
+			%
+			%		params		<struct> (optional) Allows the user to specify
+			%					the exact logicle transform parameters to use
+			%						Accepted input fields (see below):
+			%							T, M, r
+			%
+			%	Outputs
+			%		logicleData	<numeric> Logicle-transformed data
+			%
+			%		params		<struct> The parameters used for conversion
+			%
+			%	Notes
+			%		The logicle conversion function is described by Parks, et al. 
+			%		"A New Logicle Display Method Avoids Deceptive Effects of 
+			%		Logarithmic Scaling for Low Signals and Compensated Data" 
+			%   
+			%		This method implements the inverse of Equation (5):
+			%	
+			%			S = T * 10^(M-W) * (10^(X-W) - p^2 * 10^-((X-W)/p) + p^2 - 1)
+			%				(for X >= W)
+			%		
+			%		Where (see Figure 2):
+			%			S := linear 'raw' values
+			%			X := logicle-scale values
+			%			T := "Top" of scale data value (ie the highest data
+			%				 value expected from the machine, typically 2^18)
+			%			M := Total plot width in asmymptototic decades
+			%				 (defualt = 4.5)
+			%			W := Width of linearization, computed as such:
+			%				 W = (M - log10(T/abs(r))) / 2		| Eqn (6)
+			%				 This determines the value of lin2logicle(0)
+			%			r := Reference point for negative data range
+			%				 (default = -150)
+			%
+			%		Since Equation 5 cannot be explicitly solved for X, a 
+			%		spline is fitted to generic X data to estimate the logicle
+			%		values of S
+			%
+			%
+			% Written By
+			% Breanna DiAndreth
+			% bstillo@mit.edu
+			% Weiss Lab, MIT
+			%
+			% Update Log:
+			%	2018-02-10 (Ross):	Merged this w/ lin2logicleMEF to do MEF 
+			%						conversion optionally, also added optional
+			%						logicle parameters input
+			%	2020-02-26 (Ross):	Updated 'scale' input to match biexpAxes2
+			
+			% Check inputs
+			zCheckInputs_lin2logicle2();
+			
+			% Converting logicle to linear is solveable, but the reverse is not, 
+			% so we fit a spline to generic logicle-lin data and then project
+			% the given data onto that spline
+			X = linspace(0, params.M, 1000);				% Generic X values
+			SX = Transforms.logicle2lin2(X, scale, params);	% S values from X
+			p = spline(SX ./ scale, X);					% Spline fit
+			
+			% Apply spline fit to the actual given S values
+			logicleData = ppval(p, linearData ./ scale);						
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_lin2logicle2()
+				
+				% Check input arguments
+				validateattributes(linearData, {'numeric'}, {}, mfilename, 'linearData', 1);
+				
+				if exist('scale', 'var')
+					validateattributes(scale, {'numeric'}, {'scalar'}, mfilename, 'scale', 2);
+				else
+					scale = 1;
+				end
+				
+				if exist('params', 'var')
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 3);
+				else
+					params = struct();
+				end
+				
+				params = Transforms.checkLogicleParams2(params);
+			end
+		end
+		
+		
 		function [linData, params] = logicle2lin(X, doMEF, params)
 			% Converts input logicle data (X) to a linear scale 
 			% 
@@ -273,6 +372,123 @@ classdef Transforms < handle
 					params = struct();
 				end
 				params = Transforms.checkLogicleParams(doMEF, params);
+
+			end
+		end
+		
+		
+		function [linearData, params] = logicle2lin2(logicleData, scale, params)
+			% Converts input logicle data to a linear scale 
+			% 
+			%	linearData = Transforms.logicle2lin2(logicleData, scale, params);
+			%
+			%	Inputs
+			%		logicleData <numeric> Logicle-scale input values
+			%
+			%		scale		<numeric> A scaling factor for 'stretching' the
+			%					transform to cover scaled values (e.g. MEFLs)
+			%
+			%		params		<struct> (optional) Allows the user to specify
+			%					the exact logicle transform parameters to use
+			%						Accepted input fields (see below):
+			%							T, M, r
+			%
+			%	Outputs
+			%		linearData	<numeric> Linear-transformed data
+			%
+			%		params		<struct> The parameters used for conversion
+			%
+			%	Notes
+			%		The logicle conversion function is described by Parks, et al. 
+			%		"A New Logicle Display Method Avoids Deceptive Effects of 
+			%		Logarithmic Scaling for Low Signals and Compensated Data" 
+			%   
+			%		This method implements Equation (5):
+			%	
+			%			S = T * 10^(M-W) * (10^(X-W) - p^2 * 10^-((X-W)/p) + p^2 - 1)
+			%				(for X >= W)
+			%		
+			%		Where (see Figure 2):
+			%			S := linear 'raw' values
+			%			X := logicle-scale values
+			%			T := "Top" of scale data value (ie the highest data
+			%				 value expected from the machine, typically 2^18)
+			%			M := Total plot width in asmymptototic decades
+			%				 (defualt = 4.5)
+			%			W := Width of linearization, computed as such:
+			%				 W = (M - log10(T/abs(r))) / 2		| Eqn (6)
+			%				 This determines the value of lin2logicle(0)
+			%			r := Reference point for negative data range
+			%				 (default = -150)
+			%
+			%		For MEF (bead unit) data, the default is to scale the data
+			%		values by Transforms.MEF_CONVERSION_FACTOR after returning
+			%		from the logicle transformation. This parameter can be
+			%		overwritten with the optional params.MEF input.
+			%
+			% Written By
+			% Breanna DiAndreth
+			% bstillo@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%   2015-02-09 (Ross):	Added comments and intuitive variable names
+			%						Major speed up by using algebraic conversion 
+            %						instead of symbolic toolbox
+            %   2016-03-28 (Ross):	Made display breadth smaller w/ Bre's adjustment 
+			%						of r, which increases the relative size of the
+            %						area between 10^-2 and 10^2
+			%	2020-02-26 (Ross):	Updated 'scale' input to match biexpAxes2
+			
+			zCheckInputs_logicle2lin2()
+			
+			% This gives a range for linearization around zero (W).
+			W = (params.M - log10(params.T / abs(params.r))) / 2;
+			
+			% p and W are considered one parameter, p is introduced by the authors
+			% for compactness. Here we find p that solves their equivalence:
+			%   w = W * ln(10) = 2 * p * ln(p) / (p + 1)
+			% Solved by WolframAlpha:
+			w = W * log(10);
+			p = w / (2 * lambertw(w / 2 * exp(-w / 2)));
+			
+			% Find where the given data is above (thus valid).
+			posData = (logicleData >= W);
+			
+			% Compute and return the final linearized vector 
+			linearData = scale .* (toLin(logicleData, params) .* posData ...
+						  - toLin(2 * W - logicleData, params) .* (1 - posData));
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function S = toLin(X, params)
+				% Does the final conversion		| Eqn (5)
+				
+				S = params.T .* 10^-(params.M - W) .* ...
+					(10.^(X - W) - p^2 .* 10.^(-(X - W) ./ p) + p^2 - 1);
+			end
+						
+			
+			function zCheckInputs_logicle2lin2()
+				
+				% Check input arguments
+				validateattributes(logicleData, {'numeric'}, {}, mfilename, 'logicleData', 1);
+				
+				if exist('scale', 'var')
+					validateattributes(scale, {'numeric'}, {'scalar'}, mfilename, 'scale', 2);
+				else
+					scale = 1;
+				end
+				
+				if exist('params', 'var')
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 3);
+				else
+					params = struct();
+				end
+				
+				params = Transforms.checkLogicleParams2(params);
 
 			end
 		end
@@ -1357,6 +1573,17 @@ classdef Transforms < handle
 				params.MEF = 1;
 			end
 		end
+		
+		
+		function params = checkLogicleParams2(params)
+			% Simple function for checking and setting default logicle parameters
+			
+			% Set parameters
+			if ~isfield(params, 'T'), params.T = 2^18;	end
+			if ~isfield(params, 'M'), params.M = 4.5;	end
+			if ~isfield(params, 'r'), params.r = -150;	end
+		end
+
 		
     end
     
