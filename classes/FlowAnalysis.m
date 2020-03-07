@@ -147,7 +147,7 @@ classdef FlowAnalysis < handle
 					channelNames = intersect(channelNames, {fcshdr.par.name}, 'stable');
 				end
 			end
-			
+						
 			% Extract data
 			for fi = 1:numFiles
 				
@@ -158,9 +158,9 @@ classdef FlowAnalysis < handle
 				currChannelNames = {fcshdr.par.name};
                 
                 % Extract data :: The data is in columns, so we need the column numbers
-                for ci = 1:numel(currChannelNames)
-                    
-                    chanName = currChannelNames{ci};
+				for ci = 1:numel(currChannelNames)
+					
+					chanName = currChannelNames{ci};
 					if ~ismember(chanName, channelNames), continue, end
 					
                     ch = struct();
@@ -180,8 +180,8 @@ classdef FlowAnalysis < handle
                     
                     % Store channel data
                     data(fi).(fixChanNames(chanName)) = ch;
-                end
-
+				end
+				
                 % Has adjusted names
                 data(fi).chanNames = fixChanNames(channelNames);
 			end
@@ -205,9 +205,9 @@ classdef FlowAnalysis < handle
 				fixedCNames = cell(1, numel(cnames));
 				for chi = 1:numel(cnames)
 					cname = cnames{chi};
-					cname = strrep(cname, '-', '_');
-					cname = strrep(cname, ' ', '_');
+% 					cname = regexprep(cname, '[\-\\/]', '_');
 					cname = strrep(cname, '#', 'N');
+					cname = regexprep(cname, '\W', '_'); % All other pesky characters
 					fixedCNames{chi} = cname;
 				end
 				
@@ -377,6 +377,8 @@ classdef FlowAnalysis < handle
             % Takes an array of data values and bins them using the given edges, 
             % returning a double array of bin IDs for each element
             %
+			%	[bins, binSizes] = simpleBin(dataMatrix, binEdges, binFuncs)
+			%
 			%	TIMING RESULTS: 1.3 seconds. (Fastest)
 			%
             %   Inputs
