@@ -681,6 +681,143 @@ classdef Plotting < handle
 			end
 		end
         
+		
+		function h = violincompare(ax, ydata1, ydata2, xcenter, binEdges, faceColors, options)
+			% Plots the data as a split violin plot comparing two samples.
+			% The histograms are overlaid with lines representing the 5th, 
+			% 25th, 50th (median), 75th, and 95th percentiles.
+			%   
+			%	violincompare(ax, ydata, xcenter, binEdges, faceColor)
+			%
+			%   Inputs
+			%   
+			%		ax (handle)			The axis handle to plot to
+			%
+			%       ydata1 (vector)		Values of data to plot 
+			%							(Sample 1, plotted on the left)
+			%
+			%       ydata2 (vector)		Values of data to plot
+			%							(Sample 2, plotted on the left)
+			%
+			%       xcenter (integer)   The value to center the x-values on
+			%
+			%		binEdges (vector)	Bin edges for histogram computation
+			%							 - Should be equal for all violins for
+			%							   valid comparison
+			%       
+			%       faceColors (rgb)	2x3 matrix of colors for violin faces.
+			%							Row 1: left face (ydata1)
+			%							Row 2: right face (ydata2)
+			%							The faces are plotted with an alpha value 
+			%							of 0.5 to look nice.
+			%
+			%		options (cell/char) (optional) A cell array of strings (or a single 
+			%							string) specifying optional plotting behavior:
+			%							'smooth'	Flag to smooth the histogram data
+			%
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			%
+			% Update Log:
+			%
+			%	2018-01-28:		Switched to using separate density computing function
+			%	2018-10-03:		Fixed density calculation and added box plot overlay
+
+			% Check inputs
+			zCheckInputs_violincompare();
+			
+			% Compute density
+			binCounts1 = histcounts(ydata1, binEdges, 'Normalization', 'count');
+			binCounts2 = histcounts(ydata2, binEdges, 'Normalization', 'count');
+			binCenters = binEdges(2:end) - diff(binEdges) / 2;
+			
+			% Normalize to max value, then multiply by 0.4 so that 
+			%	violins don't overlap
+% 			binCounts = log10(binCounts) * 0.4 / max(log10(binCounts));
+			if ismember('smooth', options)
+				binCounts1 = smooth(binCounts1);
+				binCounts2 = smooth(binCounts2);
+			end
+			binCounts1 = binCounts1 * 0.4 / max(binCounts1(:));
+			binCounts2 = binCounts2 * 0.4 / max(binCounts2(:));
+			
+			% Force first and last values to be at zero to avoid messed-up plots
+			binCounts1 = [0; binCounts1; 0];
+			binCounts2 = [0; binCounts2; 0];
+			binCenters = binCenters([1, 1:end, end]);
+			
+			% Throw out inf and nan values
+			valid1 = ~isinf(binCounts1) & ~isnan(binCounts1);
+			valid2 = ~isinf(binCounts2) & ~isnan(binCounts2);
+
+			% Plot violins (ydata1 on left, ydata2 on right)
+			h = zeros(1, 2);
+			h(1) = fill(ax, xcenter - binCounts1(valid1), binCenters(valid1), ...
+					faceColors(1, :), 'EdgeColor', 'none', 'LineWidth', 1);
+			h(2) = fill(ax, xcenter + binCounts2(valid2), binCenters(valid2), ...
+					faceColors(2, :), 'EdgeColor', 'none', 'LineWidth', 1);
+			
+			% Plot pseudo boxplot
+			pcts1 = prctile(ydata1, [95, 75, 50, 25, 5]);
+			pcts2 = prctile(ydata2, [95, 75, 50, 25, 5]);
+			
+			linewidths = [0.5, 1, 2, 1, 0.5];
+			colorSums = mean(faceColors, 2);
+% 			lineColors = double((colorSums < 0.4) .* ones(2, 3));
+			lineColors = double((colorSums < 0.4) .* zeros(2, 3));
+			for pi = 1:numel(linewidths)
+				[~, ci1] = min(abs(binCenters - pcts1(pi)));
+				[~, ci2] = min(abs(binCenters - pcts2(pi)));
+				
+				plot(ax, xcenter - [binCounts1(ci1), 0], binCenters([ci1, ci1]), ...
+						'color', lineColors(1, :), 'linewidth', linewidths(pi))
+				plot(ax, xcenter + [0, binCounts2(ci2)], binCenters([ci2, ci2]), ...
+						'color', lineColors(2, :), 'linewidth', linewidths(pi))
+			end
+			
+			
+			% --- Helper Function --- %
+
+
+			function zCheckInputs_violincompare()
+
+				validateattributes(ydata1, {'numeric'}, {'vector'}, mfilename, 'ydata1', 2);
+				validateattributes(ydata2, {'numeric'}, {'vector'}, mfilename, 'ydata2', 3);
+				ydata1 = reshape(ydata1, [], 1); % Force column vector
+				ydata2 = reshape(ydata2, [], 1); % Force column vector
+				
+				% Fix negative infinite values by setting the resulting values to the 
+				% otherwise minimum value.
+				if any(ydata1 == -inf)
+					warning('Negative values detected - setting to min value')
+					ydata1(ydata1 == -inf) = min(ydata1(ydata1 ~= -inf));
+				end
+				if any(ydata2 == -inf)
+					warning('Negative values detected - setting to min value')
+					ydata2(ydata2 == -inf) = min(ydata2(ydata2 ~= -inf));
+				end
+				
+				validateattributes(xcenter, {'numeric'}, {}, mfilename, 'xcenter', 4);
+				if (round(xcenter) ~= xcenter)
+					warning('Non-integer ''xcetner'', rounding');
+					xcenter = round(xcenter(1)); % Ensure integer and only one point
+				end
+				
+				validateattributes(binEdges, {'numeric'}, {'vector'}, mfilename, 'binEdges', 5);
+				binEdges = reshape(binEdges, [], 1); % Force column vector
+				validateattributes(faceColors, {'numeric'}, {}, mfilename, 'faceColor', 6);
+				assert(all(size(faceColors) == [2, 3]), ...
+						'Input ''faceColors'' must be a 2 x 3 matrix');
+				
+				if ~exist('options', 'var')
+					options = {};
+				end
+			end
+		end
+		
         
 		function biexplot(x, y, plotArgs, options)
 			% NOTE: #Decrepit - to be removed before full release
