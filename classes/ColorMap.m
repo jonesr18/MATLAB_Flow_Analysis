@@ -19,6 +19,19 @@ classdef ColorMap < handle
 	%		redblue
 	%		greenpurp
 	%
+	%	matplotlib colormaps (From Stephen Cobeldick on MFEX)
+	%
+	%		viridis
+	%		cividis
+	%		inferno
+	%		magma
+	%		plasma
+	%		twilight
+	%		tab10
+	%		tab20
+	%		tab20b
+	%		tab20c
+	%
 	%	Methods
 	%
 	%		getColormap(N)		Returns an Nx3 matrix of RGB colors
@@ -76,8 +89,8 @@ classdef ColorMap < handle
             assert(ischar(cmapName));
             
             if (exist(cmapName) == 2) %#ok<EXIST>
-                % colormap is MATLAB type
-                self.category = 'matlab';
+                % colormap is a pre-built function (e.g. MATLAB built-in)
+                self.category = 'function';
 			elseif ismember(cmapName, fieldnames(self.HSV))
 				self.category = 'hsv';
 			elseif ismember(cmapName, fieldnames(self.CUSTOM))
@@ -101,7 +114,7 @@ classdef ColorMap < handle
             numColors = round(numColors);
             
             switch self.category
-				case 'matlab'
+				case 'function'
 					% If a MATLAB builtin, the colormap can be created directly using the name
 					% of the colormap - here we use the eval function to get the colormap from
 					% its name
