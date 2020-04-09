@@ -2419,16 +2419,16 @@ classdef FlowData < matlab.mixin.Copyable
 							combData = [combData; self.sampleData(i).(chan).(dtype)(1:self.numSamples:end)];
 						end
 						
-						ss = FlowAnalysis.subSample(numel(combData), 1e4);
+						pos = find(combData > 0);
+						ss = FlowAnalysis.subSample(numel(pos), 1e4);
+						combDataLog = log10(combData(pos(ss)));
 						
 						figThresh = figure();
 						ax = gca(); hold(ax, 'on')
-						edges = 0:0.1:4.5;
-						histogram(ax, Transforms.lin2logicle(combData(ss), false, self.logicleParams), edges)
+						histogram(ax, combDataLog)
 						title('Draw a line to set an x-axis threshold', 'fontsize', 16)
 						ylabel('Count', 'fontsize', 14)
-						xlabel(strrep(chan, '_', '-'), 'fontsize', 14)
-						Plotting.biexpAxes(ax, true, false, false, false, self.logicleParams);
+						xlabel(['log_{10} ', strrep(chan, '_', '-')], 'fontsize', 14)
 						
 						h = imline();
 						position = wait(h);
