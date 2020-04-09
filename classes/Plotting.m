@@ -1945,14 +1945,13 @@ classdef Plotting < handle
 		end
         
 		
-		function p = singleLineDensity(ax, xdata, color, options)
+		function [h, binCenters, binCounts] = singleLineDensity(ax, xdata, color, options, edges, float)
 			% Plots a sinlge line representing a histogram of values in a vector
 			% of given values. The Y-axis represents the probability density function.
 			%
-			%	p = Plotting.singleLineDensity(ax, xdata, color, options)
+			%	Plotting.singleLineDensity(ax, xdata, color, options)
 			%
 			%	Inputs
-			%
 			%		ax			<axes> axes handle to plot on
 			%		xdata		<numeric> A vector of data values to plot
 			%		color		<numeric> (optional) A single 1x3 RGB color 
@@ -1961,10 +1960,22 @@ classdef Plotting < handle
 			%					string) specifying optional plotting behavior:
 			%						'shade'		Flag to shade in the area under the line. 
 			%						'counts'	Flag to plot bin counts rather than probability
+			%						'maxnorm'	Flag to normalize by the max count/probability 
+			%									value (has precedence).
+			%						'kde'		Flag to use kernel density estimation, not histogram
 			%						'smooth'	Flag to smooth the histogram data
-			% 
+			%						'boxplot'	Flag to add lines denoting percentiles: 
+			%										[5, 25, 50 (median), 75, 95]
+			%		edges		<numeric> (optional) Edges to use for histogram binning
+			%					Default: 30 evenly spaced bins chosen by histcounts()
+			%		float		<numeric> (optional) A value to add to the baseline 
+			%					of the histogram to 'float' it above the x-axis
+			%
 			%	Outputs
-			%		p			<handle> A handle to the plot object for legends
+			%		h			<handle> The handle to the plotted element (eg for legends)
+			%		binCenters  <numeric> An array of computed bin center points
+			%		binCounts   <numeric> An array of computed bin counts
+			%						(normalized and smoothed if requested in inputs)
 			%
 			% Written By
 			% Ross Jones
@@ -1973,6 +1984,12 @@ classdef Plotting < handle
 			% 
 			% Update Log:
 			%
+			
+			% TODO
+			%	1) Rename to histogram
+			%	2) Check if bins are log or linearly spaced to compute centers
+			%	and maybe to also pre-transform the data
+			
 			
 			zCheckInputs_singleLineDensity();
 			
@@ -1986,20 +2003,37 @@ classdef Plotting < handle
 			end
 			
 			% Automatically find number of bins based on data
-			if ismember('counts', options)
-				normMode = 'count';
+			NUM_BINS = 32; % Power of 2 for KDE
+			if ismember('kde', options)
+				% Use kernel to estimate density
+				[~, binCounts, binCenters] = kde(xdata, NUM_BINS);
 			else
-				normMode = 'probability';
-			end
-			[binCounts, edges] = histcounts(xdata, 30, 'Normalization', normMode);
-			
-			% Estimate bin centers by averaging the edges
-			binCenters = zeros(numel(edges) - 1, 1);
-			for j = 2:length(edges)
-				binCenters(j - 1) = mean(edges([j - 1, j]));
+				% Use histogram to estimate density
+				if ismember('counts', options)
+					histNormMode = 'count';
+				else
+					histNormMode = 'pdf';
+				end
+				if exist('edges', 'var')
+					binCounts = histcounts(xdata, edges, ...
+							'normalization', histNormMode);
+				else
+					[binCounts, edges] = histcounts(xdata, NUM_BINS, ...
+							'normalization', histNormMode);
+				end
+				if ismember('maxnorm', options)
+					binCounts = binCounts ./ max(binCounts) * 0.8;
+				end
+				
+				% Estimate bin centers by averaging the edges
+				binCenters = zeros(numel(edges) - 1, 1);
+				for j = 2:length(edges)
+					binCenters(j - 1) = mean(edges([j - 1, j]));
+				end
 			end
 			
 			% Ignore bins w/o data, otherwise gaps in the line plot will show up
+			binCounts = reshape(binCounts, [], 1);
 			hasPoints = (binCounts > 0);
 			binCounts = binCounts(hasPoints);
 			binCenters = binCenters(hasPoints);
@@ -2007,15 +2041,27 @@ classdef Plotting < handle
 				binCounts = smooth(binCounts);
 			end
 			
+			% Adjust lines to a common baseline
+			minX = min(binCenters);
+			maxX = max(binCenters);
+			minY = min(binCounts) / 10 + float; % In case log axes, don't use 0
+			binCenters = [minX; binCenters; maxX];
+			binCounts = [minY; binCounts + float; minY];
+			
 			% Plot w/ or w/o shading
 			if ismember('shade', options)
-				area(ax, binCenters, binCounts, 'FaceColor', color, 'linewidth', 1, 'FaceAlpha', 0.4);
-				p = plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 3);
-				line(ax, [binCenters(1), binCenters(1)], [1e-10, binCounts(1)], 'color', color, 'linewidth', 3);
-				line(ax, [binCenters(end), binCenters(end)], [1e-10, binCounts(end)], 'color', color, 'linewidth', 3);
-			else
-				p = plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 5);
+				patch(ax, binCenters, binCounts, color, 'edgeAlpha', 0,  'facealpha', 0.4);
 			end
+			if ismember('boxplot', options)
+				pcts = prctile(xdata, [5, 25, 50, 75, 95]);
+				linewidths = [0.5, 1, 2, 1, 0.5];
+				for pi = 1:numel(pcts)
+					[~, ci] = min(abs(binCenters - pcts(pi)));
+					plot(ax, binCenters([ci, ci]), [float, binCounts(ci)], ...
+							'color', color, 'linewidth', linewidths(pi))
+				end
+			end
+			h = plot(ax, binCenters, binCounts, 'color', color, 'linewidth', 2);
 			
 			
 			% --- Helper Functions --- %
@@ -2037,13 +2083,22 @@ classdef Plotting < handle
 				color = reshape(color, 1, []);
 				
 				% If no optionsa are given, make an empty input set
-				if ~exist('options', 'var')
+				if ~exist('options', 'var') || isempty(options)
 					options = {};
 				end
 				validateattributes(options, {'cell', 'char'}, {}, mfilename, 'options', 4);
+				if ischar(options), options = {options}; end % For simplicity
+				options = cellfun(@lower, options, 'uniformoutput', false);
 				
-				% For simplicity, make options be a cell array
-				if ischar(options), options = {options}; end
+				if exist('edges', 'var')
+					validateattributes(edges, {'numeric'}, {}, mfilename, 'edges', 5);
+				end
+				
+				if exist('float', 'var')
+					validateattributes(float, {'numeric'}, {'scalar'}, mfilename, 'float', 6);
+				else
+					float = 0;
+				end
 			end
 		end
 		
