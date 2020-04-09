@@ -1080,8 +1080,7 @@ classdef FlowAnalysis < handle
             
             % Find data sizes
             [H, W, D] = size(data);
-            C = length(channels);
-            
+            C = numel(channels);
             
             % For tracking progress
             totalProgress = H * W * D * C;
@@ -1097,12 +1096,13 @@ classdef FlowAnalysis < handle
                 'SharedCovariance', false};     % Populations do not share covariance
             if (par)
                 % In order to maximize parallel processing, ensure data struct is linear
-                parfor i = 1:numel(data)
-                    for channel = channels
-                        
+                parfor di = 1:numel(data)
+                    for chi = 1:numel(channels)
+                        channel = channels{chi};
+						
                         % Log transform the data first
                         % --> perhaps better to do hyperlog or biexp tranform?
-                        d = data(i).(channel{:}).(dataType);
+                        d = data(di).(channel).(dataType);
 %                         logData = log10(d(d > 1e-2));
 %                         badData = (isinf(logData) | isnan(logData));
 %                         logData = logData(~badData);
@@ -1118,18 +1118,19 @@ classdef FlowAnalysis < handle
                         gmm = fitgmdist(logData, numPop, 'Options', options, parameters{:}); %#ok<PFBNS>
                         
                         % Extract population means and probability density function (log space) 
-                        data(i).(channel{:}).mus = sort(gmm.mu);
-                        data(i).(channel{:}).pdfs = gmm.pdf(reshape(xrange, [], 1));
+                        data(di).(channel).mus = sort(gmm.mu);
+                        data(di).(channel).pdfs = gmm.pdf(reshape(xrange, [], 1));
                     end
-                    fprintf(1, 'Worker %d has finished\n', i);
+                    fprintf(1, 'Worker %d has finished\n', di);
                 end
             else
-                for i = 1:numel(data)
-                    for channel = channels
-
+                for di = 1:numel(data)
+                    for chi = 1:numel(channels)
+						channel = channels{chi};
+						
                         % Log transform the data first
                         % --> perhaps better to do hyperlog or biexp tranform?
-                        d = data(i).(channel{:}).(dataType);
+                        d = data(di).(channel).(dataType);
                                 logData = log10(d(d > 1e-2));
                                 badData = (isinf(logData) | isnan(logData));
                                 logData = logData(~badData);
@@ -1145,8 +1146,8 @@ classdef FlowAnalysis < handle
                         gmm = fitgmdist(logData, numPop, 'Options', options, parameters{:});
 
                         % Extract population means and probability density function (log space) 
-                        data(i).(channel{:}).mus = sort(gmm.mu);
-                        data(i).(channel{:}).pdfs = gmm.pdf(reshape(xrange, [], 1));
+                        data(di).(channel).mus = sort(gmm.mu);
+                        data(di).(channel).pdfs = gmm.pdf(reshape(xrange, [], 1));
 
                         % Update progress
                         currProgress = currProgress + 1;
