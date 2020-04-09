@@ -2134,22 +2134,38 @@ classdef FlowData < matlab.mixin.Copyable
 					sliceGates = repmat(sliceGates, 1, numel(sliceChannels));
 				end
 				
-				% Slice the same number of points from each sample
-				numPoints = min(cellfun(@numel, sliceGates));
-				subSample = false;
+				% Find minimal number of points to take from each sample
+				pointsPerGate = cellfun(@numel, sliceGates);
 				if (isfield(sliceParams, 'numPoints') && ~isempty(sliceParams.numPoints))
-					numPoints = min(numPoints, sliceParams.numPoints);
-					subSample = true;
+					% Determine if a minimal number of points have been set
+					numPoints = sliceParams.numPoints;
+				else
+					numPoints = inf;
 				end
-				if ((isfield(sliceParams, 'equalize') && sliceParams.equalize) || subSample)
-					% If sP.equalize TRUE and sP.numPoints not given, then use minPoints
-					% If both or just sP.numPoints given, use min of numPoints sP.numPoints
-					% If neither are given, then subsampling is completely skipped
-					for si = 1:numel(sampleIDs)
-						ss = FlowAnalysis.subSample(numel(sliceGates{si}), numPoints);
-						sliceGates{si} = sliceGates{si}(ss);
+				if (isfield(sliceParams, 'equalize') && sliceParams.equalize)
+					% Use the same number of points per sample
+					numPoints = min(numPoints, min(min(pointsPerGate)));
+					
+					for sgi = 1:numel(sliceGates) % Do linearly because multiple dimensions
+						if ~isempty(sliceGates{sgi}) % Some tcData will be empty 
+							ss = FlowAnalysis.subSample(numel(sliceGates{sgi}), numPoints);
+							sliceGates{sgi} = sliceGates{sgi}(ss);
+						end
+					end
+				else
+					% Use the same number of points per gate per sample
+					numPoints = min(numPoints, min(pointsPerGate, [], 2));
+					
+					for si = 1:size(sliceGates, 1)
+						for gi = 1:size(sliceGates, 2)
+							if ~isempty(sliceGates{si, gi}) % Some tcData will be empty 
+								ss = FlowAnalysis.subSample(numel(sliceGates{si, gi}), numPoints(si));
+								sliceGates{si, gi} = sliceGates{si, gi}(ss);
+							end
+						end
 					end
 				end
+				
 				
 				% Slices from the given bins. Controls are not binned, so if they 
 				% are the sliceData, we just skip the rest of the inputs checking
@@ -2171,9 +2187,9 @@ classdef FlowData < matlab.mixin.Copyable
 				if ~isempty(sliceParams.bins)
 					assert(size(sliceParams.bins, 2) == 1 || ...
 						   size(sliceParams.bins, 2) == numel(fieldnames(self.binInputs)), ...
-						   'Bin IDs formatted incorrectly!')
+						   'Bin IDs formatted incorrectly')
 					assert(size(sliceParams.bins, 1) <= self.numBins, ...
-						   'Too many bins requested!')
+						   'Too many bins requested')
 
 					% Convert bin indexes to linear 
 					if (size(sliceParams.bins, 2) == 1)
