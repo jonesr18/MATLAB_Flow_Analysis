@@ -1316,15 +1316,18 @@ classdef Plotting < handle
 		function cbar = biexpColorbar2(ax, scale, params)
             % Generates a colorbar w/ biexponential labels for a given axes.
             %   
-			%	cbar = biexpColorbar2(ax, scales, params);
+			%	cbar = biexpColorbar2(ax, scale, params);
 			%
-            %   Inputs (all optional - defaults to logicle using scale factor = 1)
+            %   Inputs 
+			%
+			%		ax			<axes> Axes handle to plot onto
             %       
 			%		scale		<numeric> (optional) scaling factor to use for the 
 			%					colorbar's logicle-transformation
 			%					 - The values here are used as the MEF value for
 			%					   logicle conversions and are used as references 
 			%					   for determining axes labels
+			%					 - Defaults to 1
 			%
 			%		params		<struct> (Optional) Biexp transform parameters
 			%					 - Note that the MEF parameter is overwritten
@@ -1856,15 +1859,7 @@ classdef Plotting < handle
 				assert(size(colors, 1) == numel(data), ...
 					   'Size of colors incorrect');
 			else
-				colors = repmat([ ...
-					0       0.4470  0.7410
-					0.8500  0.3250  0.0980
-					0.9290  0.6940  0.1250
-					0.4940  0.1840  0.5560
-					0.4660  0.6740  0.1880
-					0.3010  0.7450  0.9330
-					0.6350  0.0780  0.1840], ...
-					ceil(numel(data) / 7), 1);
+				colors = repmat(lines(7), ceil(numel(data) / 7), 1);
 			end
             
 			if isfield(inputs, 'xscale')
@@ -1888,7 +1883,7 @@ classdef Plotting < handle
 					case {'logicle', 'biexp'}
 						xdata = Transforms.lin2logicle(xdata);
 					case {'logicleMEF', 'MEF'}
-						xdata = Transforms.lin2logicleMEF(xdata);
+						xdata = Transforms.lin2logicle(xdata, true);
 					otherwise
 						error('Unrecognized xscale given: %s', inputs.xscale);
 				end
