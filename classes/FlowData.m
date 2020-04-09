@@ -2288,7 +2288,7 @@ classdef FlowData < matlab.mixin.Copyable
 					values = repmat(values, 1, size(self.channels));
 				end
 				assert(length(values) == numel(self.channels), ...
-					'Incorrect scalar length passed!');
+					'Incorrect scalar length passed');
 				
 				if exist('initDataType', 'var')
 					validatestring(initDataType, self.dataTypes, mfilename, 'initDataType', 3);
@@ -2322,7 +2322,7 @@ classdef FlowData < matlab.mixin.Copyable
 		end
 				
 		
-		function self = threshGate(self, channels, mode, thresh, options)
+		function self = threshGate(self, channels, mode, thresh, options, sampleIDs)
 			% Thresholds cells in the given channel(s) using the given mode to
 			% select thresholded cells from multiple channels. 
 			%
@@ -2341,7 +2341,8 @@ classdef FlowData < matlab.mixin.Copyable
 			%		channels	<char, cell> A cell list of channels to threshold on. 
 			%					(A single string for one channel is also accepted)
 			%
-			%		mode		<char> {'or', 'and'} - determines how thresh gates are crossed
+			%		mode		(optional) <char> {'or', 'and'} - determines how 
+			%					thresh gates are crossed (if multiple channels given)
 			%
 			%		thresh		(optional) Either a specific threshold value to use 
 			%					or one of the keywords: {'manual', 'auto'}. In
@@ -2357,10 +2358,16 @@ classdef FlowData < matlab.mixin.Copyable
 			%						'Auto': The thresh is automatically determined
 			%						from the 99.9th %ile of the wtData. 
 			%
-			%		options		<char, cell> A string or cell list of strings with
-			%					additional options: 
+			%		options		(optional) <char, cell> A string or cell list of 
+			%					strings with additional options: 
 			%						'recompute': Overwrites the automatic loading 
 			%						of existing threshold values from saved files. 
+			%						<'dataType'> Uses the specified dataType for 
+			%						defining the thresholds. 
+			%
+			%		sampleIDs	(optional) <numeric> A subset of sampleIDs to use 
+			%					for generating the thresholds. By default, all the
+			%					samples are used.
 			
 			zCheckInputs_threshGate(self);
 			
@@ -2372,10 +2379,25 @@ classdef FlowData < matlab.mixin.Copyable
 			gateSaveName = [self.date, '_', self.name];
 			threshFname = [gateDir, 'Thresh-Vals_', gateSaveName, '.mat'];
 			
-			% Find thresholds - load from file if not already present
-			if (exist(threshFname, 'file') && ~ismember('recompute', options))
-				load(threshFname, 'threshVals');
+			% Load thresholds from file or from the object's fields if possible
+			if ~ismember('recompute', options)
+				if ~isempty(self.threshGateVals)
+					threshVals = self.threshGateVals;
+				elseif exist(threshFname, 'file')
+					load(threshFname, 'threshVals');
+				end
+			end
+			
+			% Check which dataType to use for thresholding
+			if any(ismember(self.dataTypes, options))
+				dti = find(ismember(self.dataTypes, options), 1);
+				dtype = self.dataTypes{dti};
 			else
+				dtype = 'raw';
+			end
+			
+			% If there were no thresh values to load, create them
+			if ~exist('threshVals', 'var') 
 				threshVals = zeros(1, numel(channels));
 				for ci = 1:numel(channels)
 					
@@ -2384,15 +2406,15 @@ classdef FlowData < matlab.mixin.Copyable
 					if (ischar(thresh) && strcmpi(thresh, 'auto'))
 						% Thresh value is found using the untransfected (wt) cells
 						% --> Set at 99.9th %ile of fluorescence in a channel
-						threshVals(ci) = prctile(self.controlData(end).(chan).raw, 99.9);
+						threshVals(ci) = prctile(self.controlData(end).(chan).(dtype), 99.9);
 					elseif isnumeric(thresh)
 						% Thresh value given as an option
 						threshVals(ci) = thresh(ci); % Ignore extra entries
 					else
 						% Thresh value is found by marking a line on a graph
 						combData = [];
-						for i = 1:self.numSamples
-							combData = [combData; self.sampleData(i).(chan).raw(1:self.numSamples:end)];
+						for i = sampleIDs
+							combData = [combData; self.sampleData(i).(chan).(dtype)(1:self.numSamples:end)];
 						end
 						
 						ss = FlowAnalysis.subSample(numel(combData), 1e4);
@@ -2408,6 +2430,7 @@ classdef FlowData < matlab.mixin.Copyable
 						
 						h = imline();
 						position = wait(h);
+						self.gatePolygons.(['TH', self.SHORT_COLORS.(chan)]) = position;
 						
 						saveas(figThresh, [gateDir, 'Gate-Thresh_', ...
 								strrep(chan, '_', '-'), '_', gateSaveName, '.fig']);
@@ -2415,13 +2438,9 @@ classdef FlowData < matlab.mixin.Copyable
 						% Fit the points to get a line, then use that to find the
 						% x-intercept (threshold value)
 						fit = polyfit(position(:, 1), position(:, 2), 1);
-	% 					plot(ax, (0:0.5:4.5), fit(1) * (0:0.5:4.5) + fit(2), 'r-');
-						threshVals(ci) = Transforms.logicle2lin(-fit(2) / fit(1), false, self.logicleParams);
+						threshVals(ci) = 10.^(-fit(2) / fit(1));
 					end
 				end
-				
-				% Save newly created thresh values
-				save(threshFname, 'threshVals');
 			end
 			
 			thrGateNames = cell(1, numel(channels));
@@ -2432,21 +2451,21 @@ classdef FlowData < matlab.mixin.Copyable
 				% Find cells passing threshold and record gate
 				thrGateNames{ci} = ['TH', self.SHORT_COLORS.(chan)];
 				for i = 1:self.numSamples
-					passThresh = (self.sampleData(i).(chan).raw >= threshVals(ci));
+					passThresh = (self.sampleData(i).(chan).(dtype) >= threshVals(ci));
 					self.sampleData(i).gates.(thrGateNames{ci}) = passThresh;
 				end
 				
 				% Do the same for controls
 				for i = 1:self.numControls
 					if ~isempty(self.controlData(i).(chan)) % Some tcData will be empty 
-						passThresh = (self.controlData(i).(chan).raw >= threshVals(ci));
+						passThresh = (self.controlData(i).(chan).(dtype) >= threshVals(ci));
 						self.controlData(i).gates.(thrGateNames{ci}) = passThresh;
 					end
 				end
 			end
 			
 			self.addGates(thrGateNames);
-			if (numel(thrGateNames) > 1) % Not necessary for < 2 channels
+			if exist('mode', 'var') && ~isempty(mode) && (numel(channels) > 1)
 				self.crossGates(thrGateNames, mode);
 			end
 			
@@ -2462,7 +2481,7 @@ classdef FlowData < matlab.mixin.Copyable
 				badChannels = setdiff(channels, self.channels);
 				assert(isempty(badChannels), 'Channel not valid: %s\n', badChannels{:});
 
-				if (numel(channels) > 1) % Not necessary for < 2 channels
+				if exist('mode', 'var') && ~isempty(mode) && (numel(channels) > 1)
 					mode = lower(mode);
 					validatestring(mode, {'and', 'or'}, mfilename, 'mode', 2);
 				end
@@ -2488,6 +2507,13 @@ classdef FlowData < matlab.mixin.Copyable
 					options = cellfun(@lower, options, 'uniformoutput', false);
 				else
 					options = {};
+				end
+				
+				if exist('sampleIDs', 'var')
+					validateattributes(sampleIDs, {'numeric'}, {'positive'}, mfilename, 'sampleIDs', 5);
+					assert(max(sampleIDs) <= self.numSamples, 'Sample ID(s) too large');
+				else
+					sampleIDs = 1:self.numSamples;
 				end
 			end
 		end
