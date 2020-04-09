@@ -34,6 +34,7 @@ classdef FlowData < matlab.mixin.Copyable
 	%		mefFitsSamples	 <table>	Table containing MEF unit fits for samples
 	%		mefFitsControls	 <table>	Table containing MEF unit fits for controls
 	%		meflFits		 <struct>	Mapping between channel names to MEF-MEFL conversion factors 
+	%		meflScalars		 <struct>	Mapping between channel names to raw-MEFL conversion
 	%
 	%		bins			 <cell>		Cell array where each element corresponds
 	%									with a data sample and contains an N-dim
@@ -103,6 +104,7 @@ classdef FlowData < matlab.mixin.Copyable
 		mefFitsSamples = table();	% Table containing MEF unit fits for samples
 		mefFitsControls = table();	% Table containing MEF unit fits for controls
 		meflFits = struct();		% Mapping between channel names to MEF-MEFL conversion factors 
+		meflScalars = struct();		% Mapping between channel names to raw-MEFL conversion factors 
 		
 		bins = {};					% Cell array where each element corresponds with a data sample
 		numBins = 0;				% Number of bins
@@ -909,7 +911,7 @@ classdef FlowData < matlab.mixin.Copyable
 			%			noFilter		Do not filter out peaks by height
 			%			recompute		Flag to force recalculation
 			
-			assert(self.controlsAdded, 'Controls must be added before converting to MEF units!\n');
+			assert(self.controlsAdded, 'Controls must be added before converting to MEF units\n');
 			
 			% Check inputs
 			zCheckInputs_convertToMEF(self);
@@ -1027,9 +1029,9 @@ classdef FlowData < matlab.mixin.Copyable
 					'File does not exist: %s\n', beadsSamples.filename)
 				
 				assert(strcmpi(beadsControls.cytometer, self.cytometer), ...
-					'Control beads cytometer does not match experiment cytometer!')
+					'Control beads cytometer does not match experiment cytometer')
 				assert(strcmpi(beadsSamples.cytometer, self.cytometer), ...
-					'Sample beads cytometer does not match experiment cytometer!')
+					'Sample beads cytometer does not match experiment cytometer')
 				
 				if ~exist('options', 'var')
 					options = {};
@@ -1053,15 +1055,15 @@ classdef FlowData < matlab.mixin.Copyable
 			%			recompute		Flag to force recalculation
 
 			% Check pre-requisites for running
-			assert(self.controlsAdded, 'Controls must be added before converting to MEFL units!\n');
-			assert(self.mefConverted, 'MEF conversion must be run before converting to MEFL units!\n');
+			assert(self.controlsAdded, 'Controls must be added before converting to MEFL units\n');
+			assert(self.mefConverted, 'MEF conversion must be run before converting to MEFL units\n');
 			
 			zCheckInputs_convertToMEFL();
 			
 			% Check if conversions already exist
 			beadDir = [self.controlFolder, 'Calibration', filesep];
 			if ~exist(beadDir, 'file')
-				error('Controls bead directory not found! It should be set up during MEF calibration')
+				error('Controls bead directory not found. It should be set up during MEF calibration')
 			end
 			colors_channels = reshape([self.colors; strrep(self.channels, '_', '-')], 1, []);
 			colorString = sprintf('_%s', colors_channels{:});
@@ -1091,24 +1093,28 @@ classdef FlowData < matlab.mixin.Copyable
 			end
 			
 			% Add converted data as 'mefl' data type
-			for chIdx = 1:numel(self.channels)
+			scalars = struct;
+			for ci = 1:numel(self.channels)
 				
-				chan = self.channels{chIdx};
-				color = self.colors{chIdx};
+				chan = self.channels{ci};
+				color = self.colors{ci};
 				
 				% Add MEFLs for controls
-				for i = 1:self.numControls
-					if isempty(self.controlData(i).(chan)), continue, end % Some tcData will be empty 
-					self.controlData(i).(chan).mefl = self.controlData(i).(chan).mef * meflFitsCalc.(color);
+				for si = 1:self.numControls
+					if isempty(self.controlData(si).(chan)), continue, end % Some tcData will be empty 
+					self.controlData(si).(chan).mefl = self.controlData(si).(chan).mef * meflFitsCalc.(color);
 				end
 				
 				% Add MEFLs for sample
-				for i = 1:self.numSamples
-					self.sampleData(i).(chan).mefl = self.sampleData(i).(chan).mef * meflFitsCalc.(color);
+				for si = 1:self.numSamples
+					self.sampleData(si).(chan).mefl = self.sampleData(si).(chan).mef * meflFitsCalc.(color);
 				end
+				
+				scalars.(chan) = meflFitsCalc.(color) * 10^self.mefFitsSamples.(chan)(2);
 			end
 			
 			self.meflFits = meflFitsCalc; 
+			self.meflScalars = scalars;
 			self.addDataTypes('mefl');
 			self.meflConverted = true;
 			fprintf(1, 'Finished converting to MEFL\n');
@@ -1177,7 +1183,7 @@ classdef FlowData < matlab.mixin.Copyable
 			compFname = [compDir, 'Comp-Fits_', dataType, colorString, '.mat'];
 			if (exist(compFname, 'file') && ~all(logical(options.recompute)))
 				% Load existing sample gates
-				fprintf(1, 'Loading pre-computed coefficients and autofluorescence!\n');
+				fprintf(1, 'Loading pre-computed coefficients and autofluorescence\n');
 				load(compFname, 'coeffs', 'ints');
 			else
 				% Compute slopes/intercepts for each pair of scData
