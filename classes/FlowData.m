@@ -315,7 +315,7 @@ classdef FlowData < matlab.mixin.Copyable
 		end
 		
 		
-		function self = gate(self, onlyP1)
+		function self = gate(self, options)
 			% Creates gates for the data using standard gating (see Gating.m)
 			%
 			%	self.gate(onlyP1)
@@ -329,10 +329,31 @@ classdef FlowData < matlab.mixin.Copyable
 			
 			assert(self.controlsAdded, 'Controls must be added before gating!\n');
 			
+			%
+			%		options		<char, cell> (optional) Logical flags:
+			%					'onlyP1': Only do P1 gating (FSC_A vs SSC_A)
+			%					'recompute': Force a remake of the gates
+						
 			% Determine gating options
-			onlyP1 = (exist('onlyP1', 'var') && all(logical(onlyP1)));
-			self.onlyP1 = onlyP1;
-			if strcmpi(self.cytometer, 'Koch-LSRII-HTS2'), swap = true; else, swap = false; end
+			onlyP1 = false;
+			if exist('options', 'var')
+				if islogical(options) % for reverse compatibility
+					if options, options = {'onlyP1'}; else, options = {}; end
+				elseif ischar(options)
+					options = {options}; % Force to be a cell array
+				end
+				if ismember('onlyP1', options), onlyP1 = true; end
+			else
+				options = {};
+			end
+			self.onlyP1 = onlyP1; %#ok<*PROPLC>
+			
+			% Swap X/Y for LSRII-HTS2 since that one is always weird
+			if strcmpi(self.cytometer, 'Koch-LSRII-HTS2')
+				swap = true; 
+			else
+				swap = false; 
+			end
 			
 			% Setup new directories for gates
 			gateDirControls = [self.controlFolder, 'Gating', filesep];
@@ -347,22 +368,22 @@ classdef FlowData < matlab.mixin.Copyable
 			% Check if gates have already been made for this data first, then
 			% process if necessary. 
 			gatesSaveName = [self.date, '_', self.name];
-			
-			gatesFnameControls = [gateDirControls, 'Gate-Polygons_Controls.mat'];
-			if exist(gatesFnameControls, 'file')
-				% Load existing control gates
-				load(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
-			else
-				% Do manual control gating
-				[gateP1c, gateP2c, gateP3c, gateFigs] = Gating.standardGating(self.controlDataScatter, onlyP1, swap);
-				save(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
-				for f = fieldnames(gateFigs)'
-					saveas(gateFigs.(f{:}), [gateDirControls, 'Gate-', f{:}, '_Controls']);
+			if (self.controlsAdded) 
+				gatesFnameControls = [gateDirControls, 'Gate-Polygons_Controls.mat'];
+				if (~ismember('recompute', options) && exist(gatesFnameControls, 'file'))
+					% Load existing control gates
+					load(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
+				else
+					% Do manual control gating
+					[gateP1c, gateP2c, gateP3c, gateFigs] = Gating.standardGating(self.controlDataScatter, onlyP1, swap);
+					save(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
+					for f = fieldnames(gateFigs)'
+						saveas(gateFigs.(f{:}), [gateDirControls, 'Gate-', f{:}, '_Controls']);
+					end
 				end
 			end
-			
 			gatesFnameSamples = [gateDirSamples, 'Gate-Polygons_', gatesSaveName '.mat'];
-			if exist(gatesFnameSamples, 'file')
+			if (~ismember('recompute', options) && exist(gatesFnameSamples, 'file'))
 				% Load existing sample gates
 				load(gatesFnameSamples, 'gateP1s', 'gateP2s', 'gateP3s');
 			else
