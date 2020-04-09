@@ -2693,6 +2693,11 @@ classdef Plotting < handle
 			%							'fig', <fig handle> enables setting the
 			%							  figure to plot onto
 			%								(defualt = new fig)
+			%							'categorical': <logical> A flag to plot
+			%							  the axes 'categorically', ie with no
+			%							  tick lines, 90deg rotated x-axis labels,
+			%							  and larger font size
+			%								(default = FALSE)
 			%
 			%	Outputs
 			%
@@ -2797,7 +2802,20 @@ classdef Plotting < handle
 						titleTxt = [titleTxt; {sprintf('%s = %s', labels{5}, center5)}]; %#ok<AGROW>
 					end
 					title(ax, titleTxt);
-					Plotting.setAxProps(ax, axProperties);
+					
+% 					% Standard axes properties
+% 					if options.categorical
+% 						set(ax, 'XTickLabelRotation', 90, ...	% Vertical X labels
+% 								'TickLength', [0, 0], ...		% No ticks	
+% 								'fontsize', 10, ...				% Readable font size
+% 								'XTick', 0.5:size(dataMatrix, 1), ... % Center the
+% 								'YTick', 0.5:size(dataMatrix, 2), ... % category labels
+% 								'XLim', [0, size(dataMatrix, 1)], ... % Sometimes it auto-adjusts wrong
+% 								'YLim', [0, size(dataMatrix, 2)]);
+% 					end
+% 					
+% 					% Settable properties
+% 					Plotting.setAxProps(ax, axProperties);
 				end
 			end
 			
@@ -2905,6 +2923,7 @@ classdef Plotting < handle
 				if isfield(options, 'fig')
 					figBinHmap = options.fig; 
 				else
+				if ~isfield(options, 'categorical'), options.categorical = false; end
 					figBinHmap = figure();
 				end
 				
