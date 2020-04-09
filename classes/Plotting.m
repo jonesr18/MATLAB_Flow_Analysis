@@ -2630,17 +2630,14 @@ classdef Plotting < handle
 			%	Inputs
 			%
 			%		data			<numeric> A 2-5 dimensional matrix containing
-			%						data to be plotted. Each element represents a
-			%						summary statistic from a single bin.
+			%						data to be plotted.
 			%
-			%		edges			<cell> A cell list of numeric arrays
-			%						containing the edge values for each bin.
+			%		edges			<cell> A cell list of numeric arrays containing
+			%						the edge values for each heatmap element.
 			%						Each element of the cell list corresponds
 			%						with one dimension. 
-			%						 - For dimensions 3+, edges can be given as
-			%						   bin center values, which is convenient if
-			%						   the dimension is defined by small molecule 
-			%						   inputs or other non-binning factors.
+			%						 - For dimensions 3+, tick values can be
+			%						   given instead of edges
 			%						 - Edges for dimensions 3+ can also be
 			%						   categorical, given as a cell list of
 			%						   strings with length equal to size(data, N)
@@ -2865,7 +2862,18 @@ classdef Plotting < handle
 				dataSize(1:numel(dataSizeTemp)) = dataSizeTemp;
 				
 				% Check edges
-				validateattributes(edges, {'cell'}, {}, mfilename, 'edges', 2);
+				if isempty(edges)
+					edges = cell(1, ndims(dataMatrix));
+					for di = 1:ndims(dataMatrix)
+						if di <= 2
+							edges{di} = 0:size(dataMatrix, di);
+						else
+							edges{di} = [];
+						end
+					end
+				else
+					validateattributes(edges, {'cell'}, {}, mfilename, 'edges', 2);
+				end
 				assert(numel(edges) == ndims(dataMatrix), ...
 						'Number of set of edges (%d) does not match dimensions of data! (%d)', ...
 						numel(edges), ndims(dataMatrix));
