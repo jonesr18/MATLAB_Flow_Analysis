@@ -2652,8 +2652,7 @@ classdef Plotting < handle
 			%
 			%		labels			<cell> A cell list of labels for each dimension.
 			%						NOTE: The last entry is the label for the
-			%						bin statistic being plotted! 
-			%						Thus, # labels = ndims(data) + 1
+			%						colorbar. Thus, # labels = ndims(data) + 1
 			%
 			%		cmap			<numeric, char, ColorMap> (Optional) 
 			%						The colormap to represent data values. 
@@ -2663,7 +2662,7 @@ classdef Plotting < handle
 			%						   ColorMap to initialize. 
 			%						 - ColorMap and char inputs will yield 100
 			%						   unique color values on the given scale
-			%						 - Defualt = parula(100);
+			%						 - Defualt = viridis(100);
 			%
 			%		axProperties	<struct> (Optional) Property-value pairs for
 			%						the axes properties for each axes object
@@ -2698,6 +2697,9 @@ classdef Plotting < handle
 			%							  tick lines, 90deg rotated x-axis labels,
 			%							  and larger font size
 			%								(default = FALSE)
+			%							'plotColorbar': <logical> A flag to plot
+			%							  the colorbar.
+			%								(default = TRUE)
 			%
 			%	Outputs
 			%
@@ -2819,19 +2821,26 @@ classdef Plotting < handle
 				end
 			end
 			
-			
-			if ismember('C', fieldnames(options.biexp))
-% 				cbar = Plotting.biexpColorbar(ax, options.doMEF, options.logicle);
-				cbar = Plotting.biexpColorbar2(ax, options.biexp.C, options.logicle);
-			else
-				cbar = colorbar(ax);
-% 				cbar.Limits = [min(dataMatrix(:)), max(dataMatrix(:))];
-			end
-			colormap(ax, cmap);
-			cbar.Limits = [options.min, options.max];
-			cbar.Label.String = labels{end};
-			if isfield(axProperties, 'FontSize')
-				cbar.Label.FontSize = axProperties.FontSize;
+			if options.plotColorbar
+				fO = fieldnames(options.biexp);
+				[~, idxO] = ismember({'c', 'C'}, fO);
+				if any(idxO)
+	% 				cbar = Plotting.biexpColorbar(ax, options.doMEF, options.params);
+					fC = fO{idxO(find(idxO > 0, 1))};
+					cbar = Plotting.biexpColorbar2(ax, options.biexp.(fC), options.params);
+				else
+					cbar = colorbar(ax);
+	% 				cbar.Limits = [min(dataMatrix(:)), max(dataMatrix(:))];
+				end
+				colormap(ax, cmap);
+				cbar.Limits = [options.min, options.max];
+				ax.CLim = cbar.Limits; % Need this or the color won't fill the entire bar
+				cbar.Label.String = labels{end};
+				if isfield(axProperties, 'FontSize')
+					cbar.Label.FontSize = axProperties.FontSize;
+				else
+					cbar.Label.FontSize = 10;
+				end
 			end
 			
 			
@@ -2896,7 +2905,7 @@ classdef Plotting < handle
 						cmap = cmap.getColorMap(100);
 					end
 				else
-					cmap = parula(100);
+					cmap = viridis(100);
 				end
 				
 				% Check axes properties
@@ -2924,6 +2933,7 @@ classdef Plotting < handle
 					figBinHmap = options.fig; 
 				else
 				if ~isfield(options, 'categorical'), options.categorical = false; end
+				if ~isfield(options, 'plotColorbar'), options.plotColorbar = true; end
 					figBinHmap = figure();
 				end
 				
