@@ -2683,10 +2683,11 @@ classdef Plotting < handle
 			%							'params': <params> enables setting the
 			%							  logicle function parameters
 			%							  (see Transforms.lin2logicle())
-			%							'min', <min val> enables setting the
+			%								(defaults to 'standard' values)
+			%							'min': <min val> enables setting the
 			%							  lower bound for color-data conversion
 			%								(default = 0)
-			%							'max', <max val> enables setting the
+			%							'max': <max val> enables setting the
 			%							  upper bound for color-data conversion
 			%								(default = 4.5)
 			%							'fig', <fig handle> enables setting the
@@ -2834,7 +2835,7 @@ classdef Plotting < handle
 				% Check edges
 				validateattributes(edges, {'cell'}, {}, mfilename, 'edges', 2);
 				assert(numel(edges) == ndims(dataMatrix), ...
-						'Number of edges (%d) does not match data dimensionality! (%d)', ...
+						'Number of set of edges (%d) does not match dimensions of data! (%d)', ...
 						numel(edges), ndims(dataMatrix));
 				doTitle = true(size(edges));
 				for ei = 1:numel(edges)
@@ -2881,7 +2882,7 @@ classdef Plotting < handle
 				end
 				
 				% Check axes properties
-				if exist('axProperties', 'var')
+				if (exist('axProperties', 'var') && ~isempty(axProperties))
 					validateattributes(axProperties, {'struct'}, {}, mfilename, 'axProperties', 5);
 				else
 					axProperties = struct();
@@ -2889,12 +2890,14 @@ classdef Plotting < handle
 				
 				% Check options
 				if exist('options', 'var')
-					validateattributes(options, {'struct'}, {}, mfilename, 'options', 6);
+					validateattributes(options, {'struct'}, {}, mfilename, 'options', 7);
 				else
 					options = struct();
 				end
+				if ~isfield(options, 'log'), options.log = {}; end
+				if ~isfield(options, 'logParams'), options.logParams = {}; end
 				if ~isfield(options, 'biexp'), options.biexp = {}; end
-				if ~isfield(options, 'logicle'), options.logicle = struct(); end
+				if ~isfield(options, 'params'), options.params = struct(); end
 				if ~isfield(options, 'doMEF'), options.doMEF = false; end
 				if options.doMEF, autoscale = 1e3; else, autoscale = 1; end
 				if ~isfield(options, 'min'), options.min = 0; end
@@ -2905,7 +2908,8 @@ classdef Plotting < handle
 					figBinHmap = figure();
 				end
 				
-				% Convert biexp options to struct if necessary
+				% Convert biexp/log options to struct if necessary
+				if ischar(options.biexp), options.biexp = {options.biexp}; end
 				if iscell(options.biexp)
 					biexp = struct();
 					for i = 1:numel(options.biexp)
@@ -2916,8 +2920,17 @@ classdef Plotting < handle
 					end
 					options.biexp = biexp;
 				end
+				if iscell(options.log)
+					logopt = struct();
+					for i = 2:numel(options.log)
+						try % Assume a cell list of axes-limits were passed
+							logopt.(options.log{i - 1}) = options.log{i};
+						catch % in case the fieldname is invalid or otherwise fails
+						end
+					end
+					options.log = logopt;
+				end
 			end
-			
 		end
 		
 		
