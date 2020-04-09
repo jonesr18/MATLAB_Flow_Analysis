@@ -423,7 +423,7 @@ classdef FlowData < matlab.mixin.Copyable
 		end
 		
 		
-		function self = customGate(self, gateName, sampleIDs, sliceParams, axScale)
+		function self = customGate(self, gateName, sampleIDs, sliceParams, axProperties, gatePolygon)
 			% Creates a custom gate using data from the given samples 
 			% and the given slice parameters.
 			%
@@ -432,12 +432,15 @@ classdef FlowData < matlab.mixin.Copyable
 			%	Inputs
 			%
 			%		gateName		<char> The name of the new gate
+			%							Avoid using 'x' as the first letter since
+			%							we use 'xABC' to denote the opposite of gate 
+			%							'ABC', though the code would still work. 
 			%
-			%		sampleIDs		<integer> The sample(s) to slice as given by
-			%						the numerical sample ID(s).
-			%							(Optional, defaults to all cells)
+			%		sampleIDs		<integer> (Optional) The sample(s) to slice as 
+			%							given by the numerical sample ID(s).
+			%								(Defaults to all cells)
 			%
-			%		sliceParams		<struct> Optional, struct with optional fields:
+			%		sliceParams		<struct> (Optional) Struct with optional fields:
 			%						'channels':  <cell, char>, defaults to self.channels
 			%									 (Only first 2 channels are used)
 			%						'dataType':  <char>, defaults to 'raw'
@@ -462,12 +465,12 @@ classdef FlowData < matlab.mixin.Copyable
 			%									 they are given or not
 			%									 <Can input 'all' to select all bins>
 			%
-			%		axScale			<char> Optional: The axis scaling to use:
-			%							'loglog', 'semilogy', 'semilogx',
-			%							'linear' (default)
+			%		axProperties	<struct> (Optional) Settable axes properties
+			%
+			%		gatePolygon		<numeric> (Optional) An array of gate polygon vertices 
 			
 			% Check inputs
-			zCheckInputs_customGate()
+			zCheckInputs_customGate(self)
 			
 			gateDirSamples = [self.folder, 'Gating', filesep];
 			if ~exist(gateDirSamples, 'file')
@@ -475,29 +478,35 @@ classdef FlowData < matlab.mixin.Copyable
 			end
 			
 			% Extract data and do gating
-			outData = self.slice(sampleIDs, sliceParams);
-			[~, gatePolygon, gateFig] = Gating.gatePolygon( ...
-					outData(:, 1), outData(:, 2), axScale);
+			if exist('gatePolygon', 'var')
+				gateFig = [];
+			else
+				outData = self.slice(sampleIDs, sliceParams);
+				[~, gatePolygon, gateFig] = Gating.gatePolygon( ...
+						outData(:, 1), outData(:, 2), axProperties);
+			end
 			
 			% Store gate info
 			if (isfield(sliceParams, 'controls') && sliceParams.controls)
-				for ci = 1:self.numControls
+				for ci = sampleIDs
 					if isempty(self.controlData(ci).(self.channels{1}))
 						continue % Handle empty tcData
 					end
 					% Extract sample data and gate
 					[outData, sliceGates] = self.slice(ci, sliceParams);
-					inGate = Gating.gatePolygon(outData(:, 1), outData(:, 2), axScale, gatePolygon);
+					inGate = Gating.gatePolygon(outData(:, 1), outData(:, 2), ...
+							axProperties, gatePolygon);
 					
 					% Adjust index based on input gate
 					inGateFixed = Gating.fixGateIdxs(sliceGates{1}, inGate);
 					self.controlData(ci).gates.(gateName) = inGateFixed;
 				end
 			else
-				for si = 1:numel(self.sampleData)
+				for si = sampleIDs
 					% Extract sample data and gate
 					[outData, sliceGates] = self.slice(si, sliceParams);
-					inGate = Gating.gatePolygon(outData(:, 1), outData(:, 2), axScale, gatePolygon);
+					inGate = Gating.gatePolygon(outData(:, 1), outData(:, 2), ...
+							axProperties, gatePolygon);
 					
 					% Adjust index based on input gate
 					inGateFixed = Gating.fixGateIdxs(sliceGates{1}, inGate);
@@ -521,16 +530,40 @@ classdef FlowData < matlab.mixin.Copyable
 			% --- Helper Functions --- % 
 			
 			
-			function zCheckInputs_customGate()
+			function zCheckInputs_customGate(self)
+				
+				assert(ischar(gateName), 'Gate name must be a character vector');
+				
+				if exist('sampleIDs', 'var')
+					validateattributes(sampleIDs, {'numeric'}, {'positive'}, mfilename, 'sampleIDs', 2);
+					sampleIDs = reshape(sampleIDs, 1, []); % For-loop optimized
+					if (isfield(sliceParams, 'controls') && sliceParams.controls)
+						assert(max(sampleIDs) <= self.numControls, ...
+								'Sample ID(s) are too large');
+					else
+						assert(max(sampleIDs) <= self.numSamples, ...
+								'Sample ID(s) are too large');
+					end
+				elseif (isfield(sliceParams, 'controls') && sliceParams.controls)
+					sampleIDs = 1:self.numControls;
+				else
+					sampleIDs = 1:self.numSamples;
+				end
 				
 				if exist('sliceParams', 'var')
-					validateattributes(sliceParams, {'struct'}, {}, mfilename, 'sliceParams', 2);
+					validateattributes(sliceParams, {'struct'}, {}, mfilename, 'sliceParams', 3);
 				else
 					sliceParams = struct();
 				end
 				
-				if ~exist('axScale', 'var')
-					axScale = 'linear';
+				if exist('axProperties', 'var')
+					validateattributes(axProperties, {'struct'}, {}, mfilename, 'axProperties', 4);
+				else
+					axProperties = struct();
+				end
+				
+				if exist('gatePolygon', 'var')
+					validateattributes(gatePolygon, {'numeric'}, {}, mfilename, 'gatePolygon', 5);
 				end
 			end
 		end
