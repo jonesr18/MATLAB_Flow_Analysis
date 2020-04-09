@@ -2293,6 +2293,324 @@ classdef Plotting < handle
 		end
 		
 		
+		function ax = heatmap(ax, dataMatrix, edges, labels, cmap, axProperties, options)
+			% Creates a heatmap representing the given data.
+			%
+			%	ax = heatmap(ax, dataMatrix, edges, labels, cmap, axProperties, options)
+			%
+			%	 - 2D data is plotted as a simple heatmap on a single axis
+			%	 - 3D data is plotted as a series of 2D heatmaps stacked in
+			%	   the 3rd dimension on a single axis
+			%
+			%	Inputs
+			%
+			%		ax				<Axes> Handle to the axes to plot onto
+			%
+			%		data			<numeric> A 2-3 dimensional matrix containing
+			%						data to be plotted.
+			%
+			%		edges			<cell> A cell list of numeric arrays containing 
+			%						the edge values for each heatmap element.
+			%						Each element of the cell list corresponds
+			%						with one dimension. 
+			%
+			%		labels			<cell> A cell list of labels for each dimension.
+			%						NOTE: The last entry is the label for the
+			%						colorbar. Thus, # labels = ndims(data) + 1
+			%
+			%		cmap			<numeric, char, ColorMap> (Optional) 
+			%						The colormap to represent data values. 
+			%						 - Can input an Nx3 matrix of RGB values, a
+			%						   ColorMap object pre-initialized with a
+			%						   color, or a string indicating which
+			%						   ColorMap to initialize. 
+			%						 - ColorMap and char inputs will yield 100
+			%						   unique color values on the given scale
+			%						 - Defualt = viridis(100);
+			%
+			%		axProperties	<struct> (Optional) Property-value pairs for
+			%						the axes properties
+			%
+			%		options			<struct> Optional property-value pairs:
+			%							'biexp', <dimensions> enables biexponential 
+			%							  axes in the given dimensions 
+			%								({'C', 'X', 'Y', 'Z'} accepted, where 
+			%								'C' corresponds w/ the colorbar)
+			%							  - Can also pass a struct with the
+			%								dimension names as fields to set the
+			%								MEF scaling factor for axes labels
+			%							'doMEF' If TRUE, does logicle conversion
+			%							  with MEF-unit scaling (1e3)
+			%								(default = FALSE)
+			%							'params': <params> enables setting the
+			%							  logicle function parameters
+			%							  (see Transforms.lin2logicle())
+			%								(defaults to 'standard' values
+			%							'min': <min val> enables setting the
+			%							  lower bound for color-data conversion
+			%								(default = 0)
+			%							'max': <max val> enables setting the
+			%							  upper bound for color-data conversion
+			%								(default = 4.5)
+			%							'fig': <fig handle> enables setting the
+			%							  figure to plot onto
+			%								(default = new fig)
+			%							'categorical': <logical> A flag to plot
+			%							  the axes 'categorically', ie with no
+			%							  tick lines, 90deg rotated x-axis labels,
+			%							  and larger font size
+			%								(default = FALSE)
+			%							'plotColorbar': <logical> A flag to plot
+			%							  the colorbar.
+			%								(default = TRUE)
+			%
+			%	Outputs
+			%
+			%		figBinHmap		<handle> A handle to the generated figure 
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%			
+			
+			xCheckInputs_heatmap();
+			
+			for d3 = 1:size(dataMatrix, 3)
+				
+				% Setup patch coordinates
+				patchesX = zeros(4, size(dataMatrix, 1) * size(dataMatrix, 2));
+				patchesY = zeros(size(patchesX));
+				patchesZ = ones(size(patchesX)) * (d3 - 1);
+				patIdx = 0;
+
+				% Adjust for differential edges in higher dims. Linear indexing
+				% ensures that this works no matter how the edges were formatted
+				if iscell(edges{2})
+					currSubsIdx = {d3, options.d4, options.d5};
+					currLinearIdx = sub2ind(options.dataSize(3:end), currSubsIdx{:});
+					e2 = edges{2}{currLinearIdx};
+				else
+					e2 = edges{2};
+				end
+
+				% Extract patch coordinates
+				for d2 = 1:size(dataMatrix, 2)
+
+					% Adjust first dimension for dims 2+
+					if iscell(edges{1})
+						currSubsIdx = {d2, d3, options.d4, options.d5};
+						currLinearIdx = sub2ind(options.dataSize(2:end), currSubsIdx{:});
+						e1 = edges{1}{currLinearIdx};
+					else
+						e1 = edges{1};
+					end
+
+					for d1 = 1:size(dataMatrix, 1)
+
+						patIdx = patIdx + 1;
+
+						patchesX(:, patIdx) = [
+							e1(d1); e1(d1 + 1); e1(d1 + 1); e1(d1)];
+
+						patchesY(:, patIdx) = [
+							e2(d2); e2(d2); e2(d2 + 1); e2(d2 + 1)];
+
+					end
+				end
+
+				% Get colors for each patch
+				colors = Plotting.getColors(dataMatrix(:, :, d3), cmap, options);
+
+				% Plot all patches
+				patch(ax, patchesX, patchesY, patchesZ, ...
+					reshape(colors, [size(patchesX, 2), 1, 3]), ...
+					'EdgeColor', 'none', 'FaceColor', 'flat');
+
+				% Set axes properties/labels
+				% - We do this before setting values on the Z-axis since
+				%	we want any 3rd dim bins to be evenly spaced
+% 						Plotting.biexpAxes(ax, ismember('X', options.biexp), ...
+% 							   ismember('Y', options.biexp), ...
+% 							   ismember('Z', options.biexp), ...
+% 							   options.doMEF, options.params);
+				Plotting.logAxes(ax, options.log, [], options.logParams);
+				Plotting.biexpAxes2(ax, options.biexp, [], options.params);
+				xlabel(ax, labels{1}, 'fontsize', 10);
+				ylabel(ax, labels{2}, 'fontsize', 10);
+			end
+			
+			% Standard axes properties
+			if options.categorical
+				set(ax, 'XTickLabelRotation', 90, ...	% Vertical X labels
+						'TickLength', [0, 0], ...		% No ticks
+						'fontsize', 10, ...				% Readable font size
+						'XTick', 0.5:size(dataMatrix, 1), ... % Center the
+						'YTick', 0.5:size(dataMatrix, 2), ... % category labels
+						'XLim', [0, size(dataMatrix, 1)], ... % Sometimes it auto-adjusts wrong
+						'YLim', [0, size(dataMatrix, 2)]);
+			end
+			
+			% Settable properties
+			Plotting.setAxProps(ax, axProperties);
+			
+			% Colormap
+			if options.plotColorbar
+				fO = fieldnames(options.biexp);
+				[~, idxO] = ismember({'c', 'C'}, fO);
+				if any(idxO)
+	% 				cbar = Plotting.biexpColorbar(ax, options.doMEF, options.params);
+					fC = fO{idxO(find(idxO > 0, 1))};
+					cbar = Plotting.biexpColorbar2(ax, options.biexp.(fC), options.params);
+				else
+					cbar = colorbar(ax);
+	% 				cbar.Limits = [min(dataMatrix(:)), max(dataMatrix(:))];
+				end
+				colormap(ax, cmap);
+				cbar.Limits = [options.min, options.max];
+				ax.CLim = cbar.Limits; % Need this or the color won't fill the entire bar
+				cbar.Label.String = labels{end};
+				if isfield(axProperties, 'FontSize')
+					cbar.Label.FontSize = axProperties.FontSize;
+				else
+					cbar.Label.FontSize = 10;
+				end
+			end
+			
+			% --- Helper Functions --- %
+			
+			
+			function dataSize = xCheckInputs_heatmap()
+				
+				% Check axes
+				validateattributes(ax, {'matlab.graphics.axis.Axes'}, {}, mfilename, 'ax', 1);
+				
+				% Check data + dimensions
+				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'data', 2);
+				assert(ndims(dataMatrix) > 1, 'Data must have at least two dimensions!')
+				assert(ndims(dataMatrix) < 4, 'Data must have no more than 3 dimensions!')
+				
+				% Determine size of data
+				dataSize = ones(1, 3); % 5 Max allowed number of dimensions
+				dataSizeTemp = size(dataMatrix);
+				dataSize(1:numel(dataSizeTemp)) = dataSizeTemp;
+				
+				% Check edges
+				if isempty(edges)
+					edges = cell(1, ndims(dataMatrix));
+					for di = 1:ndims(dataMatrix)
+						if di <= 2
+							edges{di} = 0:size(dataMatrix, di);
+						else
+							edges{di} = [];
+						end
+					end
+				else
+					validateattributes(edges, {'cell'}, {}, mfilename, 'edges', 3);
+				end
+				assert(numel(edges) == ndims(dataMatrix), ...
+						'Number of set of edges (%d) does not match dimensions of data! (%d)', ...
+						numel(edges), ndims(dataMatrix));
+				doTitle = true(size(edges));
+				for ei = 1:numel(edges)
+					if isempty(edges{ei})
+						doTitle(ei) = false;
+						continue
+					end
+					if ei <= 2
+						if iscell(edges{ei}) % Cell list of edges for each higher dim
+							assert(numel(edges{ei}) == prod(dataSize(ei + 1:end)), ...
+									'Number of dim %d edges variants does not match data', ei);
+							for dei = 1:numel(edges{ei})
+								assert(numel(edges{ei}{dei}) == (size(dataMatrix, ei) + 1), ...
+									'Number of edges supplied for dim %d is incorrect!', ei)
+							end
+						else
+							assert(numel(edges{ei}) == (size(dataMatrix, ei) + 1), ...
+								   'Number of edges supplied for dim %d is incorrect!', ei)
+						end
+					else % Allow specifying exact positions for dims 3+
+						assert(numel(edges{ei}) == size(dataMatrix, ei) || ...
+							   numel(edges{ei}) == (size(dataMatrix, ei) + 1), ...
+							   'Number of edges supplied for dim %d is incorrect!', ei)
+					end
+				end
+				
+				% Check labels
+				validateattributes(labels, {'cell'}, {}, mfilename, 'labels', 4);
+				assert(numel(labels) == (ndims(dataMatrix) + 1), ...
+					'Number of labels (%d) does not match data dimensionality + 1! (%d)', ...
+					numel(labels), ndims(dataMatrix));
+				
+				% Check colormap
+				if exist('cmap', 'var')
+					validateattributes(cmap, {'numeric', 'char', 'ColorMap'}, {}, mfilename, 'cmap', 5);
+					if ischar(cmap)
+						cmap = ColorMap(cmap).getColormap(100);
+					elseif isa(cmap, 'ColorMap')
+						cmap = cmap.getColorMap(100);
+					end
+				else
+					cmap = viridis(100);
+				end
+				
+				% Check axes properties
+				if (exist('axProperties', 'var') && ~isempty(axProperties))
+					validateattributes(axProperties, {'struct'}, {}, mfilename, 'axProperties', 6);
+				else
+					axProperties = struct();
+				end
+				
+				% Check options
+				if exist('options', 'var')
+					validateattributes(options, {'struct'}, {}, mfilename, 'options', 7);
+				else
+					options = struct();
+				end
+				if ~isfield(options, 'log'), options.log = {}; end
+				if ~isfield(options, 'logParams'), options.logParams = {}; end
+				if ~isfield(options, 'biexp'), options.biexp = {}; end
+				if ~isfield(options, 'params'), options.params = struct(); end
+				if ~isfield(options, 'doMEF'), options.doMEF = false; end
+				if options.doMEF, autoscale = 1e3; else, autoscale = 1; end
+				if ~isfield(options, 'min'), options.min = 0; end
+				if ~isfield(options, 'max'), options.max = 4.5; end
+				if ~isfield(options, 'categorical'), options.categorical = false; end
+				if ~isfield(options, 'plotColorbar'), options.plotColorbar = true; end
+				
+				% Options added by Plotting.binHeatmap()
+				if ~isfield(options, 'd4'), options.d4 = 1; end
+				if ~isfield(options, 'd5'), options.d5 = 1; end
+				if ~isfield(options, 'dataSize'), options.dataSize = dataSize; end
+				
+				% Convert biexp/log options to struct if necessary
+				if ischar(options.biexp), options.biexp = {options.biexp}; end
+				if iscell(options.biexp)
+					biexp = struct();
+					for i = 1:numel(options.biexp)
+						try
+							biexp.(options.biexp{i}) = autoscale;
+						catch % in case the fieldname is invalid
+						end
+					end
+					options.biexp = biexp;
+				end
+				if iscell(options.log)
+					logopt = struct();
+					for i = 2:numel(options.log)
+						try % Assume a cell list of axes-limits were passed
+							logopt.(options.log{i - 1}) = options.log{i};
+						catch % in case the fieldname is invalid or otherwise fails
+						end
+					end
+					options.log = logopt;
+				end
+			end
+		end
+		
+		
 		function figBinHmap = binHeatmap(dataMatrix, edges, labels, cmap, axProperties, options)
 			% Creates a heatmap representing the given bin data. The presentation 
 			% depends on the dimensionality of the data.
@@ -2397,68 +2715,18 @@ classdef Plotting < handle
 					spIdx = spIdx + 1;
 					ax = subplot(size(dataMatrix, 5), size(dataMatrix, 4), spIdx);
 					
-					for d3 = 1:size(dataMatrix, 3)
-						
-						% Setup patch coordinates
-						patchesX = zeros(4, size(dataMatrix, 1) * size(dataMatrix, 2));
-						patchesY = zeros(size(patchesX));
-						patchesZ = ones(size(patchesX)) * (d3 - 1);
-						patIdx = 0;
-						
-						% Adjust for differential edges in higher dims. Linear indexing
-						% ensures that this works no matter how the edges were formatted
-						currSubsIdx = {d3, d4, d5};
-						currLinearIdx = sub2ind(dataSize(3:end), currSubsIdx{:});
-						if iscell(edges{2})
-							e2 = edges{2}{currLinearIdx};
-						else
-							e2 = edges{2};
-						end
-						
-						% Extract patch coordinates
-						for d2 = 1:size(dataMatrix, 2)
-							
-							% Adjust first dimension for dims 2+
-							currSubsIdx = {d2, d3, d4, d5};
-							currLinearIdx = sub2ind(dataSize(2:end), currSubsIdx{:});
-							if iscell(edges{1})
-								e1 = edges{1}{currLinearIdx};
-							else
-								e1 = edges{1};
-							end
-							
-							for d1 = 1:size(dataMatrix, 1)
-								
-								patIdx = patIdx + 1;
-								
-								patchesX(:, patIdx) = [
-									e1(d1); e1(d1 + 1); e1(d1 + 1); e1(d1)];
-								
-								patchesY(:, patIdx) = [
-									e2(d2); e2(d2); e2(d2 + 1); e2(d2 + 1)];
-								
-							end
-						end
-						
-						% Get colors for each patch
-						colors = Plotting.getColors(dataMatrix(:, :, d3, d4, d5), cmap, options);
-						
-						% Plot all patches
-						patch(ax, patchesX, patchesY, patchesZ, ...
-							reshape(colors, [size(patchesX, 2), 1, 3]), ...
-							'EdgeColor', 'none', 'FaceColor', 'flat');
-						
-						% Set axes properties/labels
-						% - We do this before setting values on the Z-axis since
-						%	we want any 3rd dim bins to be evenly spaced
-% 						Plotting.biexpAxes(ax, ismember('X', options.biexp), ...
-% 							   ismember('Y', options.biexp), ...
-% 							   ismember('Z', options.biexp), ...
-% 							   options.doMEF, options.logicle);
-						Plotting.biexpAxes2(ax, options.biexp, options.logicle);
-						xlabel(ax, labels{1});
-						ylabel(ax, labels{2});
+					if (size(dataMatrix, 3) == 1)
+						elSubs = [1, 2];
+					else
+						elSubs = [1, 2, 3];
 					end
+					
+					optionsHM = options;
+					optionsHM.d4 = d4; optionsHM.d5 = d5;
+					optionsHM.plotColorbar = false;
+					ax = Plotting.heatmap(ax, dataMatrix(:, :, :, d4, d5), ...
+							edges(elSubs), labels([elSubs, numel(labels)]), ...
+							cmap, axProperties, optionsHM);
 					
 					% Plot Z (3D) labels if applicable
 					if (size(dataMatrix, 3) > 1 && doTitle(3))
