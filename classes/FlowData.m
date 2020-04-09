@@ -290,20 +290,26 @@ classdef FlowData < matlab.mixin.Copyable
 					sampleMapFname = [];
 				end
 				
-				% Get data filenames
+				% Get data filenames and import Sample 1
 				dataFnames = self.convertToFullFile(dataFnames, expDetails.folder);
-				ds = FlowAnalysis.openFiles(dataFnames{1});
+				ds1 = FlowAnalysis.openFiles(dataFnames{1});
 				
 				% Check channels are present in dataStruct
-				badChannels = setdiff(expDetails.channels, fieldnames(ds));
+				badChannels = setdiff(expDetails.channels, fieldnames(ds1));
 				assert(isempty(badChannels), ...
 					'Channel not in dataStruct: %s\n', badChannels{:});
 				
+				% Remove unwanted fields from structure
+				goodFields = [expDetails.channels, Gating.SCATTER_CHANNELS, {'Time'}, {'nObs'}];
+				ds1 = rmfield(ds1, setdiff(fieldnames(ds1), goodFields));
+				
 				% Import all data
 				if (numel(dataFnames) > 1)
-					dataStruct = [ds, FlowAnalysis.openFiles(dataFnames{2:end})];
+					ds = FlowAnalysis.openFiles(dataFnames{2:end});
+					ds = rmfield(ds, setdiff(fieldnames(ds), goodFields));
+					dataStruct = [ds1, ds];
 				else
-					dataStruct = ds;
+					dataStruct = ds1;
 				end
 			end
 		end
