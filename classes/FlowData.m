@@ -326,9 +326,6 @@ classdef FlowData < matlab.mixin.Copyable
 			%	Inputs
 			%		onlyP1		<logical> Logical flag to only do P1 gating
 			%						(FSC_A vs SSC_A)
-			
-			assert(self.controlsAdded, 'Controls must be added before gating!\n');
-			
 			%
 			%		options		<char, cell> (optional) Logical flags:
 			%					'onlyP1': Only do P1 gating (FSC_A vs SSC_A)
@@ -356,9 +353,11 @@ classdef FlowData < matlab.mixin.Copyable
 			end
 			
 			% Setup new directories for gates
-			gateDirControls = [self.controlFolder, 'Gating', filesep];
-			if ~exist(gateDirControls, 'file')
-				mkdir(gateDirControls)
+			if (self.controlsAdded)
+				gateDirControls = [self.controlFolder, 'Gating', filesep];
+				if ~exist(gateDirControls, 'file')
+					mkdir(gateDirControls)
+				end
 			end
 			gateDirSamples = [self.folder, 'Gating', filesep];
 			if ~exist(gateDirSamples, 'file')
@@ -405,12 +404,16 @@ classdef FlowData < matlab.mixin.Copyable
 			end
 			
 			% Apply gate polygons to scatter data 
-			self.controlDataScatter = Gating.applyStandardGates(self.controlDataScatter, gateP1c, gateP2c, gateP3c, swap);
+			if (self.controlsAdded)
+				self.controlDataScatter = Gating.applyStandardGates(self.controlDataScatter, gateP1c, gateP2c, gateP3c, swap);
+			end
 			self.sampleDataScatter	= Gating.applyStandardGates(self.sampleDataScatter,  gateP1s, gateP2s, gateP3s, swap);
 			
 			% Transfer gate logicals to externally accesible data
-			for cd = 1:self.numControls
-				self.controlData(cd).gates = self.controlDataScatter(cd).gates;
+			if (self.controlsAdded)
+				for cd = 1:self.numControls
+					self.controlData(cd).gates = self.controlDataScatter(cd).gates;
+				end
 			end
 			for sd = 1:self.numSamples
 				self.sampleData(sd).gates = self.sampleDataScatter(sd).gates;
