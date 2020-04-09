@@ -2671,7 +2671,7 @@ classdef FlowData < matlab.mixin.Copyable
 				if ~contains(newSampleMap, filesep)
 					newSampleMap = [self.folder, newSampleMap];
 				end
-				assert(logical(exist(newSampleMap, 'file')), 'New Sample Map file not found!');
+				assert(logical(exist(newSampleMap, 'file')), 'New Sample Map file not found');
 				newSampleMap = readtable(newSampleMap, 'delimiter', '\t');
 			elseif iscell(newSampleMap)
 				assert(self.sampleMap.width == size(newSampleMap, 2), ...
@@ -2712,13 +2712,11 @@ classdef FlowData < matlab.mixin.Copyable
 			if ~isfield(newParams, 'T'), newParams.T = self.logicleParams.T; end
 			if ~isfield(newParams, 'M'), newParams.M = self.logicleParams.M; end
 			if ~isfield(newParams, 'r'), newParams.r = self.logicleParams.r; end
-			if ~isfield(newParams, 'MEF'), newParams.MEF = self.logicleParams.MEF; end
 			
 			% Check the values are valid
 			validateattributes(newParams.T, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.T');
 			validateattributes(newParams.M, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.M');
 			validateattributes(newParams.r, {'numeric'}, {'scalar', 'negative'}, mfilename, 'newParams.r');
-			validateattributes(newParams.MEF, {'numeric'}, {'scalar', 'positive'}, mfilename, 'newParams.MEF');
 			
 			self.logicleParams = newParams;
 		end
@@ -2859,10 +2857,10 @@ classdef FlowData < matlab.mixin.Copyable
 			
 			% Add dataTypes
 			added = {};
-			for g = 1:numel(gates)
-				if ~any(strcmp(gates{g}, self.gateNames))
-					self.gateNames = [self.gateNames, gates(g)];
-					added = [added, gates(g)];
+			for gi = 1:numel(gates)
+				if ~any(strcmp(gates{gi}, self.gateNames))
+					self.gateNames = [self.gateNames, gates(gi)];
+					added = [added, gates(gi)];
 				end
 			end
 			
