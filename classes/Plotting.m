@@ -1027,7 +1027,7 @@ classdef Plotting < handle
 		end
 		
 		
-		function ax = biexpAxes2(ax, scales, params)
+		function ax = biexpAxes2(ax, scales, axProperties, params)
             % Tranforms the given axes to a scale used for biexponential views.
             %   
 			%	ax = biexpAxes(ax, scales, params);
@@ -1042,6 +1042,9 @@ classdef Plotting < handle
 			%					 - The values here are used as the MEF value for
 			%					   logicle conversions and are used as references 
 			%					   for determining axes labels
+			%
+			%		axProperties	<struct> (optional) A struct of axes properties
+			%						that can be given to overwrite default options
 			%
 			%		params		<struct> (Optional) Biexp transform parameters
 			%					 - Note that the MEF parameter is overwritten
@@ -1107,6 +1110,10 @@ classdef Plotting < handle
 					'LineWidth', 1, ...
 					'box', 'off')
 			
+			Plotting.setAxProps(ax, axProperties);
+			
+			
+				
 			
 			% --- Helper Functions --- %
 			
@@ -1120,9 +1127,13 @@ classdef Plotting < handle
 					scales = struct('x', 1, 'y', 1);
 				end
 				
+				if ~exist('axProperties', 'var') || ~isstruct(axProperties)
+					axProperties = struct();
+				end
+				
 				% Check params input
 				if exist('params', 'var')
-					validateattributes(params, {'struct'}, {}, mfilename, 'params', 2);
+					validateattributes(params, {'struct'}, {}, mfilename, 'params', 3);
 				else
 					params = struct();
 				end
