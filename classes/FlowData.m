@@ -1643,6 +1643,7 @@ classdef FlowData < matlab.mixin.Copyable
 			%									reshaped to match the bin sizes.  
 			%
 			%		metrics			<char, cell> (Optional) A list of metrics to compute
+			%							'numcells', 'pctpos', %iles: 'pX.Y' --> X.Y%, 
 			%							'median', 'mean', 'geomean', 'stdev', 
 			%							'geostdev', 'cv', 'sem', 'semb'*
 			%							 * semb = bootstrapped SEM - slow!
@@ -1718,24 +1719,32 @@ classdef FlowData < matlab.mixin.Copyable
 					dataOut = slicedData(:, ch);
 					dataOut = dataOut(~isnan(dataOut));
 					posData = dataOut(dataOut > 0);
+					if ismember('pctpos', metrics)
+						chi = strcmpi(self.channels, sliceParams.channels{ch});
+						thresh = self.threshGateVals(chi);
+						stats.pctpos(statIdx) = 100 * sum(dataOut > thresh) ./ numel(dataOut);
+					end
 					if ismember('pos', options), dataOut = posData;	end
+					if (numel(dataOut) < minCells), continue; end
 					
 					% Calculate percentiles
-					pcts = metrics(contains(metrics, 'p'));
-					pctsNum = cellfun(@(x) str2double(x(2:end)), pcts);
-					prctiles = prctile(dataOut, pctsNum);
-					for pi = 1:numel(pcts)
-						stats.(strrep(pcts{pi}, '.', '_'))(statIdx) = prctiles(pi);
+					pcts = setdiff(metrics(contains(metrics, 'p')), 'pctpos');
+					if ~isempty(pcts)
+						pctsNum = cellfun(@(x) str2double(x(2:end)), pcts);
+						prctiles = prctile(dataOut, pctsNum);
+						for pi = 1:numel(pcts)
+							stats.(strrep(pcts{pi}, '.', '_'))(statIdx) = prctiles(pi);
+						end
 					end
 					
 					% Calculate other metrics
 					if ismember('median', metrics), stats.median(statIdx) = median(dataOut); end % Same as p50, but preserving input name
 					if ismember('mean', metrics), stats.mean(statIdx) = mean(dataOut); end
 					if ismember('geomean', metrics), stats.geomean(statIdx) = geomean(posData); end
-					if ismember('stdev', metrics), stats.stdev(statIdx) = std(dataOut); end
-					if ismember('geostdev', metrics), stats.geostdev(statIdx) = geostd(posData); end
-					if ismember('cv', metrics), stats.cv(statIdx) = mean(dataOut) / std(dataOut); end
-					if ismember('sem', metrics), stats.sem(statIdx) = std(dataOut) / sqrt(numel(dataOut)); end
+					if ismember('stdev', metrics), stats.stdev(statIdx) = std(dataOut, 0); end
+					if ismember('geostdev', metrics), stats.geostdev(statIdx) = geostd(posData, 0); end
+					if ismember('cv', metrics), stats.cv(statIdx) = mean(dataOut) / std(dataOut, 0); end
+					if ismember('sem', metrics), stats.sem(statIdx) = std(dataOut, 0) / sqrt(numel(dataOut)); end
 					if ismember('semb', metrics), stats.semb(statIdx) = semBootstrap(dataOut); end % NOTE: SUPER SLOW
 % 					if ismember('ci95', metrics), binStats.CI95(binStatIdx) = ci95(dataOut); end
 				end
