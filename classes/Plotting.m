@@ -2115,7 +2115,7 @@ classdef Plotting < handle
 			%       yvals			<numeric> A matrix of values for each point
 			%							Note: mean and standard deviation are
 			%							automatically computed to plot the bar and
-			%							errorbars. To change to geomean or geostd,
+			%							errorbars. To change the calculations,
 			%							use the 'options' input. 
             %
  			%		options			<cell, char> (Optional) A cell array of strings (or 
@@ -2124,6 +2124,8 @@ classdef Plotting < handle
 			%										rather than mean.
 			%							'geostd'	Compute errorbar height w/
 			%										geostd rather than std.
+			%							'relerr'	Compute errorbars using
+			%										relative error (for log plots)
 			%							'points'	Show individual points
 			%							'unierr'	Plot errorbars only on the
 			%										side of the bar facing away
@@ -2157,7 +2159,11 @@ classdef Plotting < handle
 				% --> Mode of sorted xpos to handle cases where xpos is not for
 				%	  all samples that will eventually be plotted and where the
 				%	  xpos are out of order
-				dx = mode(diff(sort(xpos))); 
+				if (numel(xpos) > 1)
+					dx = mode(diff(sort(xpos))); 
+				else
+					dx = 1;
+				end
 				
 				xvals = linspace(0.7, 1.3, size(yvals, 1))';
 				rxi = zeros(size(yvals));
@@ -2200,23 +2206,26 @@ classdef Plotting < handle
 				else
 					ymeans = mean(yvals, 1, 'omitnan');
 				end
-
+				
 				if ismember('geostd', options)
 					ystds = geostd(yvals, 0, 1, 'omitnan');
 				else
 					ystds = std(yvals, 0, 1, 'omitnan');
 				end
 				
-				if ismember ('unierr', options)
-					% Make errors only show up on the appropriate 'side' of the bar
-					ystdsNeg = ystds .* (ymeans < 0);
-					ystdsPos = ystds .* (ymeans > 0);
+				if ismember('relerr', options)
+					[ystdsNeg, ystdsPos] = relError(ymeans, ystds);
 				else
 					ystdsNeg = ystds;
 					ystdsPos = ystds;
 				end
-
-
+				
+				if ismember ('unierr', options)
+					% Make errors only show up on the appropriate 'side' of the bar
+					ystdsNeg = ystdsNeg .* (ymeans < 0);
+					ystdsPos = ystdsPos .* (ymeans > 0);
+				end
+				
 				eci = find(strcmpi('edgecolor', barProperties));
 				if ~isempty(eci)
 					errProperties = {'color', barProperties{eci + 1}};
