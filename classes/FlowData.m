@@ -757,20 +757,20 @@ classdef FlowData < matlab.mixin.Copyable
 			self.controlFolder = controlFolder;
 			
 			% Extract data
-			self.controlData = extractData([self.channels, {'nObs'}], ...
+			self.controlData = extractData([self.channels, {'Time'}], ...
 						wildTypeData, singleColorData, twoColorData, FITC_IDX);
 			
 			% Extract scatter data
-			self.controlDataScatter = extractData([Gating.SCATTER_CHANNELS, {'nObs'}], ...
+			self.controlDataScatter = extractData(Gating.SCATTER_CHANNELS, ...
 						wildTypeData, singleColorData, twoColorData, FITC_IDX);
 			
 			% Find number of cells per control
 			self.numControls = numel(self.controlData);
 			self.numCellsControls = zeros(self.numControls, 1);
 			for ci = 1:self.numControls
-				nc = self.controlData.nObs;
+				nc = self.controlData(ci).nObs;
 				if isempty(nc), nc = 0; end
-				self.numCellsControls = nc;
+				self.numCellsControls(ci) = nc;
 			end
 			
 			self.controlsAdded = true;
@@ -841,13 +841,16 @@ classdef FlowData < matlab.mixin.Copyable
 								% No two color controls for FITC channel, since it
 								% is the reference color for MEFL conversion
 								outData(sc + tc).(ch{:}) = [];
+								outData(sc + tc).nObs = [];
 							else
 								tcIdx = tcIdx + 1; % For indexing tcData separate of tc iterator
-								outData(sc + tc).(ch{:}) = tcData(tcIdx).(ch{:});
+								outData(sc + tc).(ch{:}).raw = tcData(tcIdx).(ch{:}).raw;
+								outData(sc + tc).nObs = tcData(tcIdx).nObs;
 							end
 						end
 					end
-					outData(sc + tc + 1).(ch{:}) = wtData.(ch{:});
+					outData(sc + tc + 1).(ch{:}).raw = wtData.(ch{:}).raw;
+					outData(sc + tc + 1).nObs = wtData.nObs;
 				end
 			end
 		end
