@@ -1947,10 +1947,10 @@ classdef FlowData < matlab.mixin.Copyable
 			[linearSampleIDs, ~] = find(IDs);
 % 			numel(linearSampleIDs)
 % 			max(linearSampleIDs)
-			if (numel(numParams) > 1) && false
+			if (numel(numParams) > 1) && false % Currently not done
 				sampleIDs = reshape(linearSampleIDs, numParams);
 			else
-				sampleIDs = linearSampleIDs;
+				sampleIDs = reshape(linearSampleIDs, 1, []); % Force row vector for easier for-loop access
 			end
 		end
 		
@@ -1993,9 +1993,9 @@ classdef FlowData < matlab.mixin.Copyable
 			%						returned data and M is the number of
 			%						channels requested. 
 			%
-			%		gateLogicals	<cell> S x 1 cell array of N x 1 logical vector 
+			%		gateLogicals	<cell> S x G cell array of N x 1 logical vector 
 			%						indicating which points of sample ID S are in the 
-			%						given gates/bins. 
+			%						given gates (G) and/or bins. 
 			
 			% Check and extract inputs
 			[sliceData, sliceChannels, sliceDataType, sliceGates] = zCheckInputs_slice(self);
@@ -2005,21 +2005,25 @@ classdef FlowData < matlab.mixin.Copyable
 			gateLogicals = cell(size(sliceGates));
 			for s = 1:numel(sampleIDs)
 				
+				if isempty(sliceGates{s, 1}) % Some tcData will be empty 
+					continue
+				end
+				
 				% Extract data
 				sID = sampleIDs(s);
-				dataS = zeros(numel(sliceGates{s}), numel(sliceChannels));
+				dataS = zeros(numel(sliceGates{s, 1}), numel(sliceChannels));
 				for ch = 1:numel(sliceChannels)
 					if ismember(sliceChannels, Gating.SCATTER_CHANNELS)
 						sdt = 'raw';
 					else
 						sdt = sliceDataType;
 					end
-					dataS(:, ch) = sliceData(sID).(sliceChannels{ch}).(sdt)(sliceGates{s});
+					dataS(:, ch) = sliceData(sID).(sliceChannels{ch}).(sdt)(sliceGates{s, ch});
+					
+					gateLogicals{s, ch} = false(sliceData(sID).nObs, 1);
+					gateLogicals{s, ch}(sliceGates{s, ch}) = true;
 				end
 				dataMatrix = [dataMatrix; dataS];
-				
-				gateLogicals{s} = false(sliceData(sID).nObs, 1);
-				gateLogicals{s}(sliceGates{s}) = true;
 			end
 			
 			
@@ -2063,7 +2067,7 @@ classdef FlowData < matlab.mixin.Copyable
 					mfilename, 'sampleIDs', 1);
 				sampleIDs = reshape(unique(round(sampleIDs)), 1, []); 
 				assert(all(sampleIDs <= numel(sliceData)), ...
-					'At least one sampleID is too large!')
+					'At least one sampleID is too large')
 				
 				% Slices data of the given dataType
 				if isfield(sliceParams, 'dataType')
@@ -2074,21 +2078,55 @@ classdef FlowData < matlab.mixin.Copyable
 				end
 				
 				% Applies the given gate to the sliced data
-				if isfield(sliceParams, 'gate')
-					validatestring(sliceParams.gate, self.gateNames, mfilename, 'sliceParams.gate');
-					sliceGates = cell(size(sampleIDs));
-					for si = 1:numel(sampleIDs)
-						sampleID = sampleIDs(si);
-% 						sliceGates{si} = sliceData(sampleID).gates.(sliceParams.gate);
-						sliceGates{si} = find(sliceData(sampleID).gates.(sliceParams.gate));
+				gateFieldnames = {'gate', 'Gate', 'gates', 'Gates'};
+				doGate = isfield(sliceParams, gateFieldnames);
+				if any(doGate)
+					gateF = gateFieldnames{doGate};
+					gates = sliceParams.(gateF);
+					
+					validateattributes(gates, {'char', 'cell'}, {}, mfilename, ['sliceParams.', gateF]);
+					if ischar(gates), gates = {gates}; end
+					assert(numel(gates) == 1 | numel(gates) == numel(sliceChannels), ...
+							'Number of gates must be 1 or match number of channels');
+					sliceGates = cell(numel(sampleIDs), numel(gates));
+					
+					for gi = 1:numel(gates)
+						currGate = gates{gi};
+						
+						% Flip gates with 'x' in front that don't already exist as 'xABC' gates
+						if strcmp(currGate(1), 'x') && ~ismember(currGate, self.gateNames)
+							currGate = currGate(2:end);
+							flipGate = true;
+						else
+							flipGate = false;
+						end
+						
+						validatestring(currGate, self.gateNames, mfilename, ['sliceParams.' gateF, '{', num2str(gi), '}']);
+						
+						for si = 1:numel(sampleIDs)
+							sampleID = sampleIDs(si);
+							if ~isempty(sliceData(sampleID).(sliceChannels{1})) % Some tcData will be empty 
+								sliceGate = sliceData(sampleID).gates.(currGate);
+								if flipGate, sliceGate = ~sliceGate; end
+		% 						sliceGates{si} = sliceGate; % old code for logical indexing
+								sliceGates{si, gi} = find(sliceGate);
+							end
+						end
 					end
 				else
+					sliceGates = cell(numel(sampleIDs), 1);
 					for si = 1:numel(sampleIDs)
 						sampleID = sampleIDs(si);
-						numSliceCells = numel(sliceData(sampleID).(sliceChannels{1}).raw);
-% 						sliceGates{si} = true(numSliceCells, 1);
-						sliceGates{si} = (1:numSliceCells)'; % Default is all cells
+						if ~isempty(sliceData(sampleID).(sliceChannels{1})) % Some tcData will be empty 
+							numSliceCells = numel(sliceData(sampleID).(sliceChannels{1}).raw);
+	% 						sliceGates{si} = true(numSliceCells, 1); % old code for logical indexing
+							sliceGates{si} = (1:numSliceCells)'; % Default is all cells
+						end
 					end
+				end
+				% If just one gate given, expand to cover all channels 
+				if ((size(sliceGates, 2) == 1) && (numel(sliceChannels) > 1))
+					sliceGates = repmat(sliceGates, 1, numel(sliceChannels));
 				end
 				
 				% Slice the same number of points from each sample
@@ -2158,7 +2196,11 @@ classdef FlowData < matlab.mixin.Copyable
 						for b = binIdxs % Sequentially looks at each bin ID
 							cellsInBins = [cellsInBins, self.bins{sampleID}{b}];
 						end
-						sliceGates{si} = intersect(sliceGates{si}, cellsInBins);
+						for gi = 1:size(sliceGates, 2) % Handles gates for each channel
+							if ~isempty(sliceGates{si, gi}) % Some tcData will be empty 
+								sliceGates{si, gi} = intersect(sliceGates{si, gi}, cellsInBins);
+							end
+						end
 					end
 				end
 			end
