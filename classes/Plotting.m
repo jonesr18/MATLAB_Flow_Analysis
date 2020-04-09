@@ -95,7 +95,7 @@ classdef Plotting < handle
 			%		density			An Nx1 vector of density values for each
 			%						element in dataMatrix.
 			%
-			%		binCenters		If computing with 'hist' mode, then the bin edges 
+			%		binCenters		If computing with 'hist' mode, then the bin centers 
 			%						used in the calculation can be requested. 
 			%
 			%		binCounts		As with above, the binCounts can also be requested
@@ -401,22 +401,18 @@ classdef Plotting < handle
 				else
 					cmap = parula(100);
 				end
-				
-				% Fix for inf values
-				inputData(inputData == inf) = max(inputData(~isinf(inputData)));
-				inputData(inputData == -inf) = min(inputData(~isinf(inputData)));
-				
+								
 				% Treat NaNs (no data) and complex (log(neg values)) as min 
 				% values, then later overwrite them with white so they don't 
 				% show up on normal plots
 				nanIdxs = isnan(inputData);
-				inputData(nanIdxs) = min(inputData);
+				inputData(nanIdxs) = min(inputData(~isinf(inputData)));
 				imagIdxs = (imag(inputData) ~= 0);
-				inputData(imagIdxs) = min(inputData(~imagIdxs));
+				inputData(imagIdxs) = min(inputData(~imagIdxs & ~isinf(inputData)));
 				
 				% Default options
-				MIN = min(inputData);
-				MAX = max(inputData);
+				MIN = min(inputData(~isinf(inputData)));
+				MAX = max(inputData(~isinf(inputData)));
 				nanColor = [1, 1, 1];	
 				imagColor = [0.5, 0.5, 0.5];
 				
@@ -473,6 +469,10 @@ classdef Plotting < handle
 						end
 					end
 				end
+				
+				% Fix for inf values
+				inputData(inputData == inf) = MAX;
+				inputData(inputData == -inf) = MIN;
 				
 				nanInfo = struct('idxs', nanIdxs, 'color', nanColor);
 				imagInfo = struct('idxs', imagIdxs, 'color', imagColor);
