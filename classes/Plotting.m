@@ -592,14 +592,14 @@ classdef Plotting < handle
 		end
         
         
-		function violinplot(ax, ydata, xcenter, binEdges, faceColor)
+		function h = violinplot(ax, ydata, xpos, binEdges, faceColor)
 			% Plots the data as a violin plot, which represents density as a vertical,
 			% horizontally symmetric histogram. The histograms are overlaid with
 			% a black box-and-whisker plot with the box representing the 25th - 75th
 			% percentiles, the whiskers showing the 95th - 5th percentiles, and the
 			% white dot in the middle showing the median.
 			%   
-			%	violinplot(ax, ydata, xcenter, binEdges, faceColor)
+			%	violinplot(ax, ydata, xpos, binEdges, faceColor)
 			%
 			%   Inputs
 			%   
@@ -607,7 +607,7 @@ classdef Plotting < handle
 			%
 			%       ydata (vector)      Values of data to plot
 			%
-			%       xcenter (integer)   The value to center the x-values on
+			%       xpos (integer)		The x-position of the violin
 			%
 			%		binEdges (vector)	Bin edges for histogram computation
 			%							 - Should be equal for all violins for
@@ -629,38 +629,30 @@ classdef Plotting < handle
 
 			% Check inputs
 			zCheckInputs_violinplot(); 
-			xcenter = round(xcenter(1)); % Ensure integer and only one point
-			
-			% Fix negative infinite values by setting the resulting values to the 
-			% otherwise minimum value.
-			if any(ydata == -inf)
-				warning('Negative values detected - setting to min value')
-				ydata(ydata == -inf) = min(ydata(ydata ~= -inf));
-			end
 			
 			% Compute density
 			binCounts = histcounts(ydata, binEdges, 'Normalization', 'count');
 			binCenters = reshape(binEdges(2:end) - diff(binEdges) / 2, [], 1);
 			
-			% Put density on log scale for better visualization
-			% - Divide by 2 to accurately portray area
-			% - Multiply by 0.4 so that violins don't overlap
-			binCounts = reshape(log10(binCounts), [], 1) * 0.4 / max(log10(binCounts(:)));
+			% Normalize to max value, then multiply by 0.4 so that 
+			%	violins don't overlap
+% 			binCounts = reshape(log10(binCounts), [], 1) * 0.4 / max(log10(binCounts(:)));
+			binCounts = reshape((binCounts), [], 1) * 0.4 / max((binCounts(:)));
 			valid = ~isinf(binCounts) & ~isnan(binCounts);
 			
 			% Plot violins
-			fill(ax, [xcenter + binCounts(valid); xcenter - flipud(binCounts(valid))], ...
+			h = fill(ax, [xpos + binCounts(valid); xpos - flipud(binCounts(valid))], ...
 					[binCenters(valid); flipud(binCenters(valid))], ...
-					faceColor, 'EdgeColor', 'k', 'LineWidth', 1);
+					faceColor, 'EdgeColor', 'none', 'LineWidth', 1);
 			
 			% Plot pseudo boxplot
 			prctiles = prctile(ydata, [95, 75, 50, 25, 5]);
-			errorbar(ax, xcenter, prctiles(3), prctiles(3) - prctiles(5), ...
+			errorbar(ax, xpos, prctiles(3), prctiles(3) - prctiles(5), ...
 					prctiles(1) - prctiles(3), 'k', 'linewidth', 0.5)
-			fill(ax, [xcenter + 0.07 * ones(2, 1); xcenter - 0.07 * ones(2, 1)], ...
+			fill(ax, [xpos + 0.07 * ones(2, 1); xpos - 0.07 * ones(2, 1)], ...
 					[prctiles([2, 4])'; prctiles([4, 2])'], ...
 					'k', 'EdgeColor', 'none');
-			plot(ax, xcenter, prctiles(3), '.w', 'markersize', 16);
+			plot(ax, xpos, prctiles(3), '.w', 'markersize', 16);
 			
 			% TODO Get this to work someday - technically better than the hacked
 			% version above since the whiskers should be calculated by an algorithm
@@ -671,13 +663,26 @@ classdef Plotting < handle
 
 
 			function zCheckInputs_violinplot()
-
-				validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'data', 2);
+				
+				validateattributes(ax, {'matlab.graphics.axis.Axes'}, {}, mfilename, 'ax', 1);
+				
+				validateattributes(ydata, {'numeric'}, {'vector'}, mfilename, 'ydata', 2);
 				ydata = reshape(ydata, [], 1); % Force column vector
-				validateattributes(xcenter, {'numeric'}, {}, mfilename, 'xcenter', 3);
+				
+				% Fix negative infinite values by setting the resulting values to the 
+				% otherwise minimum value.
+				if any(ydata == -inf)
+					warning('Negative values detected - setting to min value')
+					ydata(ydata == -inf) = min(ydata(ydata ~= -inf));
+				end
+				
+				validateattributes(xpos, {'numeric'}, {}, mfilename, 'xpos', 3);
+				xpos = round(xpos(1)); % Ensure integer and only one point
+				
 				validateattributes(binEdges, {'numeric'}, {'vector'}, mfilename, 'binEdges', 4);
 				validateattributes(faceColor, {'numeric'}, {'vector'}, mfilename, 'faceColor', 5);
 				assert(length(faceColor) == 3);
+				
 			end
 		end
         
