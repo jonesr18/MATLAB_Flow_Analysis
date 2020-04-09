@@ -26,6 +26,7 @@ classdef FlowData < matlab.mixin.Copyable
 	%									('raw', 'comp', 'mefl', etc)
 	%		gateNames		 <cell>		Cell array of gate names (strings)
 	%		gatePolygons	 <struct>	Mapping between gate names and polygons for sampleData
+	%		threshGateVals	 <numeric>	Threshold gate thresh values
 	%
 	%		coefficients	 <numeric>	Compensation coefficients
 	%		autfluor		 <numeric>  Autofluorescence per channel
@@ -105,6 +106,7 @@ classdef FlowData < matlab.mixin.Copyable
 		dataTypes = {'raw'};		% Cell array of data types ('raw', 'mComp', 'mefl', etc)
 		gateNames = {};				% Cell array of gate names (strings)
 		gatePolygons = struct();	% Mapping between gate names and polygons for sampleData
+		threshGateVals = [];		% Threshold gate thresh values
 		
 		coefficients = [];			% Compensation coefficients
 		autofluor = [];				% Autofluorescence per channel
@@ -2443,6 +2445,11 @@ classdef FlowData < matlab.mixin.Copyable
 				end
 			end
 			
+			% Save thresh values
+			save(threshFname, 'threshVals');
+			self.threshGateVals = threshVals; 
+			
+			% Apply thresh gate
 			thrGateNames = cell(1, numel(channels));
 			for ci = 1:numel(channels)
 				
