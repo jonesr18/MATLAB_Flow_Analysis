@@ -217,9 +217,9 @@ classdef FlowData < matlab.mixin.Copyable
 			end
 			
 			% Extract data from the given channels
-			self.numSamples = size(IDs, 2);
-			self.numCells = zeros(1, self.numSamples);
-			for i = 1:size(IDs, 2)
+			self.numSamples = numel(dataStruct);
+			self.numCells = zeros(self.numSamples, 1);
+			for i = 1:self.numSamples
 				
 				nObs = dataStruct(i).nObs;
 				self.numCells(i) = nObs;
@@ -275,7 +275,7 @@ classdef FlowData < matlab.mixin.Copyable
 				end
 				
 				% Check experiment folder exist and add filesep to end for later extensions
-				assert(logical(exist(expDetails.folder, 'file')), 'Experiment folder does not exist!');
+				assert(logical(exist(expDetails.folder, 'file')), 'Experiment folder does not exist');
 				if ~(expDetails.folder(end) == filesep)
 					expDetails.folder = [expDetails.folder, filesep];
 				end
