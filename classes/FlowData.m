@@ -47,6 +47,7 @@ classdef FlowData < matlab.mixin.Copyable
 	%									on the order of channels in binInputs).
 	%		binInputs		 <struct>	Struct w/ bin channels as fields and edges as values
 	%		binDataType		 <char>		Binned dataType ('raw', 'mComp', 'mefl', etc)
+	%		binNames		 <cell>		Named binning schemes for save/load
 	%
 	%	Public Methods
 	%
@@ -119,6 +120,7 @@ classdef FlowData < matlab.mixin.Copyable
 		binSizes = [];				% Number of bins in each dimension
 		binInputs = struct();		% Struct w/ bin channels as fields and edges as values
 		binDataType = '';			% Binned dataType ('raw', 'mComp', 'mefl', etc)
+		binNames = {};				% Named binning schemes for save/load
 		
 		logicleParams = struct( ... % Logicle transformation parameters to use
 			'T', 2^18, ...
@@ -1322,11 +1324,11 @@ classdef FlowData < matlab.mixin.Copyable
 		end
 		
 		
-		function self = bin(self, binInputs, binDataType, sampleIDs, binFuncs, doPar)
+		function self = bin(self, binInputs, binDataType, sampleIDs, binName, binFuncs, doPar)
 			% Sorts the sample data using the given set of channels/edges into a
 			% number of bins using the given dataType for assignments. 
 			%
-			%	self.bin(binInputs, binDataType)
+			%	self.bin(binInputs, binDataType, sampleIDs, binName, binFuncs, doPar)
 			%
 			%	Inputs
 			%		binInputs		<struct> A struct with channel names as keys and 
@@ -1341,6 +1343,11 @@ classdef FlowData < matlab.mixin.Copyable
 			%						which samples to bin (possibly saving time). 
 			%						 - The default behavior is to bin all samples. 
 			%						 - Pass an empty array to skip. 
+			%
+			%		binName			<char> (Optional) A name with which to identify
+			%						the given binning scheme via saved files. If
+			%						no name is given, defaults to a serial number 
+			%						representing the Nth binning operation run.
 			%
 			%		binFuncs		<struct> (Optional) A struct with channel names as
 			%						keys and edge functions as values. The channel names
@@ -1376,7 +1383,7 @@ classdef FlowData < matlab.mixin.Copyable
 			%		inside of it, making all operations _after_ binning much 
 			%		faster, overall improving the speed of analysis. 
 			
-			[binChannels, binEdges] = zCheckInputs_bin(self);
+			[binFieldnames, binChannels, binEdges] = zCheckInputs_bin(self);
 			
 			slicedData = cell(1, self.numSamples);
 			for sid = sampleIDs
@@ -1391,28 +1398,45 @@ classdef FlowData < matlab.mixin.Copyable
 			binnedData = cell(size(slicedData));
 			if doPar
 				parfor sid = sampleIDs
-					binnedData{sid} = FlowAnalysis.simpleBin(slicedData{sid}, binEdges, binFuncs);
+					bins{sid} = FlowAnalysis.simpleBin(binData{sid}, binEdges, binFuncs);
 				end
 			else
 				for sid = sampleIDs
-					binnedData{sid} = FlowAnalysis.simpleBin(slicedData{sid}, binEdges, binFuncs);
+					bins{sid} = FlowAnalysis.simpleBin(binData{sid}, binEdges, binFuncs);
 				end
 			end
 			
 			% Extract size of each dimension independently, otherwise all
 			% singular dimensions over 2D are lost! Also handles single-channel 
 			% binning so only one size is given (rather than two).
-			bSizes = zeros(1, numel(binChannels));
+			binSizes = zeros(1, numel(binChannels));
 			for ci = 1:numel(binChannels)
-				bSizes(ci) = size(binnedData{sampleIDs(1)}, ci);
+				binSizes(ci) = size(bins{sampleIDs(1)}, ci);
 			end
 			
-			self.bins = binnedData;
-			self.numBins = numel(binnedData{sampleIDs(1)});
-			self.binSizes = bSizes;
+			% Only replace data for samples binned
+			for sid = sampleIDs
+				self.bins{sid} = bins{sid};
+			end
+			numBins = numel(bins{sampleIDs(1)});
+			self.numBins = numBins;
+			self.binSizes = binSizes;
 			self.binInputs = binInputs;
 			self.binDataType = binDataType;
 			self.binned = true;
+			self.binNames = [self.binNames, {binName}];
+			
+			% Setup new directory for bins
+			binDir = [self.folder, 'Binning', filesep];
+			if ~exist(binDir, 'file')
+				mkdir(binDir)
+			end
+			binSaveName = [self.date, '_', self.name];
+			binFname = [binDir, 'Binning_', binName, '_', binSaveName, '.mat'];
+			
+			save(binFname, 'bins', 'numBins', 'binSizes', 'binInputs', 'binDataType');
+			
+			
 			fprintf(1, 'Finished binning\n')
 			
 			
