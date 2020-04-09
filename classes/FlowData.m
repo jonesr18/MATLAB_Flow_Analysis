@@ -201,10 +201,6 @@ classdef FlowData < matlab.mixin.Copyable
 			self.channels = expDetails.channels;
 			self.colors = expDetails.colors;
 			
-			% Defaults
-			numReplicates = 1;
-			IDs = 1:numel(dataStruct);
-			
 			% Extract sample map
 			if ~isempty(sampleMapFname)
 				try % Don't want to throw away loaded data
@@ -213,17 +209,6 @@ classdef FlowData < matlab.mixin.Copyable
 						'Sample map (%d) contains incorrect number of rows (%d)', ...
 						height(sampleMap), numel(dataStruct))
 					
-					% "Replicate" column allows data to be automatically combined
-					if ismember('Replicate', sampleMap.Properties.VariableNames)
-						% Overwrite numReplicates and IDs based on data condensation 
-						numReplicates = max(sampleMap.Replicate);
-						IDs = zeros(numReplicates, height(sampleMap) / numReplicates);
-						for r = 1:numReplicates
-							IDs(r, :) = find(sampleMap.Replicate == r);
-						end
-						% Wean sampleMap to only be have one replicate
-						sampleMap = sampleMap(sampleMap.Replicate == 1, :);
-					end
 					self.sampleMap = sampleMap;
 				catch ME
 					warning('Error occured while reading sample map, skipping...')
@@ -236,30 +221,18 @@ classdef FlowData < matlab.mixin.Copyable
 			self.numCells = zeros(1, self.numSamples);
 			for i = 1:size(IDs, 2)
 				
-				nObs = 0;
-				
-				for r = 1:numReplicates
-					nObs = nObs + dataStruct(IDs(r, i)).nObs;
-				end
+				nObs = dataStruct(i).nObs;
 				self.numCells(i) = nObs;
 				
 				% Extract desired color channels
-				for ch = expDetails.channels
-					sd = [];
-					for r = 1:numReplicates
-						sd = [sd; dataStruct(IDs(r, i)).(ch{:}).raw];
-					end
-					self.sampleData(i).(ch{:}).raw = sd;
+				for ch = [expDetails.channels, {'Time'}]
+					self.sampleData(i).(ch{:}).raw = dataStruct(i).(ch{:}).raw;
 				end
 				self.sampleData(i).nObs = nObs;
 				
 				% Extract scatter channels
 				for ch = Gating.SCATTER_CHANNELS
-					sds = [];
-					for r = 1:numReplicates
-						sds = [sds; dataStruct(IDs(r, i)).(ch{:}).raw];
-					end
-					self.sampleDataScatter(i).(ch{:}).raw = sds;
+					self.sampleDataScatter(i).(ch{:}).raw = dataStruct(i).(ch{:}).raw;
 				end
 				self.sampleDataScatter(i).nObs = nObs;
 			end
