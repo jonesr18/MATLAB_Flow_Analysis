@@ -2638,14 +2638,15 @@ classdef FlowData < matlab.mixin.Copyable
 				gate = sampleGateNames{g};
 				
 				for si = 1:self.numSamples
+					% Use mean as simple way to compute fraction passing gate
 					gatePcts(si, g) = mean(self.sampleData(si).gates.(gate)) * 100;
 				end
 			end
 			
 			% Convert to readable table
 			sampleGateNames = fieldnames(self.sampleData(1).gates);
-			gatePcts = array2table(gatePcts);
-			gatePcts.Properties.VariableNames = sampleGateNames;
+			gatePcts = array2table([self.numCells, gatePcts]);
+			gatePcts.Properties.VariableNames = [{'Num_cells'}; sampleGateNames];
 			
 			% Append to Sample Map
 			gatePcts = [self.sampleMap, gatePcts];
