@@ -2540,29 +2540,38 @@ classdef FlowData < matlab.mixin.Copyable
 			% Check inputs
 			validateattributes(gates, {'cell'}, {'vector'}, mfilename, 'gates', 1);
 			validatestring(mode, {'and', 'or'}, mfilename, 'mode', 2);
+			newGateName = [gates{1}, sprintf('_%s', gates{2:end})];
+			
+			flipGates = false(1, numel(gates));
+			for gi = 1:numel(gates)
+				% Flip gates with 'x' in front that don't already exist as 'xABC' gates
+				if strcmp(gates{gi}(1), 'x') && ~ismember(gates{gi}, self.gateNames)
+					gates{gi} = gates{gi}(2:end);
+					flipGates(gi) = true;
+				end
+			end
 			
 			badGates = setdiff(gates, self.gateNames);
 			assert(isempty(badGates), 'Gate does not exist: %s\n', badGates{:});
-			newGateName = [gates{1}, sprintf('_%s', gates{2:end})];
 			
 			% Do gate crossing
 			switch mode
 				case 'or'
 					for i = 1:self.numSamples
-						self.sampleData(i) = crossOR(self.sampleData(i), newGateName);
+						self.sampleData(i) = crossOR(self.sampleData(i), newGateName, flipGates);
 					end
 					for i = 1:self.numControls
 						if ~isempty(self.controlData(i).(self.channels{1})) % Some tcData will be empty 
-							self.controlData(i) = crossOR(self.controlData(i), newGateName);
+							self.controlData(i) = crossOR(self.controlData(i), newGateName, flipGates);
 						end
 					end
 				case 'and'
 					for i = 1:self.numSamples
-						self.sampleData(i) = crossAND(self.sampleData(i), newGateName);
+						self.sampleData(i) = crossAND(self.sampleData(i), newGateName, flipGates);
 					end
 					for i = 1:self.numControls
 						if ~isempty(self.controlData(i).(self.channels{1})) % Some tcData will be empty 
-							self.controlData(i) = crossAND(self.controlData(i), newGateName);
+							self.controlData(i) = crossAND(self.controlData(i), newGateName, flipGates);
 						end
 					end
 			end
@@ -2574,23 +2583,27 @@ classdef FlowData < matlab.mixin.Copyable
 			% --- Helper functions --- %
 			
 			
-			function data = crossOR(data, newGateName)
+			function data = crossOR(data, newGateName, flipGates)
 				% Crosses w/ OR logic
 				
 				crossedGates = false(size(data.gates.(gates{1})));
 				for g = 1:numel(gates)
-					crossedGates = (crossedGates | data.gates.(gates{g}));
+					currGate = data.gates.(gates{g});
+					if flipGates(g), currGate = ~currGate; end
+					crossedGates = (crossedGates | currGate);
 				end
 				data.gates.(newGateName) = crossedGates;
 			end
 			
 			
-			function data = crossAND(data, newGateName)
+			function data = crossAND(data, newGateName, flipGates)
 				% Crosses w/ AND logic 
 				
 				crossedGates = true(size(data.gates.(gates{1})));
 				for g = 1:numel(gates)
-					crossedGates = (crossedGates & data.gates.(gates{g}));
+					currGate = data.gates.(gates{g});
+					if flipGates(g), currGate = ~currGate; end
+					crossedGates = (crossedGates & currGate);
 				end
 				data.gates.(newGateName) = crossedGates;
 			end
