@@ -1607,7 +1607,7 @@ classdef FlowData < matlab.mixin.Copyable
 		end
 		
 		
-		function stats = computeStats(self, sampleIDs, sliceParams, metrics, options)
+		function stats = computeStats(self, sampleIDs, sliceParams, metrics, options, minCells)
 			% Computes the given statistic metrics on the combined data 
 			% from the given sampleIDs. Can get stats for independent bins. 
 			%
@@ -1643,7 +1643,6 @@ classdef FlowData < matlab.mixin.Copyable
 			%									reshaped to match the bin sizes.  
 			%
 			%		metrics			<char, cell> (Optional) A list of metrics to compute
-			%							'numCells', %iles: 'pX.Y' --> X.Y%, 
 			%							'median', 'mean', 'geomean', 'stdev', 
 			%							'geostdev', 'cv', 'sem', 'semb'*
 			%							 * semb = bootstrapped SEM - slow!
@@ -1656,7 +1655,10 @@ classdef FlowData < matlab.mixin.Copyable
 			%		options			<char, cell> (Optional) Optional inputs:
 			%							'pos': Calculate metrics for only the 
 			%							positive data - eg, useful for looking at
-			%							smaller percentiles to plot on log-log. 
+			%							smaller percentiles to plot on log-log.
+			%							
+			%		minCells		<numeric> (Optional) The minimum number of cells
+			%							to calculate statistics (useful for binning).
 			%
 			%	Outputs
 			%		stats		<struct> A struct where each field is the name of 
@@ -1670,6 +1672,8 @@ classdef FlowData < matlab.mixin.Copyable
 			%						bin stats into their "true" shape and instead return 
 			%						a BxC matrix of metric values in each of the 
 			%						requested B bins in all the C channels. 
+			%
+			%	TODO: Change output to matrix w/ last dimension metrics
 			
 			zCheckInputs_computeStats(self);
 			
@@ -1686,9 +1690,9 @@ classdef FlowData < matlab.mixin.Copyable
 			
 			% Set up output matrix
 			for m = metrics
-				stats.(m{:}) = zeros([statSize, numel(sliceParams.channels)]);
+				stats.(m{:}) = nan([statSize, numel(sliceParams.channels)]);
 			end
-			stats.numCells = zeros([statSize, 1]);
+			stats.numcells = zeros([statSize, 1]);
 			
 			% Iterate over bins, compute stats for each one independently
 			for i = 1:iterMax
@@ -1700,7 +1704,10 @@ classdef FlowData < matlab.mixin.Copyable
 				
 				% Slice out data to compute stats with
 				slicedData = self.slice(sampleIDs, sliceParams);
-				stats.numCells(i) = size(slicedData, 1);
+				stats.numcells(i) = size(slicedData, 1);
+% 				size(slicedData, 1)
+				
+				if isempty(slicedData), slicedData = nan; end
 				
 				for ch = 1:numel(sliceParams.channels)
 					
@@ -1742,7 +1749,7 @@ classdef FlowData < matlab.mixin.Copyable
 				
 				validateattributes(sampleIDs, {'numeric'}, {'positive'}, mfilename, 'sampleIDs', 1);
 				sampleIDs = reshape(unique(ceil(sampleIDs)), 1, []);
-				assert(max(sampleIDs) <= self.numSamples, 'Sample ID(s) too large!')
+				assert(max(sampleIDs) <= self.numSamples, 'Sample ID(s) too large')
 				
 				% Only need to check sliceParams for fields that are used by
 				% this function, so we let slice() itself check the rest.
@@ -1771,12 +1778,12 @@ classdef FlowData < matlab.mixin.Copyable
 				if ~isempty(sliceParams.bins)
 					assert(size(sliceParams.bins, 2) == 1 || ...
 						   size(sliceParams.bins, 2) == numel(fieldnames(self.binInputs)), ...
-						   'Bin IDs formatted incorrectly!')
+						   'Bin IDs formatted incorrectly')
 					assert(size(sliceParams.bins, 1) <= self.numBins, ...
-						   'Too many bins requested!')
+						   'Too many bins requested')
 				end
 				
-				defaultMetrics = {'numCells', 'p10', 'p50', 'p90', 'mean', ...
+				defaultMetrics = {'numcells', 'p10', 'p50', 'p90', 'mean', ...
 						'geomean', 'stdev', 'geostdev', 'cv', 'sem'};
 				if exist('metrics', 'var')
 					validateattributes(metrics, {'cell', 'char'}, {}, mfilename, 'metrics', 3);
@@ -1794,6 +1801,12 @@ classdef FlowData < matlab.mixin.Copyable
 					options = cellfun(@lower, options, 'uniformoutput', false);
 				else
 					options = {};
+				end
+				
+				if exist('minCells', 'var')
+					validateattributes(minCells, {'numeric'}, {'scalar'}, mfilename, 'numCells', 5);
+				else
+					minCells = 1;
 				end
 			end
 		end
