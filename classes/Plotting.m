@@ -1066,16 +1066,18 @@ classdef Plotting < handle
 			dims = reshape(fieldnames(scales), 1, []);
 			for dim = dims
 				
-				if ~any(strcmpi(dim{:}, {'x', 'y', 'z'})), continue, end
+				% Don't set dim to @lower because its reference in 'scales'
+				% needs to be preseved
+				if ~any(strcmpi(dim{:}, {'x', 'X', 'y', 'Y', 'z', 'Z'})), continue, end
 				
-				% Adjust to closest round log value
+				% Set major ticks based on closest round log value
 				scaleFactor = 10^round(log10(scales.(dim{:})));
 				exps = (1:5) + log10(scaleFactor);
 				expsStr = strrep(num2str(exps), ' ', ''); % Remove white space
 				
 				% Set MEF parameter for logicle calculation
 				dimParams = params;
-				dimParams.MEF = scaleFactor;
+				dimParams.MEF = scales.(dim{:});
 				
 				% Create tick values
 				tickVals = Transforms.lin2logicle( sort( ...
@@ -1085,12 +1087,15 @@ classdef Plotting < handle
 					 true, dimParams);
 				
 				% Create tick labels
-				text = { ...['-10^', expsStr(2)], '', '', '', '', '', '', '', '', '', '', ...
-						 '', '', '', '', '', '', '', '', '', '', '', ...
-						 '', '', '', '', '', '', '', '', '', ['10^', expsStr(2)], ...
-						 '', '', '', '', '', '', '', '', ['10^', expsStr(3)], ...
-						 '', '', '', '', '', '', '', '', ['10^', expsStr(4)], ...
-						 '', '', '', '', '', '', '', '', ['10^', expsStr(5)], ''};
+				% --> To add back in the 0, replace the last element of row 1
+				% with the 0 that is commented out, then add another '' to the
+				% second row and delete the final '' in the last row
+				text = {['-10^', expsStr(2)], '', '', '', '', '', '', '', '', '', '', ...
+						 ...'', '', '', '', '', '', '', '', '', '', '', ... '0^{ }', ...
+						 '', '', '', '', '', '', '', '', '', [' 10^', expsStr(2)], ...
+						 '', '', '', '', '', '', '', '', [' 10^', expsStr(3)], ...
+						 '', '', '', '', '', '', '', '', [' 10^', expsStr(4)], ...
+						 '', '', '', '', '', '', '', '', [' 10^', expsStr(5)], ''};
 				
 				% Determine axes limits
 				AXES_MAX = 2^18 * scaleFactor;
