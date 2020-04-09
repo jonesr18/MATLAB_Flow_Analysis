@@ -2612,10 +2612,10 @@ classdef Plotting < handle
 		
 		
 		function figBinHmap = binHeatmap(dataMatrix, edges, labels, cmap, axProperties, options)
-			% Creates a heatmap representing the given bin data. The presentation 
+			% Creates a heatmap representing the given data. The presentation 
 			% depends on the dimensionality of the data.
 			%
-			%	figBinHmap = binHeatmap(data, edges, labels, cmap, axProperties, options)
+			%	figBinHmap = binHeatmap(dataMatrix, edges, labels, cmap, axProperties, options)
 			%
 			%	 - 2D data is plotted as a simple heatmap on a single axis
 			%	 - 3D data is plotted as a series of 2D heatmaps stacked in
@@ -2703,7 +2703,7 @@ classdef Plotting < handle
 			%
 			%	Outputs
 			%
-			%		figBinHmap		<handle> A handle to the generated figure 
+			%		figBinHmap		<Figure> A handle to the generated figure 
 			%
 			% Written By
 			% Ross Jones
@@ -2714,7 +2714,12 @@ classdef Plotting < handle
 			%
 			%	2018-03-06		Added option for giving figure handle to plot on
 			
-			[figBinHmap, doTitle, dataSize] = zCheckInputs_binHeatmap();
+			% TODO: 
+			%	1) Make it so N or N+1 edges can be used for D1-2 as well 
+			%		(automatically treat as categorical if so)
+			%	2) Rename to batchHeatmap or something like that
+			
+			[figBinHmap, doTitle] = zCheckInputs_binHeatmap();
 			
 			spIdx = 0;
 			for d5 = 1:size(dataMatrix, 5)
@@ -2847,7 +2852,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function [figBinHmap, doTitle, dataSize] = zCheckInputs_binHeatmap()
+			function [figBinHmap, doTitle] = zCheckInputs_binHeatmap()
 				
 				% Check data + dimensions
 				validateattributes(dataMatrix, {'numeric'}, {}, mfilename, 'data', 1);
@@ -2929,13 +2934,14 @@ classdef Plotting < handle
 				if options.doMEF, autoscale = 1e3; else, autoscale = 1; end
 				if ~isfield(options, 'min'), options.min = 0; end
 				if ~isfield(options, 'max'), options.max = 4.5; end
-				if isfield(options, 'fig')
-					figBinHmap = options.fig; 
-				else
 				if ~isfield(options, 'categorical'), options.categorical = false; end
 				if ~isfield(options, 'plotColorbar'), options.plotColorbar = true; end
+				if ~isfield(options, 'fig')
 					figBinHmap = figure();
+				else
+					figBinHmap = options.fig;
 				end
+				options.dataSize = dataSize;
 				
 				% Convert biexp/log options to struct if necessary
 				if ischar(options.biexp), options.biexp = {options.biexp}; end
