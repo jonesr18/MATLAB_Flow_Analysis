@@ -1312,7 +1312,11 @@ classdef FlowData < matlab.mixin.Copyable
 				end
 				if ~isfield(options, 'recompute'), options.recompute = false; end
 				options.logicle = self.logicleParams;
-				options.doMEF = ismember(dataType, {'mef', 'mefl'}); 
+				if ismember(dataType, {'mef', 'mefl'})
+					options.scale = 1e3;
+				else
+					options.scale = 1;
+				end
 			end
 			
 		end
