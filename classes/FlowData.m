@@ -783,7 +783,7 @@ classdef FlowData < matlab.mixin.Copyable
 			function [wildTypeData, singleColorData, twoColorData] = zCheckInputs_addControls(self)
 				
 				validateattributes(controlFolder, {'char'}, {}, mfilename, 'controlFolder', 1);
-				assert(logical(exist(controlFolder, 'file')), 'Controls folder does not exist!');
+				assert(logical(exist(controlFolder, 'file')), 'Controls folder does not exist');
 				if ~(controlFolder(end) == filesep), controlFolder = [controlFolder, filesep]; end
 								
 				validateattributes(wildTypeFname, {'cell', 'char'}, {}, mfilename, 'wildTypeFname', 2);
@@ -797,7 +797,7 @@ classdef FlowData < matlab.mixin.Copyable
 				assert(numel(singleColorFnames) == numel(self.channels), ...
 						'Incorrect number of single color controls');
 				
-				% Add full-path to filenames
+				% Add full-path to filenames if not included
 				wildTypeFname = self.convertToFullFile(wildTypeFname, controlFolder);
 				singleColorFnames = self.convertToFullFile(singleColorFnames, controlFolder);
 				
@@ -830,7 +830,15 @@ classdef FlowData < matlab.mixin.Copyable
 				
 				for ch = channels
 					for sc = 1:numel(scData)
-						outData(sc).(ch{:}) = scData(sc).(ch{:});
+						if ~isfield(scData(sc), ch{:})
+							warning('Fieldname %s not found in sc control file %d', ch{:}, sc)
+						else
+							outData(sc).(ch{:}).raw = scData(sc).(ch{:}).raw;
+						end
+						
+						if ~isfield(outData(sc), 'nObs')
+							outData(sc).nObs = scData(sc).nObs;
+						end
 					end
 					
 					tc = 0;
