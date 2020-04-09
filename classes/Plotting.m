@@ -1133,7 +1133,7 @@ classdef Plotting < handle
 		end
 		
 		
-		function ax = logAxes(ax, limits)
+		function ax = logAxes(ax, limits, axProperties, options)
 			% Converts the axes to log scales and overwrites the ticks
 			% so that they don't disappear and only show log-multiples of 5
 			%
@@ -1147,37 +1147,55 @@ classdef Plotting < handle
 			%						and/or 'z' and the values are log10-transformed 
 			%						axes limits, eg [3, 8] for [10^3, 10^8].
 			%
+			%		axProperties	<struct> (optional) A struct of axes properties
+			%						that can be given to overwrite default options
+			%
+			%		options			<char, cell> (Optional) Logical flags:
+			%							'zero': Sets the bottom tick value and
+			%							label to '0' - not a transformation!
+			%							'loglin': Plots log ticks and such for
+			%							log-transformed (but linear) data
+			%
 			%	Outputs
 			%	
 			%		ax				<Axes> The modified axes
 			
-			zcheckInputs_logAxes();
+			zCheckInputs_logAxes();
 			
-			if isfield(limits, 'x')
-				xrange = limits.x(1) : limits.x(2);
-				set(ax, 'XScale', 'log', ...
-						'XLim', 10.^limits.x, ...
-						'XTick', 10.^(xrange), ...
-						'XTickLabel', cellfun(@(x) ['10^' num2str(x)], ...
-							num2cell(xrange), 'uniformoutput', false))
-			end
-			
-			if isfield(limits, 'y')
-				yrange = limits.y(1) : limits.y(2);
-				set(ax, 'YScale', 'log', ...
-						'YLim', 10.^limits.y, ...
-						'YTick', 10.^(yrange), ...
-						'YTickLabel', cellfun(@(x) ['10^' num2str(x)], ...
-							num2cell(yrange), 'uniformoutput', false))
-			end
-			
-			if isfield(limits, 'z')
-				zrange = limits.z(1) : limits.z(2);
-				set(ax, 'ZScale', 'log', ...
-						'ZLim', 10.^limits.z, ...
-						'ZTick', 10.^(zrange), ...
-						'ZTickLabel', cellfun(@(x) ['10^' num2str(x)], ...
-							num2cell(zrange), 'uniformoutput', false))
+			dims = reshape(fieldnames(limits), 1, []);
+			for di = 1:numel(dims)
+				
+				dim = dims{di};
+				
+				% Don't set dim to @lower because its reference in 'scales'
+				% needs to be preseved
+				if ~any(strcmpi(dim, {'x', 'X', 'y', 'Y', 'z', 'Z'})), continue, end
+				
+				if (abs(limits.(dim)(1) - limits.(dim)(2)) > 5)
+					drange = limits.(dim)(1) : ...
+							 round((limits.(dim)(2) - limits.(dim)(1)) / 6) : ...
+							 limits.(dim)(2);
+				else
+					drange = limits.(dim)(1) : limits.(dim)(2);
+				end
+				
+				ticklabels = cellfun(@(x) ['10^{' num2str(x), '}'], ...
+							num2cell(drange), 'uniformoutput', false);
+				if ismember('zero', options)
+					ticklabels(1) = {'0'};
+				end
+				
+				if ismember('loglin', options)
+					set(ax, [dim, 'scale'], 'linear', ...
+							[dim, 'lim'], limits.(dim), ...
+							[dim, 'tick'], drange, ...
+							[dim, 'ticklabel'], ticklabels);
+				else
+					set(ax, [dim, 'scale'], 'log', ...
+							[dim, 'lim'], 10.^limits.(dim), ...
+							[dim, 'tick'], 10.^(drange), ...
+							[dim, 'ticklabel'], ticklabels)
+				end
 			end
 			
 			% Set remaining axes properties
@@ -1186,13 +1204,26 @@ classdef Plotting < handle
 					'LineWidth', 1, ...
 					'box', 'off')
 			
+			Plotting.setAxProps(ax, axProperties);
 			
 			% --- Helper Functions --- %
 			
 			
-			function zcheckInputs_logAxes()
+			function zCheckInputs_logAxes()
 				validateattributes(ax, {'matlab.graphics.axis.Axes'}, {}, mfilename, 'ax', 1);
 				validateattributes(limits, {'struct'}, {}, mfilename, 'limits', 2);
+				
+				if ~exist('axProperties', 'var') || ~isstruct(axProperties)
+					axProperties = struct();
+				end
+				
+				if exist('options', 'var')
+					validateattributes(options, {'char', 'cell'}, {}, mfilename, 'options', 4);
+					if ischar(options), options = {options}; end % for convenience
+					options = cellfun(@lower, options, 'uniformoutput', false);
+				else
+					options = {};
+				end
 			end
 						
 		end
