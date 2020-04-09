@@ -2041,12 +2041,17 @@ classdef FlowData < matlab.mixin.Copyable
 				end
 				
 				% Slices data from the given channels
-				if isfield(sliceParams, 'channels')
-					sliceChannels = sliceParams.channels;
+				chanFieldnames = {'channel', 'Channel', 'channels', 'Channels'};
+				doChan = isfield(sliceParams, chanFieldnames);
+				if any(doChan)
+					chanF = chanFieldnames{doChan};
+					sliceChannels = sliceParams.(chanF);
+					
+					validateattributes(sliceChannels, {'char', 'cell'}, {}, mfilename, ['sliceParams.', chanF]);
 					if ischar(sliceChannels), sliceChannels = {sliceChannels}; end % Force cell
 					sliceChannels = reshape(sliceChannels, 1, []); % Force row vector
 					
-					badChannels = setdiff(sliceChannels, [self.channels, Gating.SCATTER_CHANNELS]);
+					badChannels = setdiff(sliceChannels, [self.channels, Gating.SCATTER_CHANNELS, 'Time']);
 					assert(isempty(badChannels), ...
 							'Channel not allowed: %s\n', badChannels{:});
 				else
