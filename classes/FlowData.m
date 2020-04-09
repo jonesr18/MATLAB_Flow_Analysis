@@ -1332,10 +1332,25 @@ classdef FlowData < matlab.mixin.Copyable
 			%
 			%	Inputs
 			%		binInputs		<struct> A struct with channel names as keys and 
-			%						bin edges as values. The channel names must match 
-			%						a field in the data struct with the subfield 'raw'. 
-			%						The struct tells the function which channels to bin 
-			%						on and where to draw the bins in each dimension. 
+			%						bin edges as values. The struct tells the function 
+			%						which channels to bin on and where to draw the bins 
+			%						in each dimension. 
+			%						To create bins with edges defined by the ratio 
+			%						between two channels, create a substruct within 
+			%						binInputs with 'ratio' in the key name and the
+			%						following interface:
+			%							'Channel1': channel_1_name (char)
+			%							'Channel2': channel_2_name (char)
+			%							'edges':	edges of ch1:ch2 ratios
+			%						To create bins with edges defined by the product 
+			%						between two channels, create a substruct within 
+			%						binInputs with 'product' in the key name and the
+			%						following interface:
+			%							'Channel1': channel_1_name (char)
+			%							'Channel2': channel_2_name (char)
+			%							'edges':	edges of ch1:ch2 products
+			%						NOTE: Cells with negative values in any channel
+			%						are auto-discluded from ratio/product bins.
 			%		
 			%		binDataType		<char> The cell dataType to use (eg 'mefl', 'comp')
 			%
@@ -1395,7 +1410,31 @@ classdef FlowData < matlab.mixin.Copyable
 				
 			end
 			
-			binnedData = cell(size(slicedData));
+			binData = cell(size(slicedData));
+			for sid = sampleIDs
+				
+				binData{sid} = zeros(size(slicedData{sid}, 1), numel(binFieldnames));
+				
+				for fbi = 1:numel(binFieldnames)
+					
+					fieldname = binFieldnames{fbi};
+					
+					if contains(lower(fieldname), 'ratio')
+						chi1 = strcmpi(binChannels, binInputs.(fieldname).Channel1);
+						chi2 = strcmpi(binChannels, binInputs.(fieldname).Channel2);
+						binData{sid}(:, fbi) = slicedData{sid}(:, chi1) ./ slicedData{sid}(:, chi2);
+					elseif contains(lower(fieldname), 'prod')
+						chi1 = strcmpi(binChannels, binInputs.(fieldname).Channel1);
+						chi2 = strcmpi(binChannels, binInputs.(fieldname).Channel2);
+						binData{sid}(:, fbi) = slicedData{sid}(:, chi1) .* slicedData{sid}(:, chi2);
+					else
+						chi = strcmpi(binChannels, fieldname);
+						binData{sid}(:, fbi) = slicedData{sid}(:, chi);
+					end
+				end
+			end
+			
+			bins = cell(size(slicedData));
 			if doPar
 				parfor sid = sampleIDs
 					bins{sid} = FlowAnalysis.simpleBin(binData{sid}, binEdges, binFuncs);
@@ -1443,24 +1482,29 @@ classdef FlowData < matlab.mixin.Copyable
 			% --- Helper Functions --- %
 			
 			
-			function [binChannels, binEdges] = zCheckInputs_bin(self)
+			function [binFieldnames, binChannels, binEdges] = zCheckInputs_bin(self)
 				% Validates that the given bin properties are ok, then sets the
 				% object's properties themselves if all are ok.
 
 				% Check properties
 				validateattributes(binInputs, {'struct'}, {}, mfilename, 'inputs', 1);
-				binChannels = reshape(fieldnames(binInputs), 1, []);
-				validateattributes(binChannels, {'cell', 'char'}, {}, mfilename, 'binChannels');
+				binFieldnames = fieldnames(binInputs)';
+				binChannels = {};
+				binEdges = cell(1, numel(binFieldnames));
+				for fi = 1:numel(binFieldnames)
+					fn = binFieldnames{fi};
+					if contains(lower(fn), {'ratio', 'prod'})
+						binChannels = [binChannels, {binInputs.(fn).Channel1, binInputs.(fn).Channel2}];
+						binEdges{fi} = binInputs.(fn).edges;
+					else % Normal channel input
+						binChannels = [binChannels, {fn}];
+						binEdges{fi} = binInputs.(fn);
+					end
+				end
+				binChannels = unique(binChannels, 'stable');
 				badChannels = setdiff(binChannels, self.channels);
 				assert(isempty(badChannels), ...
 						'Channel not allowed: %s\n', badChannels{:});
-				
-				binEdges = cell(1, numel(binChannels));
-				for bc = 1:numel(binChannels)
-					assert(numel(binInputs.(binChannels{bc})) > 1, ...
-							'Must have more than one bin edge to define a bin!');
-					binEdges{bc} = binInputs.(binChannels{bc});
-				end
 				
 				validateattributes(binDataType, {'char'}, {}, mfilename, 'binDataType', 2);
 				assert(any(strcmp(binDataType, self.dataTypes)), ...
@@ -1471,21 +1515,27 @@ classdef FlowData < matlab.mixin.Copyable
 							mfilename, 'sampleIDs', 3);
 					sampleIDs = reshape(unique(round(sampleIDs)), 1, []); 
 					assert(all(sampleIDs <= self.numSamples), ...
-							'At least one sampleID is too large!')
+							'At least one sampleID is too large')
 				else
 					sampleIDs = 1:self.numSamples;
 				end
-
+				
+				if exist('binName', 'var')
+					validateattributes(binName, {'char'}, {}, mfilename, 'binName', 4);
+				else
+					binName = num2str(numel(self.binNames) + 1);
+				end
+				
 				% Check binFuncs if applicable
 				if exist('binFuncs', 'var')
-					validateattributes(binFuncs, {'function_handle', 'cell'}, {}, mfilename, 'dataMatrix', 1);
+					validateattributes(binFuncs, {'function_handle', 'cell'}, {}, mfilename, 'binFuncs', 5);
 					% The rest of the validation occurs within FlowAnalysis.simpleBin()
 				else
 					% In the case of no binFuncs, all are independent
 					binFuncs = cell(size(binEdges));
 					binFuncs(:) = {@(x) 1};
 				end
-
+				
 				doPar = exist('doPar', 'var') && all(logical(doPar));
 			end
 		end
