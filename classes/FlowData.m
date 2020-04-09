@@ -1824,7 +1824,7 @@ classdef FlowData < matlab.mixin.Copyable
 		function values = getValues(self, varargin) %% TODO ADD ABILITY TO SUB FIRST
 			% Returns unique values for each given experimental parameter.
 			%
-			%	values = self.getValues(paramters)
+			%	values = self.getValues(parameters)
 			%
 			%	Inputs
 			%		varargin	<char, cell> A cell array of strings or individual 
@@ -1837,20 +1837,24 @@ classdef FlowData < matlab.mixin.Copyable
 			%					in sampleMap. Values are produced as row vectors.
 			
 			% Check parameters
-			parameters = {};
-			for i = 1:numel(varargin)
-				
-				% Check each input to see if it is a single char or a cell of
-				% filenames, since the method should take in variable inputs
-				if iscell(varargin{i})
-					parameters = [parameters, varargin{i}];
-				else
-					validateattributes(varargin{i}, {'char'}, {}, mfilename, 'parameters', 1);
-					parameters = [parameters, varargin(i)];
+			if isempty(varargin)
+				parameters = self.sampleMap.Properties.VariableNames;
+			else
+				parameters = {};
+				for i = 1:numel(varargin)
+
+					% Check each input to see if it is a single char or a cell of
+					% filenames, since the method should take in variable inputs
+					if iscell(varargin{i})
+						parameters = [parameters, varargin{i}];
+					else
+						validateattributes(varargin{i}, {'char'}, {}, mfilename, 'parameters', 1);
+						parameters = [parameters, varargin(i)];
+					end
 				end
+				badParameters = setdiff(parameters, self.sampleMap.Properties.VariableNames);
+				assert(isempty(badParameters), 'Parameter not recognized: %s\n', badParameters{:});
 			end
-			badParameters = setdiff(parameters, self.sampleMap.Properties.VariableNames);
-			assert(isempty(badParameters), 'Parameter not recognized: %s\n', badParameters{:});
 			
 			% Extract unique values for each parameter, force to be row vectors
 			% for easier for-loop iteration
