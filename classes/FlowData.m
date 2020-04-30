@@ -2356,7 +2356,7 @@ classdef FlowData < matlab.mixin.Copyable
 			% generally doesn't matter which dataType is used (though
 			% compensation does have a slight effect on distributions).
 			%
-			%	self.threshGate(channels, mode, thresh, options)
+			%	self = self.threshGate(channels, mode, thresh, options)
 			%
 			%	Inputs
 			%		channels	<char, cell> A cell list of channels to threshold on. 
@@ -2550,7 +2550,7 @@ classdef FlowData < matlab.mixin.Copyable
 			% A new gate is created with name in the following form: 
 			%		'gate1_gate2_gate3_[...]_gateN'
 			%
-			%	self.crossGates(gates, mode)
+			%	self = self.crossGates(gates, mode)
 			%
 			%	Inputs
 			%		gates	<cell> A cell list of gate names to cross. Must be >= 2 gates
@@ -2629,23 +2629,14 @@ classdef FlowData < matlab.mixin.Copyable
 		end
 		
 		
-		function [gatePcts] = printGatePcts(self, options)
-			% Prints the percent of cells passing each defined gate
+		function [gatePcts] = printGatePcts(self)
+			% Prints the percent of cells passing each defined gate into a table
 			%
-			%	Inputs
-			%		options		<cell, char> Optional input arguments
-			%						'noPrint'	Do not print output
+			%	gatePcts = self.printGatePcts();
 			%
 			%	Outputs
 			%		gatePcts	<table> Gate percentages in a table format.
 			%					Table headers are gate names. 
-			
-			% Check inputs
-			if exist('options', 'var')
-				if ischar(options), options = {options}; end
-			else
-				options = {};
-			end
 			
 			% Some gates may not be applied to the sample data, so only look at
 			% names of gates literally assigned under sampleData
@@ -2669,10 +2660,6 @@ classdef FlowData < matlab.mixin.Copyable
 			
 			% Append to Sample Map
 			gatePcts = [self.sampleMap, gatePcts];
-			
-			if ~ismember('noPrint', options)
-				disp(gatePcts)
-			end
 		end
 		
 		
