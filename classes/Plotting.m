@@ -2484,7 +2484,7 @@ classdef Plotting < handle
 			% Update Log:
 			%			
 			
-			xCheckInputs_heatmap();
+			doTitle = xCheckInputs_heatmap();
 			
 			for d3 = 1:size(dataMatrix, 3)
 				
@@ -2550,6 +2550,35 @@ classdef Plotting < handle
 				ylabel(ax, labels{2}, 'fontsize', 10);
 			end
 			
+			% Plot Z (3D) labels if applicable
+			if (size(dataMatrix, 3) > 1 && doTitle(3))
+				centers3 = cell(1, size(dataMatrix, 3));
+				for c3i = 1:numel(centers3)
+					if iscell(edges{3}(c3i))
+						centers3{c3i} = edges{3}{c3i};
+					else % Numeric edges
+						if (size(dataMatrix, 3) < numel(edges{3}))
+							edgeVal = mean([edges{3}(c3i), edges{3}(c3i + 1)]);
+						else % Centers given as input
+							edgeVal = edges{3}(c3i);
+						end
+						if edges{3}(c3i) > 1e3
+							% Show large numbers in scientific notation
+							centers3{c3i} = sprintf('%.2g', edgeVal);
+						else
+							centers3{c3i} = num2str(edgeVal);
+						end
+					end
+				end
+				
+				% Need to fix ticks, otherwise they will be 
+				% added/removed as plot size changes
+				ax.ZTick = 0:(size(dataMatrix, 3) - 1); 
+				ax.ZTickLabel = centers3;
+				ax.ZLim = [0, size(dataMatrix, 3) - 1];
+				zlabel(ax, labels{3});
+			end
+			
 			% Standard axes properties
 			if options.categorical
 				set(ax, 'XTickLabelRotation', 90, ...	% Vertical X labels
@@ -2590,7 +2619,7 @@ classdef Plotting < handle
 			% --- Helper Functions --- %
 			
 			
-			function dataSize = xCheckInputs_heatmap()
+			function doTitle = xCheckInputs_heatmap()
 				
 				% Check axes
 				validateattributes(ax, {'matlab.graphics.axis.Axes'}, {}, mfilename, 'ax', 1);
@@ -2846,35 +2875,6 @@ classdef Plotting < handle
 							edges(elSubs), labels([elSubs, numel(labels)]), ...
 							cmap, axProperties, optionsHM);
 					
-					% Plot Z (3D) labels if applicable
-					if (size(dataMatrix, 3) > 1 && doTitle(3))
-						centers3 = cell(1, size(dataMatrix, 3));
-						for c3i = 1:numel(centers3)
-							if iscell(edges{3}(c3i))
-								centers3{c3i} = edges{3}{c3i};
-							else
-								if (size(dataMatrix, 3) < numel(edges{3}))
-									edgeVal = mean([edges{3}(c3i), edges{3}(c3i + 1)]);
-								else
-									edgeVal = edges{3}(c3i);
-								end
-								if edges{3}(c3i) > 1e3
-									% Show large numbers in scientific notation
-									centers3{c3i} = sprintf('%.2g', edgeVal);
-								else
-									centers3{c3i} = num2str(edgeVal);
-								end
-							end
-						end
-						
-						% Need to fix ticks, otherwise they will be 
-						% added/removed as plot size changes
-						ax.ZTick = 0:(size(dataMatrix, 3) - 1); 
-						ax.ZTickLabel = centers3;
-						ax.ZLim = [0, size(dataMatrix, 3) - 1];
-						zlabel(ax, labels{3});
-					end
-					
 					% Plot titles w/ 4/5D labels if applicable
 					titleTxt = {};
 					if (size(dataMatrix, 4) > 1 && doTitle(4))
@@ -2944,8 +2944,10 @@ classdef Plotting < handle
 				end
 				colormap(ax, cmap);
 				cbar.Limits = [options.min, options.max];
+				cbar.FontSize = ax.FontSize;
 				ax.CLim = cbar.Limits; % Need this or the color won't fill the entire bar
 				cbar.Label.String = labels{end};
+				cbar.Label.FontSize = ax.XLabel.FontSize;
 				if isfield(axProperties, 'FontSize')
 					cbar.Label.FontSize = axProperties.FontSize;
 				else
