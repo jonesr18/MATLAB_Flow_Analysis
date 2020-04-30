@@ -1137,6 +1137,10 @@ classdef FlowData < matlab.mixin.Copyable
 			function zCheckInputs_convertToMEFL()
 				if ~exist('options', 'var')
 					options = {};
+				else
+					if ~iscell(options)
+						options = {options};
+					end
 				end
 			end
 		end
