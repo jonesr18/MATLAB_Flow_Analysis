@@ -1575,35 +1575,40 @@ classdef FlowData < matlab.mixin.Copyable
 			
 			zCheckInputs_loadBins(self);
 			
+			binDir = [self.folder, 'Binning', filesep];
+			if ~exist(binDir, 'file')
+				error('Bin dir not found')
+			end
 			binSaveName = [self.date, '_', self.name];
 			binFname = [binDir, 'Binning_', binName, '_', binSaveName, '.mat'];
 			
 			if exist(binFname, 'file')
-				load binFname %#ok<LOAD>
+				ld = load(binFname);
 			else
-				error('No binning file found!')
+				error('Bin file not found')
 			end
 			
-			if exist('bins', 'var')
-				self.bins = bins; %#ok<CPROPLC>
+			if ismember('bins', fieldnames(ld))
+				self.bins = ld.bins;
 			else
 				error('Missing variable: ''bins''.')
 			end
 			
-			if exist('binInputs', 'var')
-				self.binInputs = binInputs; %#ok<CPROPLC>
+			if ismember('binInputs', fieldnames(ld))
+				self.binInputs = ld.binInputs;
 			else
 				error('Missing variable: ''binInputs''.')
 			end
 			
-			if exist('binDataType', 'var')
-				self.binDataType = binDataType; %#ok<CPROPLC>
+			if ismember('binDataType', fieldnames(ld))
+				self.binDataType = ld.binDataType; 
 			else
 				error('Missing variable: ''binDataType''.')
 			end
 			
-			self.binSizes = size(self.bins);
-			self.numBins = numel(self.bins);
+			sampleID = find(~isempty(self.bins), 1); % In case not all samples were binned
+			self.binSizes = size(self.bins{sampleID});
+			self.numBins = numel(self.bins{sampleID});
 			
 			fprintf(1, 'Finished loading binning data\n');
 			
@@ -1611,18 +1616,14 @@ classdef FlowData < matlab.mixin.Copyable
 			% --- Helper Functions --- %
 			
 			
-			function zCheckInputs_loadBins(self)
-				
-				if isempty(self.binNames)
-					error('No binning schemes have yet been saved')
-				else
-					if exist('binName', 'var')
-						validatestring(binName, self.binNames, mfilename, 'binName', 1);
+			function zCheckInputs_loadBins(self)			
+				if ~exist('binName', 'var')
+					if isempty(self.binNames)
+						error('No binning schemes found - please provide a name')
 					else
 						binName = self.binNames{end};
 					end
 				end
-				
 			end
 		end
 		
