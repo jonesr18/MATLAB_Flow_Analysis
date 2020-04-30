@@ -1425,14 +1425,24 @@ classdef FlowData < matlab.mixin.Copyable
 					
 					fieldname = binFieldnames{fbi};
 					
-					if contains(lower(fieldname), 'ratio')
-						chi1 = strcmpi(binChannels, binInputs.(fieldname).Channel1);
-						chi2 = strcmpi(binChannels, binInputs.(fieldname).Channel2);
-						binData{sid}(:, fbi) = slicedData{sid}(:, chi1) ./ slicedData{sid}(:, chi2);
-					elseif contains(lower(fieldname), 'prod')
-						chi1 = strcmpi(binChannels, binInputs.(fieldname).Channel1);
-						chi2 = strcmpi(binChannels, binInputs.(fieldname).Channel2);
-						binData{sid}(:, fbi) = slicedData{sid}(:, chi1) .* slicedData{sid}(:, chi2);
+					if contains(fieldname, 'ratio', 'ignorecase', true)
+						ratioFields = fieldnames(binInputs.(fieldname));
+						ratioFieldsCh = ratioFields(contains(ratioFields, 'channel', 'ignorecase', true));
+						
+						% Initiate data as a ones vector to then multiply/divide
+						% the ensuing input channels
+						binData{sid}(:, fbi) = ones(size(slicedData{sid}, 1), 1);
+						
+						for rfci = 1:numel(ratioFieldsCh)
+							chanName = ratioFieldsCh{rfci};
+							chi = strcmpi(binChannels, binInputs.(fieldname).(chanName));
+							if all(lower(chanName(1:4)) == 'inv_') % Inverted channel
+								chanData = 1 ./ slicedData{sid}(:, chi);
+							else
+								chanData = 1 .* slicedData{sid}(:, chi);
+							end
+							binData{sid}(:, fbi) = binData{sid}(:, fbi) .* chanData;
+						end
 					else
 						chi = strcmpi(binChannels, fieldname);
 						binData{sid}(:, fbi) = slicedData{sid}(:, chi);
@@ -1499,8 +1509,12 @@ classdef FlowData < matlab.mixin.Copyable
 				binEdges = cell(1, numel(binFieldnames));
 				for fi = 1:numel(binFieldnames)
 					fn = binFieldnames{fi};
-					if contains(lower(fn), {'ratio', 'prod'})
-						binChannels = [binChannels, {binInputs.(fn).Channel1, binInputs.(fn).Channel2}];
+					if contains(fn, 'ratio', 'ignorecase', true)
+						rfn = fieldnames(binInputs.(fn));
+						rfCh = rfn(contains(rfn, 'channel', 'ignorecase', true));
+						for rci = 1:numel(rfCh)
+							binChannels = [binChannels, {binInputs.(fn).(rfCh{rci})}];
+						end
 						binEdges{fi} = binInputs.(fn).edges;
 					else % Normal channel input
 						binChannels = [binChannels, {fn}];
