@@ -1192,13 +1192,10 @@ classdef Plotting < handle
 				% needs to be preseved
 				if ~any(strcmpi(dim, {'x', 'X', 'y', 'Y', 'z', 'Z'})), continue, end
 				
-				if (abs(limits.(dim)(1) - limits.(dim)(2)) > 5)
-					drange = limits.(dim)(1) : ...
-							 round((limits.(dim)(2) - limits.(dim)(1)) / 6) : ...
-							 limits.(dim)(2);
-				else
-					drange = limits.(dim)(1) : limits.(dim)(2);
-				end
+				% If more than 7 log decades, skip every ceil(N/7)
+				drange = limits.(dim)(1) : ...
+						 ceil((limits.(dim)(2) - limits.(dim)(1)) / 7) : ...
+						 limits.(dim)(2);
 				
 				ticklabels = cellfun(@(x) ['10^{' num2str(x), '}'], ...
 							num2cell(drange), 'uniformoutput', false);
