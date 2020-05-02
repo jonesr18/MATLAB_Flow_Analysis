@@ -891,7 +891,6 @@ classdef Transforms < handle
 						peakIntensity, 10.^polyval(fits(:, chID), log10(peakIntensity)), 'r-')
 					ax2.XScale = 'log';
 					ax2.YScale = 'log';
-					ax2.FontSize = 14;
 					
 					% Compute R^2 from residuals, display in title
 					title(sprintf('Scale Factor = %.2f | R^2 = %.3f', ...
