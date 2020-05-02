@@ -267,13 +267,14 @@ classdef Gating < handle
             % Full-size index for whole set of observations
             % In order to avoid problems with sub-indexing below, we will copy the entire FALSE index array
             % when assigning data to a new gate index array, then add back the TRUE entries by numerical index
-            falseIdx = false(numPoints, 1); 
-			pointsIdx = randperm(totalPoints, numPoints);
-
+            falseIdx = false(totalPoints, 1);
+			idxRaw = FlowAnalysis.subSample(totalPoints, numPoints);
+			idxNumRaw = find(idxRaw);
+			
             % First do FSC-A vs SSC-A
             [subIdxP1, gateP1, gateFigs.P1] = Gating.gatePolygon( ...
-					combinedData.FSC_A.raw(pointsIdx), ...
-					combinedData.SSC_A.raw(pointsIdx), ...
+					combinedData.FSC_A.raw(idxRaw), ...
+					combinedData.SSC_A.raw(idxRaw), ...
 					struct('YScale', 'log', ...
 						'XLabel', struct('String', 'FSC\_A'), ...
 						'YLabel', struct('String', 'SSC\_A'))); 
@@ -288,9 +289,10 @@ classdef Gating < handle
 					chans = {'FSC_W', 'FSC_H', 'SSC_W', 'SSC_H'};
 				end
 				
-				idxP1 = subIdxP1;               % No sub-indexing for P1
-				numIdxP1 = find(idxP1);         % Find numerical indexes for P1
-
+				idxNumP1 = idxNumRaw(subIdxP1);	% Get positions in raw of objects passing P1 gate
+				idxP1 = falseIdx;				% Copy this to get the full-sized indexing vector
+				idxP1(idxNumP1) = true;			% Assign TRUE values according to what passes P1
+				
 				% Second do FSC-W vs FSC-H
 				[subIdxP2, gateP2, gateFigs.P2] = Gating.gatePolygon( ... 
 						combinedData.(chans{1}).raw(idxP1), ...
@@ -298,15 +300,15 @@ classdef Gating < handle
 						struct('XLabel', struct('String', strrep(chans{1}, '_', '\_')), ...
 							'YLabel', struct('String', strrep(chans{2}, '_', '\_'))));
 				
-				numIdxP2 = numIdxP1(subIdxP2);  % Get positions in P1 of objects passing P2 gate
-				idxP2 = falseIdx;               % Copy this to get the full-sized indexing vector
-				idxP2(numIdxP2) = true;         % Assign TRUE values according to what passes P1 AND P2
-
+				idxNumP2 = idxNumP1(subIdxP2);	% Get positions in P1 of objects passing P2 gate
+				idxP2 = falseIdx;				% Copy this to get the full-sized indexing vector
+				idxP2(idxNumP2) = true;			% Assign TRUE values according to what passes P1 AND P2
+				
 				% Third do SSC-W vs SSC-H
 				[~, gateP3, gateFigs.P3] = Gating.gatePolygon( ... 
 						combinedData.(chans{3}).raw(idxP2), ...
 						combinedData.(chans{4}).raw(idxP2), ...
-						struct('YScale', 'log', ...
+						struct('yscale', 'log', 'xscale', 'log', ...
 							'XLabel', struct('String', strrep(chans{3}, '_', '\_')), ...
 							'YLabel', struct('String', strrep(chans{4}, '_', '\_'))));
 			end
@@ -443,8 +445,11 @@ classdef Gating < handle
 				plot(ax, xdata, ydata, '.', 'MarkerSize', 2)
 				
 				% Exclude outliers that can throw off the graph
-				ax.XLim = prctile(xdata, [1, 99]); 
-				ax.YLim = prctile(ydata, [1, 99]);
+				xmax = max(2^18, prctile(xdata, 99));
+				ymax = max(2^18, prctile(ydata, 99));
+				set(ax, 'xlim', [1, xmax], 'ylim', [1, ymax])
+% 				ax.XLim = prctile(xdata, [1, 99]); 
+% 				ax.YLim = prctile(ydata, [1, 99]);
 				
 				ax = Plotting.setAxProps(ax, axProperties);				
                 
