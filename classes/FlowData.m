@@ -1729,7 +1729,7 @@ classdef FlowData < matlab.mixin.Copyable
 				stats.numcells(i) = size(slicedData, 1);
 % 				size(slicedData, 1)
 				
-				if isempty(slicedData), slicedData = nan; end
+				if isempty(slicedData), slicedData = nan(size(sliceParams.channels)); end
 				
 				for ch = 1:numel(sliceParams.channels)
 					
