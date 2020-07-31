@@ -1250,7 +1250,7 @@ classdef Plotting < handle
 		function cbar = biexpColorbar(ax, doMEF, params)
 			% Generates a colorbar w/ biexponential labels for a given axes
 			%
-			%	cbar = biexpColorbar(ax)
+			%	cbar = Plotting.biexpColorbar(ax)
 			%
 			%	Optional inputs:
 			%
@@ -1334,7 +1334,7 @@ classdef Plotting < handle
 		function cbar = biexpColorbar2(ax, scale, params)
             % Generates a colorbar w/ biexponential labels for a given axes.
             %   
-			%	cbar = biexpColorbar2(ax, scale, params);
+			%	cbar = Plotting.biexpColorbar2(ax, scale, params);
 			%
             %   Inputs 
 			%
@@ -1417,7 +1417,86 @@ classdef Plotting < handle
 				params = Transforms.checkLogicleParams(false, params);
 			end
 		end
+		
+		
+		function cbar = logColorbar(ax, limits, options)
+            % Generates a colorbar w/ log labels for a given axes.
+            %   
+			%	cbar = Plotting.logColorbar(ax, limits, options);
+			%
+            %   Inputs 
+			%
+			%		ax			<axes> Axes handle to plot onto
+            %       
+			%		limits			<struct> A struct where fields are 'x', 'y',
+			%						and/or 'z' and the values are log10-transformed 
+			%						axes limits, eg [3, 8] for [10^3, 10^8].
+			%
+			%		options			<char, cell> (Optional) Logical flags:
+			%							'zero': Sets the bottom tick value and
+			%							label to '0' - not a transformation!
+			%							'loglin': Plots log ticks and such for
+			%							log-transformed (but linear) data
+			%							--> Note - currently auto does loglin,
+			%								may be uptdate in the future to 
+			%								allow for real log coloration
+			%
+			%
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
+			
+			% Check inputs
+			zCheckInputs_logColorbar();
+			
+			cbar = colorbar('peer', ax, 'EastOutside');
+			
+			% If more than 7 log decades, skip every ceil(N/7)
+			drange = limits(1) : ...
+					 ceil((limits(2) - limits(1)) / 7) : ...
+					 limits(2);
 
+			tickLabels = cellfun(@(x) ['10^{' num2str(x), '}'], ...
+						num2cell(drange), 'uniformoutput', false);
+			if ismember('zero', options)
+				tickLabels(1) = {'0'};
+			end
+
+% 			if ismember('loglin', options)
+				cbar.Ticks = drange;
+				cbar.Limits = limits;
+% 			else
+% 				cbar.Ticks = 10.^(drange);
+% 				cbar.Limits = 10.^limits;
+% 			end
+			
+			cbar.TickLabels = tickLabels;
+			cbar.TickDirection = 'out';
+			
+			
+			% --- Helper Functions --- %
+			
+			
+			function zCheckInputs_logColorbar()
+
+				% Check limits input
+				validateattributes(limits, {'numeric'}, {'vector'}, mfilename, 'limits', 1);
+				
+				% Check params input
+				if exist('options', 'var')
+					validateattributes(options, {'cell', 'char'}, {}, mfilename, 'options', 2);
+					if ischar(options), options = {options}; end
+					options = cellfun(@lower, options, 'uniformoutput', false);
+				else
+					options = {};
+				end
+			end
+		end
+		
         
 		function [numElements, binCenters] = biexhist(Y, numBins, showPlot)
 			%BIEXHIST Logiclly-scaled (Parks,et al.) histogram. 
