@@ -2535,10 +2535,10 @@ classdef Plotting < handle
 			%								(defaults to 'standard' values
 			%							'min': <min val> enables setting the
 			%							  lower bound for color-data conversion
-			%								(default = 0)
+			%								(default = min(dataMatrix(:)))
 			%							'max': <max val> enables setting the
 			%							  upper bound for color-data conversion
-			%								(default = 4.5)
+			%								(default = max(dataMatrix(:)))
 			%							'fig': <fig handle> enables setting the
 			%							  figure to plot onto
 			%								(default = new fig)
@@ -2553,7 +2553,7 @@ classdef Plotting < handle
 			%
 			%	Outputs
 			%
-			%		figBinHmap		<handle> A handle to the generated figure 
+			%		ax				<handle> A handle to the modified axes 
 			%
 			% Written By
 			% Ross Jones
@@ -2674,12 +2674,17 @@ classdef Plotting < handle
 			
 			% Colormap
 			if options.plotColorbar
-				fO = fieldnames(options.biexp);
-				[~, idxO] = ismember({'c', 'C'}, fO);
-				if any(idxO)
+				fBxC = fieldnames(options.biexp);
+				[~, idxBxC] = ismember({'c', 'C'}, fBxC);
+				fLgC = fieldnames(options.log);
+				[~, idxLgC] = ismember({'c', 'C'}, fLgC);
+				if any(idxBxC)
 	% 				cbar = Plotting.biexpColorbar(ax, options.doMEF, options.params);
-					fC = fO{idxO(find(idxO > 0, 1))};
+					fC = fBxC{idxBxC(find(idxBxC > 0, 1))};
 					cbar = Plotting.biexpColorbar2(ax, options.biexp.(fC), options.params);
+				elseif any(idxLgC)
+					fC = fLgC{idxLgC(find(idxLgC > 0, 1))};
+					cbar = Plotting.logColorbar(ax, options.log.(fC), options.logParams);
 				else
 					cbar = colorbar(ax);
 	% 				cbar.Limits = [min(dataMatrix(:)), max(dataMatrix(:))];
@@ -2791,8 +2796,8 @@ classdef Plotting < handle
 				if ~isfield(options, 'params'), options.params = struct(); end
 				if ~isfield(options, 'doMEF'), options.doMEF = false; end
 				if options.doMEF, autoscale = 1e3; else, autoscale = 1; end
-				if ~isfield(options, 'min'), options.min = 0; end
-				if ~isfield(options, 'max'), options.max = 4.5; end
+				if ~isfield(options, 'min'), options.min = min(dataMatrix(:)); end
+				if ~isfield(options, 'max'), options.max = max(dataMatrix(:)); end
 				if ~isfield(options, 'categorical'), options.categorical = false; end
 				if ~isfield(options, 'plotColorbar'), options.plotColorbar = true; end
 				
