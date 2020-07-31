@@ -14,7 +14,7 @@ function [score, maxVals] = scoreOrthoMatrix(subMatrix)
 
 	maxVals = false(size(subMatrix));	% Store 1 where max values found
 	M = subMatrix;						% Updates over time to set non-max 
-											% values in the same row/col to NaN
+										% values in the same row/col to NaN
 	
 	% Find r & c of max val in matrix, set the rest of row and col to
 	% NaN and set that index to 1 in maxVals
