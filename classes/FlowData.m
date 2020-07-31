@@ -1665,8 +1665,8 @@ classdef FlowData < matlab.mixin.Copyable
 			%
 			%		metrics			<char, cell> (Optional) A list of metrics to compute
 			%							'numcells', 'pctpos', %iles: 'pX.Y' --> X.Y%, 
-			%							'median', 'mean', 'geomean', 'stdev', 
-			%							'geostdev', 'cv', 'sem', 'semb'*
+			%							'median', 'iqr', 'liqr', 'mean', 'stdev', 
+			%							'geomean', 'geostdev', 'cv', 'sem', 'semb'*
 			%							 * semb = bootstrapped SEM - slow!
 			%							 -> If 'all' or no metrics are given, then
 			%								all metrics except 'semb' are computed,
@@ -1757,9 +1757,13 @@ classdef FlowData < matlab.mixin.Copyable
 							stats.(strrep(pcts{pi}, '.', '_'))(statIdx) = prctiles(pi);
 						end
 					end
+					pBox = prctile(dataOut, [25, 50, 75]);
+					pBoxPos = prctile(posData, [25, 50, 75]);
 					
 					% Calculate other metrics
-					if ismember('median', metrics), stats.median(statIdx) = median(dataOut); end % Same as p50, but preserving input name
+					if ismember('median', metrics), stats.median(statIdx) = pBox(2); end % Same as p50, but preserving input name
+					if ismember('iqr', metrics), stats.iqr(statIdx) = pBox(3) - pBox(1); end
+					if ismember('liqr', metrics), stats.liqr(statIdx) = log10(pBoxPos(3)) - log10(pBoxPos(1)); end
 					if ismember('mean', metrics), stats.mean(statIdx) = mean(dataOut); end
 					if ismember('geomean', metrics), stats.geomean(statIdx) = geomean(posData); end
 					if ismember('stdev', metrics), stats.stdev(statIdx) = std(dataOut, 0); end
