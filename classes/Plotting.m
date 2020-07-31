@@ -2200,7 +2200,7 @@ classdef Plotting < handle
 		end
 		
 		
-		function [ax] = barplot(ax, xpos, yvals, options, barProperties, axProperties)
+		function [ax, h] = barplot(ax, xpos, yvals, options, barProperties, axProperties)
 			% Generates a bar chart w/ error bars and (optionally) individual points)
             %
             %   Inputs:
@@ -2235,6 +2235,8 @@ classdef Plotting < handle
             %   Outputs: 
             %
             %       ax              A handle to the figure axes
+			%
+			%		h				A handle to the bar(s)
             % 
             % Written By 
 			% Ross Jones
@@ -2247,7 +2249,7 @@ classdef Plotting < handle
 			[ymeans, ystdsNeg, ystdsPos, errProperties] = zCheckInputs_barPlot();
 			
 			hold(ax, 'on')
-			bar(ax, xpos, ymeans, barProperties{:})
+			h = bar(ax, xpos, ymeans, barProperties{:});
 			errorbar(ax, xpos, ymeans, ystdsNeg, ystdsPos, '.', 'markersize', 1, errProperties{:})
 			
 			if any(ismember({'points', 'dots'}, options))
@@ -2263,12 +2265,12 @@ classdef Plotting < handle
 				end
 				
 				xvals = linspace(0.7, 1.3, size(yvals, 1))';
-				rxi = zeros(size(yvals));
-				for xi = 1:numel(xpos)
-					rxi(:, xi) = randperm(numel(xvals))';
-				end
+% 				rxi = zeros(size(yvals));
+% 				for xi = 1:numel(xpos)
+% 					rxi(:, xi) = randperm(numel(xvals))';
+% 				end
 				
-				xvals = repmat(xpos, size(yvals, 1), 1) + dx .* (xvals(rxi) - 1);
+				xvals = repmat(xpos, size(yvals, 1), 1) + dx .* (xvals - 1);
 				
 				scatter(ax, xvals(:), yvals(:), 10, 'k', 'filled')
 			end
@@ -2292,7 +2294,7 @@ classdef Plotting < handle
 				if ~exist('axProperties', 'var') || isempty(axProperties)
 					axProperties = struct();
 				end
-				if exist('options', 'var')
+				if exist('options', 'var') && ~isempty(options)
 					if ischar(options), options = {options}; end
 				else
 					options = {};
