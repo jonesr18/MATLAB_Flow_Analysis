@@ -204,7 +204,7 @@ classdef Gating < handle
         end
 		
 		
-        function [gateP1, gateP2, gateP3, gateFigs] = standardGating(data, onlyP1, swap, maxPoints)
+        function [gateP1, gateP2, gateP3, gateFigs] = standardGating(data, onlyP1, linSSC, swap, maxPoints)
             % Creates 3 standard gates from a given samples
             %
             %   Gates
@@ -219,6 +219,7 @@ classdef Gating < handle
 			%		onlyP1		(optional) Logical flag to only gate on P1. The other 
 			%					gates are returned as empty so that the output 
 			%					interface is conserved. <Default := false>
+			%		linSSC		(optional) Logical flag to plot SSC_A on linear axis
 			%		swap		(optional) Logical flag to swap the FSC and SSC
 			%					plot axes (useful for Koch LSRII-HTS2)
 			%		maxPoints	(optional) Number indicating the maximum number of 
@@ -243,16 +244,17 @@ classdef Gating < handle
 			
 			% Check inputs
 			validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
-			missingChannels = setdiff(Gating.SCATTER_CHANNELS, fieldnames(data));
+			missingChannels = setdiff(Gating.SCATTER_CHANNELS(1:6), fieldnames(data));
 			assert(isempty(missingChannels), 'Scatter channel missing: %s\n', missingChannels{:});
 			onlyP1 = (exist('onlyP1', 'var') && all(logical(onlyP1))); % Default FALSE
+			linSSC = (exist('linSSC', 'var') && all(logical(linSSC))); % Default FALSE
 			swap = (exist('swap', 'var') && all(logical(swap)));
 			if ~exist('maxPoints', 'var'), maxPoints = 20000; end
 			gateFigs = struct();
 			
 			% For each scatter channel, extract # cells/# samples from each sample
 			combinedData = struct();
-			for ch = Gating.SCATTER_CHANNELS
+			for ch = Gating.SCATTER_CHANNELS(1:6)
 				combData = [];
 				for d = 1:numel(data)
 					if ~isempty(data(d).(ch{:})) % Some FlowData tcData will be empty 
@@ -272,12 +274,13 @@ classdef Gating < handle
 			idxNumRaw = find(idxRaw);
 			
             % First do FSC-A vs SSC-A
+			if linSSC, yscale = 'lin'; else, yscale = 'log'; end
             [subIdxP1, gateP1, gateFigs.P1] = Gating.gatePolygon( ...
-					combinedData.FSC_A.raw(idxRaw), ...
-					combinedData.SSC_A.raw(idxRaw), ...
-					struct('YScale', 'log', ...
-						'XLabel', struct('String', 'FSC\_A'), ...
-						'YLabel', struct('String', 'SSC\_A'))); 
+					combinedData.('FSC_A').raw(idxRaw), ...
+					combinedData.('SSC_A').raw(idxRaw), ...
+					struct('YScale', yscale, ...
+						'XLabel', struct('String', 'FSC-A'), ...
+						'YLabel', struct('String', 'SSC-A'))); 
 			
 			if onlyP1
 				gateP2 = [];
@@ -297,8 +300,8 @@ classdef Gating < handle
 				[subIdxP2, gateP2, gateFigs.P2] = Gating.gatePolygon( ... 
 						combinedData.(chans{1}).raw(idxP1), ...
 						combinedData.(chans{2}).raw(idxP1), ...
-						struct('XLabel', struct('String', strrep(chans{1}, '_', '\_')), ...
-							'YLabel', struct('String', strrep(chans{2}, '_', '\_'))));
+						struct('XLabel', struct('String', strrep(chans{1}, '_', '-')), ...
+							'YLabel', struct('String', strrep(chans{2}, '_', '-'))));
 				
 				idxNumP2 = idxNumP1(subIdxP2);	% Get positions in P1 of objects passing P2 gate
 				idxP2 = falseIdx;				% Copy this to get the full-sized indexing vector
@@ -309,11 +312,99 @@ classdef Gating < handle
 						combinedData.(chans{3}).raw(idxP2), ...
 						combinedData.(chans{4}).raw(idxP2), ...
 						struct('yscale', 'log', 'xscale', 'log', ...
-							'XLabel', struct('String', strrep(chans{3}, '_', '\_')), ...
-							'YLabel', struct('String', strrep(chans{4}, '_', '\_'))));
+							'XLabel', struct('String', strrep(chans{3}, '_', '-')), ...
+							'YLabel', struct('String', strrep(chans{4}, '_', '-'))));
 			end
-        end
-        
+		end
+
+		function [gateP1, gateP2, gateFigs] = standardGating2(data, onlyP1, linSSC, maxPoints)
+            % Creates 3 standard gates from a given samples
+            %
+            %   Gates
+            %   
+            %       P1:     FSC_A vs SSC_A
+            %       P2:     FSC_H vs FSC_A
+            %
+            %   Inputs
+            %
+            %       data		A standard struct (must contain channels noted above)
+			%		onlyP1		(optional) Logical flag to only gate on P1. The other 
+			%					gates are returned as empty so that the output 
+			%					interface is conserved. <Default := false>
+			%		linSSC		(optional) Logical flag to plot SSC_A on linear axis
+			%		maxPoints	(optional) Number indicating the maximum number of 
+			%					points to plot for drawing gates. <Default := 20000>
+            %
+            %   Outputs
+            %
+            %       gateP1      Logical index array for events in P1
+            %       gateP2      Logical index array for events in P2
+			%		gateFigs	Struct containing handles to gating figures
+            %
+            %
+            % Written By
+			% Ross Jones
+			% jonesr18@ubc.ca
+            % Zandstra Lab, UBC
+			% 
+            % Update Log: 
+			% 
+			
+			% Check inputs
+			validateattributes(data, {'struct'}, {}, mfilename, 'data', 1);
+			missingChannels = setdiff(Gating.SCATTER_CHANNELS([1, 2, 4, 5]), fieldnames(data));
+			assert(isempty(missingChannels), 'Scatter channel missing: %s\n', missingChannels{:});
+			onlyP1 = (exist('onlyP1', 'var') && all(logical(onlyP1))); % Default FALSE
+			linSSC = (exist('linSSC', 'var') && all(logical(linSSC))); % Default FALSE
+			if ~exist('maxPoints', 'var'), maxPoints = 20000; end
+			gateFigs = struct();
+			
+			% For each scatter channel, extract # cells/# samples from each sample
+			combinedData = struct();
+			for ch = Gating.SCATTER_CHANNELS([1, 2, 4, 5])
+				combData = [];
+				for d = 1:numel(data)
+					if ~isempty(data(d).(ch{:})) % Some FlowData tcData will be empty 
+						combData = [combData; data(d).(ch{:}).raw(1:numel(data):end)]; %#ok<AGROW>
+					end
+				end
+				combinedData.(ch{:}).raw = combData;
+			end
+			totalPoints = numel(combinedData.(Gating.SCATTER_CHANNELS{1}).raw);
+			numPoints = min(maxPoints, totalPoints);
+            
+            % Full-size index for whole set of observations
+            % In order to avoid problems with sub-indexing below, we will copy the entire FALSE index array
+            % when assigning data to a new gate index array, then add back the TRUE entries by numerical index
+            falseIdx = false(totalPoints, 1);
+			idxRaw = FlowAnalysis.subSample(totalPoints, numPoints);
+			idxNumRaw = find(idxRaw);
+			
+            % First do FSC-A vs SSC-A
+			if linSSC, yscale = 'lin'; else, yscale = 'log'; end
+			[subIdxP1, gateP1, gateFigs.P1] = Gating.gatePolygon( ...
+					combinedData.('FSC_A').raw(idxRaw), ...
+					combinedData.('SSC_A').raw(idxRaw), ...
+					struct('YScale', yscale, ...
+						'XLabel', struct('String', 'FSC-A'), ...
+						'YLabel', struct('String', 'SSC-A'))); 
+			
+			if onlyP1
+				gateP2 = [];
+			else
+				idxNumP1 = idxNumRaw(subIdxP1);	% Get positions in raw of objects passing P1 gate
+				idxP1 = falseIdx;				% Copy this to get the full-sized indexing vector
+				idxP1(idxNumP1) = true;			% Assign TRUE values according to what passes P1
+				
+				% Second do FSC-A vs FSC-H
+				[~, gateP2, gateFigs.P2] = Gating.gatePolygon( ... 
+						combinedData.('FSC_A').raw(idxP1), ...
+						combinedData.('FSC_H').raw(idxP1), ...
+						struct('XLabel', struct('String', 'FSC-A'), ...
+							'YLabel', struct('String', 'FSC-H')));
+			end
+		end
+		
         
         function data = applyStandardGates(data, gateP1, gateP2, gateP3, swap)
             % Applies the standard gates (see Gating.standardGating()) to the given sample
@@ -390,8 +481,64 @@ classdef Gating < handle
 					data(d).gates.P3 = idxP3;
 				end
             end
+		end
+ 
+		
+        function data = applyStandardGates2(data, gateP1, gateP2)
+            % Applies the standard gates (see Gating.standardGating2()) to the given sample
+            % 
+			%	Inputs
+			%
+			%		data		Data in a standard struct
+			%		gateP1, gateP2	...	
+			%					Gate polygon outputs of Gating.standardGating()
+			%
+			%	Outputs
+			%		data		Updated data struct w/ gate logicals added in 
+			%					'gates' field.
+			% 
+			% Written By
+			% Ross Jones
+			% jonesr18@mit.edu
+			% Weiss Lab, MIT
+			% 
+			% Update Log:
+			%
+            
+            % Iterate over all samples in struct
+            for d = 1:numel(data)
+                
+				if isempty(data(d).FSC_A) % Some FlowData tcData will be empty 
+					continue
+				end
+				
+                % Full-size false vector for setting up gates
+                falseIdx = false(data(d).nObs, 1);
+
+                % Apply gates
+                [idxP1, ~] = Gating.gatePolygon( ...
+                    data(d).('FSC_A').raw, ...
+                    data(d).('SSC_A').raw, ...
+                    struct('YScale', 'log'), gateP1);
+				
+				% Save Gate P1
+				data(d).gates.P1 = idxP1;
+				
+				% Gates P2/3 are not always applied
+				if (exist('gateP2', 'var') && ~isempty(gateP2))
+					[subIdxP2, ~] = Gating.gatePolygon( ...
+						data(d).('FSC_A').raw(idxP1), ...
+						data(d).('FSC_H').raw(idxP1), ...
+						struct(), gateP2);
+					
+					idxP2 = Gating.fixGateIdxs(idxP1, subIdxP2);
+					
+					% Save Gate P2
+					data(d).gates.P2 = idxP2;
+				end
+            end
         end
-        
+
         
 		function [cellsInGate, polygon, gateFig] = gatePolygon(xdata, ydata, axProperties, polygon)
 			% Gates a given population.  Uses the polygon vertices specified by

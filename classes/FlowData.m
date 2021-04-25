@@ -370,18 +370,22 @@ classdef FlowData < matlab.mixin.Copyable
 			%	self.gate(onlyP1)
 			%
 			%	onlyP1 = true adds new gates: {'P1'}
-			%	onlyP2 = false adds new gates: {'P1', 'P2', 'P3'}
+			%	onlyP1 = false adds new gates: {'P1', 'P2', 'P3'}
 			%
 			%	Inputs
 			%		onlyP1		<logical> Logical flag to only do P1 gating
 			%						(FSC_A vs SSC_A)
 			%
 			%		options		<char, cell> (optional) Logical flags:
-			%					'onlyP1': Only do P1 gating (FSC_A vs SSC_A)
+			%					'onlyP1':	 Only do P1 gating (FSC_A vs SSC_A)
+			%					'v2':		 Gate P2 as FSC_A vs FSC_H
+			%					'linSSC':	 Plot SSC_A on a linear axis
 			%					'recompute': Force a remake of the gates
-						
+			
 			% Determine gating options
 			onlyP1 = false;
+			v2 = false;
+			linSSC = false;
 			if exist('options', 'var')
 				if islogical(options) % for reverse compatibility
 					if options, options = {'onlyP1'}; else, options = {}; end
@@ -389,6 +393,8 @@ classdef FlowData < matlab.mixin.Copyable
 					options = {options}; % Force to be a cell array
 				end
 				if ismember('onlyP1', options), onlyP1 = true; end
+				if ismember('v2', options), v2 = true; end
+				if ismember('linSSC', options), linSSC = true; end
 			else
 				options = {};
 			end
@@ -423,8 +429,13 @@ classdef FlowData < matlab.mixin.Copyable
 					load(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
 				else
 					% Do manual control gating
-					[gateP1c, gateP2c, gateP3c, gateFigs] = Gating.standardGating(self.controlDataScatter, onlyP1, swap);
-					save(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
+					if v2
+						[gateP1c, gateP2c, gateFigs] = Gating.standardGating2(self.controlDataScatter, onlyP1, linSSC);
+						save(gatesFnameControls, 'gateP1c', 'gateP2c');
+					else
+						[gateP1c, gateP2c, gateP3c, gateFigs] = Gating.standardGating(self.controlDataScatter, onlyP1, linSSC, swap);
+						save(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
+					end
 					for f = fieldnames(gateFigs)'
 						saveas(gateFigs.(f{:}), [gateDirControls, 'Gate-', f{:}, '_Controls']);
 					end
@@ -436,8 +447,13 @@ classdef FlowData < matlab.mixin.Copyable
 				load(gatesFnameSamples, 'gateP1s', 'gateP2s', 'gateP3s');
 			else
 				% Do manual sample gating
-				[gateP1s, gateP2s, gateP3s, gateFigs] = Gating.standardGating(self.sampleDataScatter, onlyP1, swap);
-				save(gatesFnameSamples, 'gateP1s', 'gateP2s', 'gateP3s');
+				if v2
+					[gateP1s, gateP2s, gateFigs] = Gating.standardGating2(self.sampleDataScatter, onlyP1, linSSC);
+					save(gatesFnameControls, 'gateP1c', 'gateP2c');
+				else
+					[gateP1s, gateP2s, gateP3s, gateFigs] = Gating.standardGating(self.sampleDataScatter, onlyP1, linSSC, swap);
+					save(gatesFnameControls, 'gateP1c', 'gateP2c', 'gateP3c');
+				end
 				for f = fieldnames(gateFigs)'
 					saveas(gateFigs.(f{:}), [gateDirSamples, 'Gate-', f{:}, '_', gatesSaveName]);
 				end
@@ -448,15 +464,26 @@ classdef FlowData < matlab.mixin.Copyable
 			self.addGates('P1');
 			if ~onlyP1
 				self.gatePolygons.P2 = gateP2s;
-				self.gatePolygons.P3 = gateP3s;
-				self.addGates({'P2', 'P3'});
+				self.addGates({'P2'});
+				if ~v2
+					self.gatePolygons.P3 = gateP3s;
+					self.addGates({'P3'});
+				end
 			end
 			
 			% Apply gate polygons to scatter data 
 			if (self.controlsAdded)
-				self.controlDataScatter = Gating.applyStandardGates(self.controlDataScatter, gateP1c, gateP2c, gateP3c, swap);
+				if v2
+					self.controlDataScatter = Gating.applyStandardGates2(self.controlDataScatter, gateP1c, gateP2c);
+				else
+					self.controlDataScatter = Gating.applyStandardGates(self.controlDataScatter, gateP1c, gateP2c, gateP3c, swap);
+				end
 			end
-			self.sampleDataScatter	= Gating.applyStandardGates(self.sampleDataScatter,  gateP1s, gateP2s, gateP3s, swap);
+			if v2
+				self.sampleDataScatter	= Gating.applyStandardGates2(self.sampleDataScatter,  gateP1s, gateP2s);
+			else
+				self.sampleDataScatter	= Gating.applyStandardGates(self.sampleDataScatter,  gateP1s, gateP2s, gateP3s, swap);
+			end
 			
 			% Transfer gate logicals to externally accesible data
 			if (self.controlsAdded)
