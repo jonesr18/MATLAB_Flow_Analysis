@@ -17,7 +17,7 @@ classdef Gating < handle
     % Weiss Lab, MIT
 	
 	properties (Constant)
-		SCATTER_CHANNELS = {'SSC_A', 'SSC_H', 'SSC_W', 'FSC_A', 'FSC_H', 'FSC_W'};
+		SCATTER_CHANNELS = {'SSC_A', 'SSC_H', 'SSC_W', 'FSC_A', 'FSC_H', 'FSC_W', 'FSC_Width'};
 	end
 	
 	methods (Static)

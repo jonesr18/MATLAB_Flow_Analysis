@@ -156,7 +156,26 @@ classdef FlowData < matlab.mixin.Copyable
 				'PE_YG_A', 'O', ...			% Koch LSRII-HTS2 Name
 				'PE_Texas_Red_A', 'R', ...
 				'PE_TxRed_YG_A', 'R', ...	% Koch LSRII-HTS2 Name
-				'APC_Cy7_A', 'I');
+				'APC_Cy7_A', 'I', ...
+				'FL1_A', 'Y1', ...			% These and below for ZL Cytoflex
+				'FL2_A', 'Y2', ...
+				'FL3_A', 'Y3', ...
+				'FL4_A', 'R1', ...
+				'FL5_A', 'R2', ...
+				'FL6_A', 'R3', ...
+				'FL7_A', 'R4', ...
+				'FL8_A', 'R5', ...
+				'FL9_A', 'I1', ...
+				'FL10_A', 'I2', ...
+				'FL11_A', 'I3', ...
+				'FL12_A', 'B1', ...
+				'FL13_A', 'B2', ...
+				'FL14_A', 'B3', ...
+				'FL15_A', 'B4', ...
+				'FL16_A', 'B5', ...
+				'FL17_A', 'U1', ...
+				'FL18_A', 'U2', ...
+				'FL19_A', 'U3');
 	end
 	
 	
@@ -239,13 +258,21 @@ classdef FlowData < matlab.mixin.Copyable
 				
 				% Extract desired color channels
 				for ch = [expDetails.channels, {'Time'}]
-					self.sampleData(i).(ch{:}).raw = dataStruct(i).(ch{:}).raw;
+					if isfield(dataStruct(i), ch{:})
+						self.sampleData(i).(ch{:}).raw = dataStruct(i).(ch{:}).raw;
+					elseif (i == 1)
+						warning('Channel not in data: %s', ch{:});
+					end
 				end
 				self.sampleData(i).nObs = nObs;
 				
 				% Extract scatter channels
 				for ch = Gating.SCATTER_CHANNELS
-					self.sampleDataScatter(i).(ch{:}).raw = dataStruct(i).(ch{:}).raw;
+					if isfield(dataStruct(i), ch{:})
+						self.sampleDataScatter(i).(ch{:}).raw = dataStruct(i).(ch{:}).raw;
+					elseif (i == 1)
+						warning('Channel not in data: %s', ch{:});
+					end
 				end
 				self.sampleDataScatter(i).nObs = nObs;
 			end
@@ -842,12 +869,16 @@ classdef FlowData < matlab.mixin.Copyable
 				%	the reference for the other fluorescent proteins. 
 				
 				for ch = channels
+					
+					if ~isfield(scData(1), ch{:})
+						continue
+					end
+					
 					for sc = 1:numel(scData)
-						if ~isfield(scData(sc), ch{:})
-							warning('Fieldname %s not found in sc control file %d', ch{:}, sc)
-						else
-							outData(sc).(ch{:}).raw = scData(sc).(ch{:}).raw;
-						end
+% 						if ~isfield(scData(sc), ch{:})
+% 							warning('Fieldname %s not found in sc control file %d', ch{:}, sc)
+% 						else
+						outData(sc).(ch{:}).raw = scData(sc).(ch{:}).raw;
 						
 						if ~isfield(outData(sc), 'nObs')
 							outData(sc).nObs = scData(sc).nObs;
