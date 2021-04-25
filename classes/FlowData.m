@@ -2448,14 +2448,15 @@ classdef FlowData < matlab.mixin.Copyable
 			%						the intercept of which determines the threshold
 			%						 --> Default if no option given
 			%						'Auto': The thresh is automatically determined
-			%						from the 99.9th %ile of the wtData. 
+			%						from the 99.9th %ile of the wtData. This %ile 
+			%						can be modulated in options.
 			%
-			%		options		(optional) <char, cell> A string or cell list of 
-			%					strings with additional options: 
+			%		options		(optional) <char, numeric, cell> Additional options: 
 			%						'recompute': Overwrites the automatic loading 
 			%						of existing threshold values from saved files. 
 			%						<'dataType'> Uses the specified dataType for 
 			%						defining the thresholds. 
+			%						<numeric> A percentile for automatic thresholding
 			%
 			%		sampleIDs	(optional) <numeric> A subset of sampleIDs to use 
 			%					for generating the thresholds. By default, all the
@@ -2497,28 +2498,40 @@ classdef FlowData < matlab.mixin.Copyable
 					
 					if (ischar(thresh) && strcmpi(thresh, 'auto'))
 						% Thresh value is found using the untransfected (wt) cells
-						% --> Set at 99.9th %ile of fluorescence in a channel
-						threshVals(ci) = prctile(self.controlData(end).(chan).(dtype), 99.9);
+						% --> Default is 99.9th %ile of fluorescence in a channel
+						numOption = cellfun(@isnumeric, options);
+						if ~any(numOption)
+							pct = min(max(abs(options(numOption)), 100), 0);
+						else
+							pct = 99.9;
+						end
+						threshVals(ci) = prctile(self.controlData(end).(chan).(dtype), pct);
 					elseif isnumeric(thresh)
 						% Thresh value given as an option
 						threshVals(ci) = thresh(ci); % Ignore extra entries
-					else
+					else % Manual
 						% Thresh value is found by marking a line on a graph
+						
 						combData = [];
 						for i = sampleIDs
 							combData = [combData; self.sampleData(i).(chan).(dtype)(1:self.numSamples:end)];
 						end
+						scData = self.controlData(ci).(chan).(dtype);
+						wtData = self.controlData(end).(chan).(dtype);
 						
-						pos = find(combData > 0);
-						ss = FlowAnalysis.subSample(numel(pos), 1e4);
-						combDataLog = log10(combData(pos(ss)));
+						combDataLog = log10(combData(combData > 0));
+						scDataLog = log10(scData(scData > 0));
+						wtDataLog = log10(wtData(wtData > 0));
 						
 						figThresh = figure();
 						ax = gca(); hold(ax, 'on')
 						histogram(ax, combDataLog)
-						title('Draw a line to set an x-axis threshold', 'fontsize', 16)
-						ylabel('Count', 'fontsize', 14)
-						xlabel(['log_{10} ', strrep(chan, '_', '-')], 'fontsize', 14)
+						histogram(ax, scDataLog)
+						histogram(ax, wtDataLog)
+						title('Draw a line to set an x-axis threshold', 'fontsize', 14)
+						ylabel('Count', 'fontsize', 12)
+						xlabel(['log_{10} ', strrep(chan, '_', '-'), ' (', self.colors{ci}, ')'], 'fontsize', 12)
+						legend({'Samples', 'SC', 'WT'}, 'fontsize', 10)
 						
 						h = imline();
 						position = wait(h);
