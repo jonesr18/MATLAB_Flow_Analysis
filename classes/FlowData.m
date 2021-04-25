@@ -2473,7 +2473,7 @@ classdef FlowData < matlab.mixin.Copyable
 			threshFname = [gateDir, 'Thresh-Vals_', gateSaveName, '.mat'];
 			
 			% Load thresholds from file or from the object's fields if possible
-			if ~ismember('recompute', options)
+			if ~any(strcmpi('recompute', options))
 				if ~isempty(self.threshGateVals)
 					threshVals = self.threshGateVals;
 				elseif exist(threshFname, 'file')
@@ -2587,7 +2587,7 @@ classdef FlowData < matlab.mixin.Copyable
 			
 			function zCheckInputs_threshGate(self)
 				validateattributes(channels, {'char', 'cell'}, {}, mfilename, 'gates', 1);
-				if ischar(channels), channels = {channels}; end % For simplicity
+				if ~iscell(channels), channels = {channels}; end % For simplicity
 				badChannels = setdiff(channels, self.channels);
 				assert(isempty(badChannels), 'Channel not valid: %s\n', badChannels{:});
 
@@ -2612,8 +2612,8 @@ classdef FlowData < matlab.mixin.Copyable
 				end
 				
 				if exist('options', 'var')
-					validateattributes(options, {'cell', 'char'}, {}, mfilename, 'options', 4);
-					if ischar(options), options = {options}; end % For simplicity
+					validateattributes(options, {'cell', 'char', 'numeric'}, {}, mfilename, 'options', 4);
+					if ~iscell(options), options = {options}; end % For simplicity
 					options = cellfun(@lower, options, 'uniformoutput', false);
 				else
 					options = {};

@@ -2192,7 +2192,7 @@ classdef Plotting < handle
 				end
 				
 				if exist('float', 'var')
-					validateattributes(float, {'numeric'}, {'scalar'}, mfilename, 'float', 6);
+					validateattributes(float, {'numeric'}, {}, mfilename, 'float', 6);
 				else
 					float = 0;
 				end
@@ -2203,13 +2203,14 @@ classdef Plotting < handle
 		function [ax, h] = barplot(ax, xpos, yvals, options, barProperties, axProperties)
 			% Generates a bar chart w/ error bars and (optionally) individual points)
             %
-            %   Inputs:
+            %	Inputs:
             %
 			%		ax				<axes> Axes handle to plot on
 			%
 			%		xpos			<numeric> A vector of x-axis centers for each bar
             %
-			%       yvals			<numeric> A matrix of values for each point
+			%		yvals			<numeric> A matrix of values for each point
+			%							Rows: replicates, Columns: Samples
 			%							Note: mean and standard deviation are
 			%							automatically computed to plot the bar and
 			%							errorbars. To change the calculations,
@@ -2228,13 +2229,13 @@ classdef Plotting < handle
 			%										side of the bar facing away
 			%										from the x-axis
 			%
-            %       barProperties   <cell> (Optional) Cell array of bar plot optional inputs
+            %		barProperties   <cell> (Optional) Cell array of bar plot optional inputs
 			%
 			%		axProperties	<struct> (Optional) Struct of axes properties
 			%
-            %   Outputs: 
+            %	Outputs: 
             %
-            %       ax              A handle to the figure axes
+            %		ax              A handle to the figure axes
 			%
 			%		h				A handle to the bar(s)
             % 
@@ -2253,7 +2254,7 @@ classdef Plotting < handle
 			errorbar(ax, xpos, ymeans, ystdsNeg, ystdsPos, '.', 'markersize', 1, errProperties{:})
 			
 			if any(ismember({'points', 'dots'}, options))
-				% Copmute an average dx so that we know how much space there is
+				% Compute an average dx so that we know how much space there is
 				% between each bar for plotting dots
 				% --> Mode of sorted xpos to handle cases where xpos is not for
 				%	  all samples that will eventually be plotted and where the
@@ -2345,6 +2346,7 @@ classdef Plotting < handle
 			
 		end
         
+		
         function [ax, h, cbar] = standardHeatmap(dataMatrix, rowLabels, colLabels, cmap, options)
             % Generates a standard heatmap with fontsize 14 and data arranged nicely
             %
