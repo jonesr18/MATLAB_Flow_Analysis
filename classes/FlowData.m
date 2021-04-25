@@ -4,6 +4,7 @@ classdef FlowData < matlab.mixin.Copyable
 	%
 	%	Visible Properties
 	%
+	%		ID				 <char>		Experiment ID
 	%		name			 <char>		Experiment name
 	%		date			 <char>		Experiment start date
 	%		folder			 <char>		The full path name for the experiment
@@ -87,6 +88,7 @@ classdef FlowData < matlab.mixin.Copyable
 	
 	
 	properties (SetAccess = private)
+		ID = '';					% Experiment ID
 		name = '';					% Experiment name
 		date = '';					% Experiment start date
 		folder = '';				% Experiment full path name
@@ -186,7 +188,7 @@ classdef FlowData < matlab.mixin.Copyable
 			% by importing data from the given files, which should correspond
 			% with the given sample map and contain data in the given channels.
 			%
-			%	self = FlowData(dataFnames, channels, expDetails)
+			%	self = FlowData(dataFnames, expDetails)
 			%
 			%	Inputs
 			%		dataFnames		<cell, char> Data filenames to import
@@ -226,12 +228,19 @@ classdef FlowData < matlab.mixin.Copyable
 			[dataStruct, sampleMapFname] = zCheckInputs(self);
 			
 			% Extract experiment details
-			self.date = expDetails.date;
-			self.name = expDetails.name;
-			self.folder = expDetails.folder;
-			self.cytometer = expDetails.cytometer;
-			self.channels = expDetails.channels;
-			self.colors = expDetails.colors;
+			edItems = {'date', 'name', 'folder', 'cytometer', 'channels', 'colors'};
+			for edItem = edItems
+				if isfield(expDetails, edItem)
+					self.(edItem{:}) = expDetails.(edItem{:});
+				end
+			end
+			
+% 			self.date = expDetails.date;
+% 			self.name = expDetails.name;
+% 			self.folder = expDetails.folder;
+% 			self.cytometer = expDetails.cytometer;
+% 			self.channels = expDetails.channels;
+% 			self.colors = expDetails.colors;
 			
 			% Extract sample map
 			if ~isempty(sampleMapFname)
